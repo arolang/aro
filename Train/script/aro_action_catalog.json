@@ -128,6 +128,7 @@
   "role": "own",
   "role_label": "OWN (Internal \u2192 Internal)",
   "prepositions": [
+   "from",
    "against",
    "with",
    "to"
@@ -255,7 +256,6 @@
   ],
   "aliases": [
    "extract",
-   "parse",
    "get"
   ],
   "source": "Sources/ARORuntime/Actions/BuiltIn/ExtractAction.swift"
@@ -297,7 +297,6 @@
   "role": "own",
   "role_label": "OWN (Internal \u2192 Internal)",
   "prepositions": [
-   "with",
    "from"
   ],
   "aliases": [
@@ -428,8 +427,8 @@
   "source": "Sources/ARORuntime/Actions/BuiltIn/ResponseActions.swift"
  },
  "parse": {
-  "role": "own",
-  "role_label": "OWN (Internal \u2192 Internal)",
+  "role": "request",
+  "role_label": "REQUEST (External \u2192 Internal)",
   "prepositions": [
    "from"
   ],
@@ -614,6 +613,20 @@
   ],
   "source": "Sources/ARORuntime/Actions/BuiltIn/ResponseActions.swift"
  },
+ "reverse": {
+  "role": "own",
+  "role_label": "OWN (Internal \u2192 Internal)",
+  "prepositions": [
+   "for",
+   "from",
+   "with"
+  ],
+  "aliases": [
+   "reverse",
+   "flip"
+  ],
+  "source": "Sources/ARORuntime/Actions/BuiltIn/ComputeAction.swift"
+ },
  "schedule": {
   "role": "export",
   "role_label": "EXPORT (makes symbols global / exports data)",
@@ -682,7 +695,8 @@
   "role_label": "OWN (Internal \u2192 Internal)",
   "prepositions": [
    "for",
-   "with"
+   "with",
+   "from"
   ],
   "aliases": [
    "sort",
@@ -752,8 +766,7 @@
   "role_label": "RESPONSE (Internal \u2192 External)",
   "prepositions": [
    "into",
-   "to",
-   "in"
+   "to"
   ],
   "aliases": [
    "store",
@@ -833,7 +846,8 @@
    "with",
    "to",
    "for",
-   "from"
+   "from",
+   "into"
   ],
   "aliases": [
    "update",

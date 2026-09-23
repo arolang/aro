@@ -120,6 +120,14 @@ else
   "${PYTHON}" -m pip install --quiet nbconvert nbclient nbformat ipykernel
 fi
 
+# mlx-lm ships Qwen3 MoE routers that forget to stop the gradient on their
+# expert indices, so the first LoRA backward pass dies with "[gather_axis]
+# Cannot calculate VJP with respect to indices" — after validation has already
+# run clean, which makes it look like a data problem. Re-apply the missing
+# stop_gradient to the freshly installed package. Idempotent, and a no-op once
+# upstream fixes it; see Train/tools/patch_mlx_lm.py.
+"${PYTHON}" "${SCRIPT_DIR}/tools/patch_mlx_lm.py"
+
 # Register a Jupyter kernel inside the venv so nbconvert can resolve
 # 'python3' to *our* interpreter instead of the system one. Idempotent.
 "${PYTHON}" -m ipykernel install --user --name=aro-train --display-name='ARO Train' \

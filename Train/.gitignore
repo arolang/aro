@@ -21,3 +21,6 @@ script/run/
 data/
 models/
 release/
+
+# Local experiment ledger (per-machine run history, experiment_db.py)
+experiments.db
