@@ -688,6 +688,7 @@ The Compute action transforms data using built-in operations:
 | `sha256` | SHA-256 hex digest (alias of `hash`) | `Compute the <d: sha256> from <payload>.` |
 | `captures` | First regex match, as a record of its groups | `Compute the <p: captures> from <line> by /(?<k>\w+)=(?<v>.*)/.` |
 | `all-captures` | Every match, as a list of those records | `Compute the <ps: all-captures> from <line> by /…/.` |
+| `symmetric-difference` | Elements in exactly one of the two | `Compute the <changed: symmetric-difference> from <before> with <after>.` |
 | `fixed` | Round to N decimal places (2 by default) — money | `Compute the <total: fixed> from <raw>.` |
 | Arithmetic | +, -, *, /, % | `Compute the <total> from <price> * <qty>.` |
 
@@ -735,6 +736,12 @@ the whole match under `match`; `all-captures` binds a list of those records. **A
 non-match binds an empty record (or empty list), it does not fail** — the same
 call ARO makes for a `Retrieve` that matches nothing. A group that took part in
 no match is absent rather than empty.
+
+**`subset of` is an operator, not a qualifier** (ARO-0042 §3.6, GitLab #864).
+It answers a question rather than producing a collection, so it sits with `in`,
+`contains` and `matches`: `Return an <OK: status> for the <request> when
+<required-roles> subset of <user-roles>.` Set semantics — a duplicate on the
+left does not make a new member — and the empty set is a subset of everything.
 
 ### Condition operators
 
@@ -965,14 +972,14 @@ Sources/
 │       └── RuntimeExecutionBridge.swift # Expression evaluation for built code
 └── AROCLI/             # CLI (run, compile, check, build commands)
 
-Examples/               # 114 examples organized by category (run `ls Examples/` for full list)
+Examples/               # 115 examples organized by category (run `ls Examples/` for full list)
 │                       #
 │                       # plan.md is the canonical description of an example:
-│                       # 105 of the 114 have one, and it is the prompt the
+│                       # 106 of the 115 have one, and it is the prompt the
 │                       # example was written from. expected.txt is its
 │                       # executable contract, and test.hint tells the
 │                       # integration harness how (or whether) to run it.
-│                       # README.md is optional narrative — 46 have one — and
+│                       # README.md is optional narrative — 41 have one — and
 │                       # is the layer that goes stale, so when they disagree,
 │                       # plan.md and expected.txt win (GitLab #818).
 │
@@ -1019,7 +1026,7 @@ Examples/               # 114 examples organized by category (run `ls Examples/`
 ├── DataPipeline/       # Filter, transform, aggregate
 ├── GroupDemo/          # Group action: partition collections by field
 ├── CaptureGroups/      # Regex capture groups: captures / all-captures (ARO-0037 §7)
-├── SetOperations/      # Union, intersect, difference
+├── SetOperations/      # Union, intersect, difference, symmetric-difference, subset of
 ├── CollectionMerge/    # Merging collections and objects
 ├── DeleteResult/       # What a Delete statement's result holds (ARO-0007 §6.4)
 ├── RepositoryObserver/ # Repository change observers
@@ -1151,7 +1158,7 @@ The `Proposals/` directory contains language specifications:
 | **0038 List Element Access** | first, last, index, range specifiers |
 | **0040 Format-Aware I/O** | Auto format detection for JSON, YAML, CSV |
 | **0041 Date/Time Ranges** | Date arithmetic, ranges, recurrence patterns |
-| **0042 Set Operations** | intersect, difference, union on collections |
+| **0042 Set Operations** | intersect, difference, union, symmetric-difference, `subset of` |
 | **0043 Sink Syntax** | Expressions in result position |
 | **0044 Runtime Metrics** | Execution counts, timing, Prometheus format |
 | **0045 Package Manager** | Plugin installation, aro add/remove, plugin.yaml |

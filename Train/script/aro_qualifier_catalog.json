@@ -315,6 +315,18 @@
   "description": "Total of a numeric collection",
   "source": "aro actions --qualifiers --format json"
  },
+ "symmetric-difference": {
+  "namespace": "_builtin",
+  "builtin": true,
+  "input_types": [
+   "List",
+   "Object",
+   "String"
+  ],
+  "accepts_parameters": true,
+  "description": "Elements in exactly one of the two (ARO-0042 \u00a73.7)",
+  "source": "aro actions --qualifiers --format json"
+ },
  "take": {
   "namespace": "_builtin",
   "builtin": true,

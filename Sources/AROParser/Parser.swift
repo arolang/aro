@@ -2623,8 +2623,9 @@ extension Parser {
         .isNot:        .equality,
         .contains:     .equality,
         // Membership and affix tests read as comparisons (GitLab #830
-        // item 5), so `when <p> starts with "/" and <m> is "GET"` groups
-        // the way it reads.
+        // item 5, GitLab #864), so `when <p> starts with "/" and <m> is "GET"`
+        // groups the way it reads.
+        .subset:       .equality,
         .notIn:        .equality,
         .startsWith:   .equality,
         .endsWith:     .equality,
@@ -2655,6 +2656,13 @@ extension Parser {
         // position tells them apart with no lookahead.
         case .identifier(let name) where name == "before" || name == "after":
             return .comparison
+
+        // `subset` is a set-containment predicate in operator position and an
+        // ordinary name everywhere else (GitLab #864) — the same
+        // context-sensitive treatment `before` and `after` get, and for the
+        // same reason: `<subset>` is a name people write.
+        case .identifier(let name) where name == "subset":
+            return .equality
 
         // `in` is a membership comparison in operator position. It is a
         // lexer keyword because `for each <x> in <xs>` needs it, but every
@@ -2756,6 +2764,14 @@ extension Parser {
             if op == .is && check(.not) {
                 advance()
                 actualOp = .isNot
+            }
+
+            // `subset of <b>` — the `of` is part of the operator and reads
+            // like English (GitLab #864). It is optional so that `<a> subset
+            // <b>` is not a parse error for something whose meaning is plain;
+            // ARO-0042 writes the `of`.
+            if actualOp == .subset, case .identifier("of") = peek().kind {
+                advance()
             }
 
             // The other two-word operators (GitLab #830 item 5).
@@ -2877,6 +2893,7 @@ extension Parser {
         case .is: return .is
         case .identifier(let name) where name == "before": return .before
         case .identifier(let name) where name == "after": return .after
+        case .identifier(let name) where name == "subset": return .subset
         case .identifier(let name) where name.lowercased() == "starts": return .startsWith
         case .identifier(let name) where name.lowercased() == "ends": return .endsWith
         case .in: return .in

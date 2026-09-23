@@ -149,7 +149,7 @@ comparison       = expression , comparison_op , expression ;
 
 comparison_op    = "is" | "is not" | "==" | "!="
                  | "<" | ">" | "<=" | ">="
-                 | "equals" | "contains" | "matches" ;
+                 | "equals" | "contains" | "matches" | "subset" , [ "of" ] ;
 
 existence_check  = expression , "exists"
                  | expression , "is" , "defined"
@@ -175,12 +175,19 @@ type_check       = expression , "is" , [ "a" | "an" ] , type_name ;
 | `contains` | Membership / substring (dispatches on left operand) | `<roles> contains "admin"`, `<text> contains "error"` |
 | `in` | Membership, the inverse of `contains` (dispatches on right operand) | `<order-date> in <sale-period>`, `"admin" in <roles>` |
 | `matches` | Regex match | `<email> matches /.*@.*\.com/` |
+| `subset of` | Set containment — every element of the left is in the right (ARO-0042 §3.6) | `<required-roles> subset of <user-roles>` |
 
 The `contains` operator picks its comparison from the **runtime type of the
 left operand**: a list/collection tests element membership, a string tests
 substring containment (right operand must also be a string), and a map/object
 tests key membership. All other left-operand types evaluate to `false`. See
 ARO-0001 §Pattern Matching for the full dispatch table.
+
+`subset of` asks the same question of a whole collection rather than one
+element, and answers it with **set** semantics — a duplicate on the left does
+not make a new member, and the empty set is a subset of everything. ARO-0042
+§3.6 has the per-type table and the reason it is an operator rather than a
+Compute qualifier. The `of` may be omitted; the proposals write it.
 
 ### 2.3 Existence Checks
 
@@ -957,7 +964,7 @@ condition_atom    = comparison | existence | type_check
 comparison        = expression , comp_op , expression ;
 comp_op           = "is" | "is" , "not" | "==" | "!="
                   | "<" | ">" | "<=" | ">="
-                  | "equals" | "contains" | "matches" ;
+                  | "equals" | "contains" | "matches" | "subset" , [ "of" ] ;
 
 existence         = expression , ( "exists" | "is" , "defined"
                                  | "is" , "null" | "is" , "empty" ) ;
