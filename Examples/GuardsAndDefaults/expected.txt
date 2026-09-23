@@ -1,0 +1,17 @@
+# Generated: Mon Sep 21 20:57:18 2026
+# Type: console
+# Command: aro run ./Examples/GuardsAndDefaults
+---
+=== 1. A default for an absent value ===
+port: 8080
+region: eu-central
+=== 2. Affix and membership guards ===
+routed to the API
+path is allowed
+aro files: 2
+=== 3. A guarded Publish ===
+headline: 90
+=== 4. Two copies in one feature set ===
+backup a: true
+backup b: true
+startup

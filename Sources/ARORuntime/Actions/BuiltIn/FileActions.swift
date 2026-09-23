@@ -519,11 +519,16 @@ public struct CopyAction: ActionImplementation {
     ) async throws -> any Sendable {
         try validatePreposition(object.preposition)
 
-        // Get source path from result specifiers
-        let sourcePath = try context.resolveString(
+        // Get source path from result specifiers.
+        //
+        // The result slot is a binding the author names, so the path is
+        // read from the specifier first: `<file: "a.txt">` and
+        // `<backup: "a.txt">` are both a copy of a.txt, and the second
+        // binds `backup` rather than colliding on `file` (GitLab #830).
+        let sourcePath = try context.resolveNamedPath(
             base: result.base,
             specifiers: result.specifiers,
-            excluding: ["file", "directory"],
+            reservedBases: ["file", "directory"],
             field: "a source path",
             action: "Copy"
         )
@@ -579,11 +584,16 @@ public struct MoveAction: ActionImplementation {
     ) async throws -> any Sendable {
         try validatePreposition(object.preposition)
 
-        // Get source path from result specifiers
-        let sourcePath = try context.resolveString(
+        // Get source path from result specifiers.
+        //
+        // The result slot is a binding the author names, so the path is
+        // read from the specifier first: `<file: "a.txt">` and
+        // `<backup: "a.txt">` are both a copy of a.txt, and the second
+        // binds `backup` rather than colliding on `file` (GitLab #830).
+        let sourcePath = try context.resolveNamedPath(
             base: result.base,
             specifiers: result.specifiers,
-            excluding: ["file", "directory"],
+            reservedBases: ["file", "directory"],
             field: "a source path",
             action: "Move"
         )

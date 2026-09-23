@@ -153,7 +153,14 @@ public struct ConstantFolder {
         // question the runtime answers correctly (GitLab #516). `in`
         // is membership, whose container is a range or a collection
         // rather than a scalar literal (GitLab #558).
-        case .concat, .is, .isNot, .contains, .matches, .before, .after, .in:
+        // is membership, whose container is a range or a collection
+        // rather than a scalar literal (GitLab #558) — and `not in` is
+        // that same question. `starts with` / `ends with` could fold for
+        // two string literals, but a literal affix test is a tautology
+        // nobody writes, so folding it would only be a second place for
+        // the semantics to drift from the runtime (GitLab #830 item 5).
+        case .concat, .is, .isNot, .contains, .matches, .before, .after, .in,
+             .notIn, .startsWith, .endsWith:
             return nil
         }
     }
