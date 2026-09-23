@@ -1021,6 +1021,7 @@ Examples/               # 114 examples organized by category (run `ls Examples/`
 ├── CaptureGroups/      # Regex capture groups: captures / all-captures (ARO-0037 §7)
 ├── SetOperations/      # Union, intersect, difference
 ├── CollectionMerge/    # Merging collections and objects
+├── DeleteResult/       # What a Delete statement's result holds (ARO-0007 §6.4)
 ├── RepositoryObserver/ # Repository change observers
 ├── SQLiteExample/      # Database plugin usage
 │
