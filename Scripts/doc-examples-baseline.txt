@@ -107,9 +107,9 @@ Proposals/ARO-0010-advanced-features.md:683
 Proposals/ARO-0010-advanced-features.md:727
 Proposals/ARO-0010-advanced-features.md:756
 Proposals/ARO-0010-advanced-features.md:777
-Proposals/ARO-0011-html-xml-parsing.md:228
-Proposals/ARO-0011-html-xml-parsing.md:306
-Proposals/ARO-0011-html-xml-parsing.md:315
+Proposals/ARO-0011-html-xml-parsing.md:285
+Proposals/ARO-0011-html-xml-parsing.md:364
+Proposals/ARO-0011-html-xml-parsing.md:373
 Proposals/ARO-0014-domain-modeling.md:268
 Proposals/ARO-0014-domain-modeling.md:381
 Proposals/ARO-0014-domain-modeling.md:414

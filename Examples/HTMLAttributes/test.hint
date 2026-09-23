@@ -1,0 +1,3 @@
+# Test hints for HTMLAttributes (ARO-0011 §1.5, GitLab #860)
+mode: both
+occurrence-check: true
