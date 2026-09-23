@@ -86,6 +86,14 @@ public enum ComputeQualifierCatalog {
                  + "Reduce the <\(result)> from the <\(object)> with \(qualifier.lowercased())()."
         case "split":
             return "Splitting is an action: Split the <\(result)> from the <\(object)> with \",\"."
+        case "timezone", "tz", "zone", "localtime", "local-time":
+            // GitLab #865. Every other date operation — `date`, `format`,
+            // `distance` — is a Compute qualifier, so this is the first place
+            // people look. Timezone conversion is an Extract because it reads
+            // one rendering of an instant out of another (ARO-0041 §7).
+            return "Timezone conversion is an Extract: "
+                 + "Extract the <\(result): timezone> from the <\(object)> "
+                 + "with \"Europe/Berlin\"."
         case "round", "rounded", "money", "currency", "precision":
             // GitLab #517: these are the names people reach for when a
             // price prints as 7.199999999999999. `fixed` is one word

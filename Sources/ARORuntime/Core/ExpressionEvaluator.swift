@@ -396,12 +396,24 @@ public struct ExpressionEvaluator: Sendable {
         // (GitLab #558).
         case .in:
             return containsValue(right, left)
+        case .notIn:
+            return !containsValue(right, left)
         case .matches:
             return matchesPattern(left, right)
 
         // Set containment (ARO-0042 §3.6, GitLab #864).
         case .subset:
             return isSubset(left, of: right)
+
+        // Affix tests (GitLab #830 item 5). `where` has dispatched
+        // `starts-with` / `ends-with` since ARO-0018; the guard grammar
+        // could not say them, so a prefix test in a `when` was written as
+        // a `matches "^…"` regex — which escapes wrong the moment the
+        // prefix contains a `.` or a `?`.
+        case .startsWith:
+            return affixText(left).hasPrefix(affixText(right))
+        case .endsWith:
+            return affixText(left).hasSuffix(affixText(right))
 
         // Type operators (handled in type check expression)
         case .is, .isNot:
@@ -791,6 +803,19 @@ public struct ExpressionEvaluator: Sendable {
         guard superset is [any Sendable] || superset is String
                 || superset is [String: any Sendable] else { return false }
         return elements.allSatisfy { containsValue(superset, $0) }
+    }
+
+    /// Text for an affix test. A `starts with` on a number is a
+    /// reasonable thing to write (`when <code> starts with "4"`), so the
+    /// operand is rendered rather than required to already be a String.
+    private func affixText(_ value: any Sendable) -> String {
+        if let s = value as? String { return s }
+        if let i = value as? Int { return String(i) }
+        if let d = value as? Double {
+            return d == d.rounded() && abs(d) < 1e15 ? String(Int(d)) : String(d)
+        }
+        if let b = value as? Bool { return b ? "true" : "false" }
+        return String(describing: value)
     }
 
     private func matchesPattern(_ value: any Sendable, _ pattern: any Sendable) -> Bool {

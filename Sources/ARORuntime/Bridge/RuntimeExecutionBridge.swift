@@ -771,8 +771,8 @@ func evaluateExpressionJSON(_ expr: [String: Any], context: RuntimeContext) -> a
             // is expected — resolution falls through to property access below.
             if let transformed = try? QualifierRegistry.shared.resolve(spec, value: value) {
                 value = transformed
-            } else if let dict = value as? [String: any Sendable], let propVal = dict[spec] {
-                // Fall back to dictionary property access (e.g., <user: name>)
+            } else if let propVal = specifierValue(value, spec) {
+                // Fall back to property access (e.g., <user: name>, <date: hour>)
                 value = propVal
             }
             // If neither works, just continue - the value stays as-is
@@ -1011,13 +1011,10 @@ private func resolveVariableExpression(_ expr: String, context: RuntimeContext) 
 
         // Navigate through property path
         for specifier in specifiers {
-            if let dict = value as? [String: any Sendable], let nested = dict[specifier] {
-                value = nested
-            } else if let dict = value as? [String: Any], let nested = dict[specifier] {
-                value = convertToSendable(nested)
-            } else {
+            guard let nested = specifierValue(value, specifier) else {
                 return ""  // Property not found
             }
+            value = nested
         }
 
         return stringValue(value)
@@ -1317,6 +1314,37 @@ func evaluateBinaryOp(op: String, left: any Sendable, right: any Sendable) -> an
         }
         return false
 
+    // `a not in b` — the exact negation of the case above, written out
+    // rather than delegating so the date-range and dictionary paths stay
+    // literally the same code (GitLab #830 item 5).
+    case "not in":
+        if let range = right as? ARODateRange, let date = parseARODate(left) {
+            return !range.contains(date)
+        }
+        if let range = left as? ARODateRange, let date = parseARODate(right) {
+            return !range.contains(date)
+        }
+        if let array = right as? [any Sendable] {
+            let leftStr = asString(left)
+            return !array.contains { asString($0) == leftStr }
+        }
+        if let str = right as? String, let substr = left as? String {
+            return !(substr.isEmpty || str.contains(substr))
+        }
+        if let dict = right as? [String: any Sendable], let key = left as? String {
+            return dict[key] == nil
+        }
+        return true
+
+    // Affix tests (GitLab #830 item 5), matching the interpreter's
+    // `affixText` rendering so a numeric operand behaves the same in
+    // both modes.
+    case "starts with":
+        return asString(left).hasPrefix(asString(right))
+
+    case "ends with":
+        return asString(left).hasSuffix(asString(right))
+
     // Regex matching
     case "matches":
         let str = asString(left)
@@ -1376,6 +1404,28 @@ private func asBool(_ value: any Sendable) -> Bool {
     case let s as String: return s.lowercased() == "true"
     default: return false
     }
+}
+
+/// One step of `<value: specifier>` in compiled code.
+///
+/// Dictionaries were the only shape this understood, so an `Extractable` —
+/// `ARODate`, `ARODateRange`, `ARORecurrence`, `DateDistance` — answered
+/// nothing at all: `<order-date: hour>` printed empty in a built binary and the
+/// right number under `aro run` (GitLab #865). The interpreter has always gone
+/// through `Extractable`; this is the same lookup, on the compiled path.
+///
+/// Returns `nil` when the specifier names nothing on this value.
+func specifierValue(_ value: any Sendable, _ specifier: String) -> (any Sendable)? {
+    if let dict = value as? [String: any Sendable], let nested = dict[specifier] {
+        return nested
+    }
+    if let dict = value as? [String: Any], let nested = dict[specifier] {
+        return convertToSendable(nested)
+    }
+    if let extractable = value as? any Extractable, let property = extractable.property(specifier) {
+        return property
+    }
+    return nil
 }
 
 /// Parse a value as an ARODate (ARO-0041)
@@ -1539,16 +1589,10 @@ private func resolveInterpolationExpression(_ expr: String, context: RuntimeCont
 
         // Navigate through property path
         for specifier in specifiers {
-            // Try [String: any Sendable] first
-            if let dict = value as? [String: any Sendable], let nested = dict[specifier] {
-                value = nested
-            }
-            // Also try [String: Any] for dictionaries from JSON parsing
-            else if let dict = value as? [String: Any], let nested = dict[specifier] {
-                value = convertToSendable(nested)
-            } else {
+            guard let nested = specifierValue(value, specifier) else {
                 return ""  // Property not found
             }
+            value = nested
         }
 
         return formatInterpolatedValue(value)

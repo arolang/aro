@@ -316,20 +316,24 @@ def is_safely_runnable(code):
 
 
 def run_aro_program(code, openapi_yaml=None, timeout=10):
-    """Execute a generated ARO program with `aro run`.
+    """Execute a generated ARO program with `aro run`, sandboxed.
 
     Returns (ok, output): ok True on exit 0, False on failure/timeout,
     None when the aro binary is missing.
+
+    This is the call that was writing model output into the repository
+    (GitLab #804): it passed no `cwd`, so the subprocess inherited the
+    pipeline's, and a relative file sink in a generated program resolved
+    against `Train/script`. sandbox.run_program_dir gives the program its own
+    working directory, HOME and TMPDIR, all inside a temp tree that is deleted
+    afterwards.
     """
+    import sandbox
+    extra = {'openapi.yaml': openapi_yaml} if openapi_yaml else None
     try:
-        with tempfile.TemporaryDirectory() as tmp:
-            d = Path(tmp)
-            (d / 'main.aro').write_text(code)
-            if openapi_yaml:
-                (d / 'openapi.yaml').write_text(openapi_yaml)
-            r = subprocess.run(['aro', 'run', str(d)],
-                               capture_output=True, text=True, timeout=timeout)
-            return r.returncode == 0, (r.stdout or r.stderr).strip()[:300]
+        r = sandbox.run_program_dir(['aro', 'run'], code, extra_files=extra,
+                                    timeout=timeout)
+        return r.returncode == 0, (r.stdout or r.stderr).strip()[:300]
     except FileNotFoundError:
         return None, 'aro_not_found'
     except subprocess.TimeoutExpired:
@@ -353,17 +357,14 @@ def extract_openapi_and_aro(text):
 
 
 def aro_check_dir(main_aro, openapi_yaml=None, timeout=15):
-    """Run `aro check` on a temp directory holding main.aro (+ contract).
-    Returns True/False, or None when the aro binary is missing."""
+    """Run `aro check` on a sandboxed temp directory holding main.aro
+    (+ contract). Returns True/False, or None when the aro binary is missing."""
+    import sandbox
+    extra = {'openapi.yaml': openapi_yaml} if openapi_yaml else None
     try:
-        with tempfile.TemporaryDirectory() as tmp:
-            d = Path(tmp)
-            if openapi_yaml:
-                (d / 'openapi.yaml').write_text(openapi_yaml)
-            (d / 'main.aro').write_text(main_aro or '')
-            r = subprocess.run(['aro', 'check', str(d)],
-                               capture_output=True, text=True, timeout=timeout)
-            return r.returncode == 0
+        r = sandbox.run_program_dir(['aro', 'check'], main_aro or '',
+                                    extra_files=extra, timeout=timeout)
+        return r.returncode == 0
     except FileNotFoundError:
         return None
     except subprocess.TimeoutExpired:

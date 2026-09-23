@@ -183,9 +183,25 @@ Read-only access to process environment:
 Get the <api-key> from the <env: "API_KEY">.
 Get the <port> from the <env: "PORT">.
 
+(* Supply a value for the case where it is not set *)
+Get the <timeout> from the <env: "TIMEOUT"> default "30".
+
 (* Get all environment variables *)
 Get the <all-env> from the <env>.
 ```
+
+An **unset** variable binds the empty string, and `default` supplies a value
+instead. A variable set to the empty string (`PORT=`) is a value somebody wrote
+and wins over the default — the same rule the `default` operator follows for
+`false`, `0` and `""` (ARO-0001, GitLab #547). Without the clause the empty
+string still stands, so this changes nothing about programs that do not use it.
+
+The clause reads the same on `<parameter: NAME>` (ARO-0047), where an absent
+parameter would otherwise fail the statement rather than bind an empty value.
+
+Before the clause existed, every reader of an optional variable wrote
+`when <x> == ""` — the condition in the wrong place, repeated once per reader
+(GitLab #830).
 
 #### File Object
 

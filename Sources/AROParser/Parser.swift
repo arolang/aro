@@ -1261,6 +1261,12 @@ public final class Parser {
         case .in:
             advance()
             op = .in
+        case .identifier(let word) where word.lowercased() == "starts"
+                                      || word.lowercased() == "ends":
+            let isStarts = word.lowercased() == "starts"
+            advance()
+            try expectPreposition(.with, message: "'with' after '\(word)'")
+            op = isStarts ? .startsWith : .endsWith
         case .not:
             advance()
             // Must be followed by 'in' for "not in"
@@ -1271,7 +1277,7 @@ public final class Parser {
                 throw ParserError.unexpectedToken(expected: "'in' after 'not' in where clause", got: peek())
             }
         default:
-            throw ParserError.unexpectedToken(expected: "comparison operator (is, =, <, >, <=, >=, !=, contains, matches, in, not in, between) after <\(field)> in where clause", got: peek())
+            throw ParserError.unexpectedToken(expected: "comparison operator (is, =, <, >, <=, >=, !=, contains, matches, starts with, ends with, in, not in, between) after <\(field)> in where clause", got: peek())
         }
 
         // Parse value expression — stops before and/or (see doc comment)
@@ -1464,12 +1470,21 @@ public final class Parser {
         try expect(.leftAngle, message: "'<'")
         let internalVariable = try parseCompoundIdentifier()
         try expect(.rightAngle, message: "'>'")
-        
+
+        // Trailing `when` guard, the same clause action statements take
+        // (GitLab #830 item 14).
+        var whenCondition: (any Expression)?
+        if check(.when) {
+            advance()
+            whenCondition = try parseExpression()
+        }
+
         let endToken = try expectStatementTerminator()
-        
+
         return PublishStatement(
             externalName: externalName,
             internalVariable: internalVariable,
+            statementGuard: StatementGuard(condition: whenCondition),
             span: startToken.span.merged(with: endToken.span)
         )
     }
@@ -2535,7 +2550,13 @@ extension Parser {
         .is:           .equality,
         .isNot:        .equality,
         .contains:     .equality,
+        // Membership and affix tests read as comparisons (GitLab #830
+        // item 5, GitLab #864), so `when <p> starts with "/" and <m> is "GET"`
+        // groups the way it reads.
         .subset:       .equality,
+        .notIn:        .equality,
+        .startsWith:   .equality,
+        .endsWith:     .equality,
         // Temporal comparison sits with the other comparisons, so
         // `when <a> before <b> and <c> after <d>` groups the way it
         // reads (GitLab #516).
@@ -2577,6 +2598,26 @@ extension Parser {
         // before any expression parsing starts, so giving it a precedence
         // here cannot swallow one of those (GitLab #558).
         case .in:
+            return .comparison
+
+        // `starts with` / `ends with` — context-sensitive for the same
+        // reason `before`/`after` are: `<starts>` and `<ends>` are
+        // ordinary names, so neither word is a lexer keyword. Only a
+        // following `with` makes it an operator, which is the lookahead
+        // this case performs (GitLab #830 item 5).
+        case .identifier(let name) where name.lowercased() == "starts"
+                                      || name.lowercased() == "ends":
+            let nextIndex = current + 1
+            guard nextIndex < tokens.count,
+                  case .preposition(.with) = tokens[nextIndex].kind else { return nil }
+            return .comparison
+
+        // `not in`: `not` alone is the unary negation and must stay one,
+        // so only the pair is an infix operator.
+        case .not:
+            let nextIndex = current + 1
+            guard nextIndex < tokens.count,
+                  case .in = tokens[nextIndex].kind else { return nil }
             return .comparison
 
         // Context-sensitive: `<` / `>` are comparison operators here only when
@@ -2659,6 +2700,16 @@ extension Parser {
             // ARO-0042 writes the `of`.
             if actualOp == .subset, case .identifier("of") = peek().kind {
                 advance()
+            }
+
+            // The other two-word operators (GitLab #830 item 5).
+            // `infixPrecedence` already refused to reach here unless the
+            // second word is present, so these consume it unconditionally.
+            if op == .startsWith || op == .endsWith {
+                try expectPreposition(.with, message: "'with' after '\(token.lexeme)'")
+            }
+            if op == .notIn {
+                try expect(.in, message: "'in' after 'not'")
             }
 
             // Handle "is true", "is false", "is nil/null" as equality comparisons
@@ -2771,7 +2822,10 @@ extension Parser {
         case .identifier(let name) where name == "before": return .before
         case .identifier(let name) where name == "after": return .after
         case .identifier(let name) where name == "subset": return .subset
+        case .identifier(let name) where name.lowercased() == "starts": return .startsWith
+        case .identifier(let name) where name.lowercased() == "ends": return .endsWith
         case .in: return .in
+        case .not: return .notIn
         case .and: return .and
         case .or: return .or
         case .identifier("default"): return .defaulting

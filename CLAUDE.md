@@ -617,7 +617,7 @@ instead of reporting "no action named" (GitLab #828):
 
 | Form | Meaning |
 |------|---------|
-| `Publish as <alias> <variable>.` | Makes a variable visible to other feature sets in the same business activity |
+| `Publish as <alias> <variable> [when <cond>].` | Makes a variable visible to other feature sets in the same business activity; a false guard leaves the name unpublished (GitLab #830) |
 | `Require the <name> from the <source>.` | Declares an external dependency (below) |
 | `match <noun> { case <pattern> { … } otherwise { … } }` | Branches on a value; the first matching case wins |
 | `Break.` | Leaves the innermost loop |
@@ -732,6 +732,49 @@ It answers a question rather than producing a collection, so it sits with `in`,
 `contains` and `matches`: `Return an <OK: status> for the <request> when
 <required-roles> subset of <user-roles>.` Set semantics — a duplicate on the
 left does not make a new member — and the empty set is a subset of everything.
+
+### Condition operators
+
+`when` and `where` take the same operator set (ARO-0001, ARO-0018 §2.1) — they
+had diverged, so a predicate that could filter a collection could not guard a
+statement (GitLab #830):
+
+| Operator | Example |
+|----------|---------|
+| `in` / `not in` | `when <tag> not in <banned>` |
+| `starts with` / `ends with` | `when <path> starts with "/api"` |
+| `contains` | `when <name> contains "test"` |
+| `matches` | `when <name> matches "^a.c"` |
+| `before` / `after` | `when <deadline> before <now>` |
+
+The affix operators are **literal** — that is the point of having them, since
+`matches "^a.c"` also accepts `axc`. `starts` and `ends` are not reserved: only
+a following `with`, in operator position, makes them operators, so `<starts>`
+and `<end-date>` stay usable as names. `not` alone is still the unary negation.
+
+### Absent values
+
+`Extract … default <value>` supplies a value when the source is not there:
+
+```aro
+Extract the <port> from the <env: PORT> default "8080".
+Extract the <mode> from the <parameter: mode> default "fast".
+```
+
+Only an **unset** variable takes the default. `PORT=` is a value somebody wrote
+and wins — the same rule the `default` operator follows for `false`, `0` and
+`""` (GitLab #547). Without the clause an unset variable still binds `""`.
+
+### HTTP status names
+
+`HTTPStatusCatalog` (AROParser) is the single source for
+`Return a <Name: status>` — read by the interpreter, the compiled binary and
+`aro check`. It used to be two hard-coded switches that disagreed (twelve names
+vs five) and **both fell through to 200**, so `<TooManyRequests: status>` was a
+200 with a rate-limit body (GitLab #830). Case and separators do not
+distinguish names. A misspelling within a typo's distance of a real name is a
+check warning; a genuine domain status (`<PendingVerification: status>`,
+ARO-0002 §7) is a deliberate 200 and stays silent.
 
 **Qualifier-as-Name Syntax**: When you need multiple results of the same operation, use the qualifier to specify the operation while the base becomes the variable name:
 
@@ -878,10 +921,10 @@ Sources/
 │       └── RuntimeExecutionBridge.swift # Expression evaluation for built code
 └── AROCLI/             # CLI (run, compile, check, build commands)
 
-Examples/               # 110 examples organized by category (run `ls Examples/` for full list)
+Examples/               # 111 examples organized by category (run `ls Examples/` for full list)
 │                       #
 │                       # plan.md is the canonical description of an example:
-│                       # 100 of the 110 have one, and it is the prompt the
+│                       # 101 of the 111 have one, and it is the prompt the
 │                       # example was written from. expected.txt is its
 │                       # executable contract, and test.hint tells the
 │                       # integration harness how (or whether) to run it.
@@ -939,6 +982,7 @@ Examples/               # 110 examples organized by category (run `ls Examples/`
 │   # Dates & Time
 ├── DateTimeDemo/       # Date/time operations
 ├── DateRangeDemo/      # Date ranges and recurrence
+├── TimezoneDemo/       # Timezone conversion, DST, instants vs. rendering (ARO-0041 §7)
 │
 │   # Git
 ├── GitDemo/            # Native Git operations (status, log, stage, commit)

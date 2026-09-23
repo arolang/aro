@@ -18,7 +18,13 @@ public actor RemoteBackend: LMBackend {
     public func start() async throws {}
     public func stop() async {}
 
+    private var lastUsage: LMUsage?
+
     public func chat(request: LMChatRequest) async throws -> LMChatResponse.Choice.Message {
-        try await client.chat(request)
+        let (message, usage) = try await client.chatWithUsage(request)
+        lastUsage = usage
+        return message
     }
+
+    public func usageOfLastChat() async -> LMUsage? { lastUsage }
 }

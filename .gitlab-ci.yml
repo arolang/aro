@@ -313,11 +313,30 @@ train:unit:
   stage: test
   image: python:3.12-slim
   before_script:
+    # The git-history miner and the artefact-metadata helper both shell out to
+    # git, which python:3.12-slim does not ship. Without this the suite fails
+    # on the image rather than on the code.
     - apt-get update -qq && apt-get install -y -qq --no-install-recommends git
     - git config --global --add safe.directory "$CI_PROJECT_DIR"
   script:
-    - pip install --no-cache-dir --quiet pytest
+    - pip install --no-cache-dir --quiet pytest PyYAML
     - python3 -m pytest Train/script/tests -q
+    # Train/ is Apple-Silicon-only where it touches mlx, but everything that
+    # decides what the pipeline PRODUCES — the shared helpers, the
+    # hyper-parameter table, the stall watchdog, the sandbox, the run archive —
+    # is ordinary Python a Linux runner can prove (GitLab #803).
+    - python3 Train/script/check_hparams.py
+    - python3 Train/script/run_archive.py --dry-run --release ci || true
+    # Not applicable off Apple Silicon: exit 2 is the expected answer here, and
+    # asserting it keeps the preflight honest about saying so.
+    #
+    # Captured with `|| rc=$?` rather than `; test $? -eq 2`: the runner's
+    # shell has `set -e`, so the bare `;` form aborted the line the moment the
+    # preflight exited 2 — the very outcome being asserted — and the job failed
+    # with that same exit code, which read as the preflight being broken rather
+    # than the assertion never running. `|| …` is a condition context, where
+    # `set -e` does not fire.
+    - rc=0; python3 Train/script/mlx_preflight.py --no-record || rc=$?; test "$rc" -eq 2
 
 # =============================================================================
 # Fenced ARO blocks in the documentation must parse (GitLab #834)
@@ -355,24 +374,6 @@ doc-examples:
     - chmod +x aro-dist/aro
     - ARO_BIN=aro-dist/aro python3 Scripts/check-doc-examples.py
 
-# =============================================================================
-# The training pipeline's own unit tests (GitLab #783)
-# =============================================================================
-# Pure python: pair shapes, the corpus gates, the config helpers. The tests
-# that need an `aro` binary skip themselves here and run for real in
-# train:corpus, which has one.
-train:tests:
-  stage: test
-  image: python:3.12-slim
-  before_script:
-    # The git-history miner and the artefact-metadata helper both shell
-    # out to git, which python:3.12-slim does not ship. Without this the
-    # suite fails on the image rather than on the code.
-    - apt-get update -qq && apt-get install -y -qq --no-install-recommends git
-    - git config --global --add safe.directory "$CI_PROJECT_DIR"
-  script:
-    - pip install --quiet pytest
-    - python3 -m pytest Train/script/tests -q
 
 # =============================================================================
 # Test Stage - Gate for all builds (main branch only)
