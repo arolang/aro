@@ -1,0 +1,9 @@
+first key: host
+first value: example.com
+whole match: host=example.com
+settings: 3
+host -> example.com
+port -> 8080
+tls -> on
+unmatched fields: 0
+startup

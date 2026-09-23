@@ -70,5 +70,15 @@ value: 2
 id: 4
 value: 7
 
+--- Symmetric Difference (what changed) ---
+Changed (in exactly one):
+[admin, billing]
+Changes against itself:
+0
+
+--- Subset (a predicate) ---
+required subset of granted: yes
+granted subset of required: no
+
 === Demo Complete ===
 demo

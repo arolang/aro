@@ -20,6 +20,7 @@ public final class LLVMExternalDeclEmitter {
     private var _runtimeAwaitPendingEvents: Function?
     private var _runtimeRegisterHandler: Function?
     private var _parseArguments: Function?
+    private var _declarePositionalParameters: Function?
     private var _hasKeepAlive: Function?
     private var _registerRepositoryObserver: Function?
     private var _registerRepositoryObserverWithGuard: Function?
@@ -149,6 +150,12 @@ public final class LLVMExternalDeclEmitter {
         _parseArguments = ctx.module.declareFunction(
             "aro_parse_arguments",
             types.voidFunctionType(parameters: [i32, ptr])
+        )
+
+        // void @aro_declare_positional_parameters(ptr) - ARO-0047, GitLab #857
+        _declarePositionalParameters = ctx.module.declareFunction(
+            "aro_declare_positional_parameters",
+            types.voidFunctionType(parameters: [ptr])
         )
 
         // i32 @aro_has_keep_alive() - Check for --keep-alive flag
@@ -588,6 +595,7 @@ public final class LLVMExternalDeclEmitter {
     public var runtimeAwaitPendingEvents: Function { _runtimeAwaitPendingEvents! }
     public var runtimeRegisterHandler: Function { _runtimeRegisterHandler! }
     public var parseArguments: Function { _parseArguments! }
+    public var declarePositionalParameters: Function { _declarePositionalParameters! }
     public var hasKeepAlive: Function { _hasKeepAlive! }
     public var registerRepositoryObserver: Function { _registerRepositoryObserver! }
     public var registerRepositoryObserverWithGuard: Function { _registerRepositoryObserverWithGuard! }

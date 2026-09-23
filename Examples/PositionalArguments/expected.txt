@@ -1,0 +1,9 @@
+# Type: console
+# Command: aro run ./Examples/PositionalArguments https://example.com 3
+# NOTE: This example uses test-script for verification
+# This expected.txt is for reference only, not used in testing
+---
+site: https://example.com
+depth: 3
+arguments: 2
+startup
