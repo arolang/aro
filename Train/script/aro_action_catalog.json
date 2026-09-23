@@ -384,8 +384,7 @@
   "aliases": [
    "createdirectory",
    "make",
-   "mkdir",
-   "touch"
+   "mkdir"
   ],
   "source": "Sources/ARORuntime/Actions/BuiltIn/FileActions.swift"
  },
@@ -838,6 +837,19 @@
    "throw"
   ],
   "source": "Sources/ARORuntime/Actions/BuiltIn/ThrowAction.swift"
+ },
+ "touch": {
+  "role": "server",
+  "role_label": "SERVER (service lifecycle operations)",
+  "prepositions": [
+   "at",
+   "for",
+   "to"
+  ],
+  "aliases": [
+   "touch"
+  ],
+  "source": "Sources/ARORuntime/Actions/BuiltIn/FileActions.swift"
  },
  "transform": {
   "role": "own",

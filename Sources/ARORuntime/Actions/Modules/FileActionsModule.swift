@@ -11,6 +11,7 @@ public enum FileActionsModule: ActionModule {
             StatAction.self,
             ExistsAction.self,
             MakeAction.self,
+            TouchAction.self,
             CopyAction.self,
             MoveAction.self,
             AppendAction.self,

@@ -922,6 +922,22 @@ public func aro_action_make(
     return executeAction(verb: "make", contextPtr: contextPtr, resultPtr: resultPtr, objectPtr: objectPtr)
 }
 
+/// `Touch the <marker> for the <file: "./stamp">.` in a compiled binary
+/// (ARO-0036 §3.4, GitLab #861).
+///
+/// There was no export for this verb at all, so any program using it failed to
+/// *link* — `undefined symbol: _aro_action_touch` — while `aro run` worked.
+/// The verb existed on `MakeAction` from the start; only the bridge was
+/// missing, which is why nothing caught it: the interpreter never asks.
+@_cdecl("aro_action_touch")
+public func aro_action_touch(
+    _ contextPtr: UnsafeMutableRawPointer?,
+    _ resultPtr: UnsafeRawPointer?,
+    _ objectPtr: UnsafeRawPointer?
+) -> UnsafeMutableRawPointer? {
+    return executeAction(verb: "touch", contextPtr: contextPtr, resultPtr: resultPtr, objectPtr: objectPtr)
+}
+
 @_cdecl("aro_action_copy")
 public func aro_action_copy(
     _ contextPtr: UnsafeMutableRawPointer?,
