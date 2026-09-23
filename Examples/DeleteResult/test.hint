@@ -1,0 +1,4 @@
+# Test hints for DeleteResult (ARO-0007 §6.4, GitLab #866)
+# Repository iteration order is not defined, so match lines rather than order.
+mode: both
+occurrence-check: true

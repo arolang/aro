@@ -4,6 +4,7 @@
 /Website/node_modules
 /Website/dist
 /Examples/HelloWorld/HelloWorld
+/Examples/DeleteResult/DeleteResult
 /Examples/HTMLAttributes/HTMLAttributes
 /Examples/TimezoneDemo/TimezoneDemo
 .DS_Store

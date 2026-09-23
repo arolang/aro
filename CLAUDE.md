@@ -969,6 +969,7 @@ Examples/               # 111 examples organized by category (run `ls Examples/`
 ├── GroupDemo/          # Group action: partition collections by field
 ├── SetOperations/      # Union, intersect, difference
 ├── CollectionMerge/    # Merging collections and objects
+├── DeleteResult/       # What a Delete statement's result holds (ARO-0007 §6.4)
 ├── RepositoryObserver/ # Repository change observers
 ├── SQLiteExample/      # Database plugin usage
 │

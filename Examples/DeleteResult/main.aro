@@ -1,0 +1,29 @@
+(* What a Delete statement's result holds — ARO-0007 §6.4
+ *
+ * A delete is not only something a program does, it is something a program
+ * reports on: how many rows went, which ones, and whether any did.
+ *)
+
+(Application-Start: Delete Result) {
+    Store the <a> into the <order-repository> with { id: "1", status: "cancelled" }.
+    Store the <b> into the <order-repository> with { id: "2", status: "open" }.
+    Store the <c> into the <order-repository> with { id: "3", status: "cancelled" }.
+
+    Delete the <purged> from the <order-repository> where <status> is "cancelled".
+    Log "removed ${<purged: count>}" to the <console>.
+
+    (* `deleted` is always a list, including for a single match. *)
+    for each <order> in <purged: deleted> {
+        Log "purged ${<order: id>}" to the <console>.
+    }
+
+    (* A delete that matched nothing is distinguishable from one that did. *)
+    Delete the <nothing> from the <order-repository> where <status> is "refunded".
+    Log "removed ${<nothing: count>}" to the <console>.
+
+    (* No `where` clears the repository; count is what it held. *)
+    Delete the <cleared> from the <order-repository>.
+    Log "cleared ${<cleared: count>}" to the <console>.
+
+    Return an <OK: status> for the <startup>.
+}
