@@ -914,10 +914,10 @@ Sources/
 │       └── RuntimeExecutionBridge.swift # Expression evaluation for built code
 └── AROCLI/             # CLI (run, compile, check, build commands)
 
-Examples/               # 110 examples organized by category (run `ls Examples/` for full list)
+Examples/               # 111 examples organized by category (run `ls Examples/` for full list)
 │                       #
 │                       # plan.md is the canonical description of an example:
-│                       # 100 of the 110 have one, and it is the prompt the
+│                       # 101 of the 111 have one, and it is the prompt the
 │                       # example was written from. expected.txt is its
 │                       # executable contract, and test.hint tells the
 │                       # integration harness how (or whether) to run it.
@@ -975,6 +975,7 @@ Examples/               # 110 examples organized by category (run `ls Examples/`
 │   # Dates & Time
 ├── DateTimeDemo/       # Date/time operations
 ├── DateRangeDemo/      # Date ranges and recurrence
+├── TimezoneDemo/       # Timezone conversion, DST, instants vs. rendering (ARO-0041 §7)
 │
 │   # Git
 ├── GitDemo/            # Native Git operations (status, log, stage, commit)
