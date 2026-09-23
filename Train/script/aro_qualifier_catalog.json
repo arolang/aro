@@ -1,4 +1,14 @@
 {
+ "absolute": {
+  "namespace": "_builtin",
+  "builtin": true,
+  "input_types": [
+   "String"
+  ],
+  "accepts_parameters": false,
+  "description": "Resolved against the working directory, . and .. removed",
+  "source": "aro actions --qualifiers --format json"
+ },
  "average": {
   "namespace": "_builtin",
   "builtin": true,
@@ -59,6 +69,16 @@
   "description": "URL-safe Base64 encode (JWTs)",
   "source": "aro actions --qualifiers --format json"
  },
+ "basename": {
+  "namespace": "_builtin",
+  "builtin": true,
+  "input_types": [
+   "String"
+  ],
+  "accepts_parameters": false,
+  "description": "Last path component, extension included",
+  "source": "aro actions --qualifiers --format json"
+ },
  "clip": {
   "namespace": "_builtin",
   "builtin": true,
@@ -102,6 +122,16 @@
   "description": "Set difference",
   "source": "aro actions --qualifiers --format json"
  },
+ "dirname": {
+  "namespace": "_builtin",
+  "builtin": true,
+  "input_types": [
+   "String"
+  ],
+  "accepts_parameters": false,
+  "description": "Everything before the last path component",
+  "source": "aro actions --qualifiers --format json"
+ },
  "distance": {
   "namespace": "_builtin",
   "builtin": true,
@@ -110,6 +140,16 @@
   ],
   "accepts_parameters": true,
   "description": "Date distance between two dates",
+  "source": "aro actions --qualifiers --format json"
+ },
+ "extension": {
+  "namespace": "_builtin",
+  "builtin": true,
+  "input_types": [
+   "String"
+  ],
+  "accepts_parameters": false,
+  "description": "File extension without the dot; empty when there is none",
   "source": "aro actions --qualifiers --format json"
  },
  "fixed": {
@@ -247,6 +287,17 @@
   "description": "Render markdown to HTML",
   "source": "aro actions --qualifiers --format json"
  },
+ "path-join": {
+  "namespace": "_builtin",
+  "builtin": true,
+  "input_types": [
+   "List",
+   "String"
+  ],
+  "accepts_parameters": true,
+  "description": "Join path components with exactly one separator; with <name> or with [\"a\", \"b\"]",
+  "source": "aro actions --qualifiers --format json"
+ },
  "random": {
   "namespace": "_builtin",
   "builtin": true,
@@ -283,6 +334,16 @@
   ],
   "accepts_parameters": false,
   "description": "SHA-256 digest, hex-encoded (alias of hash)",
+  "source": "aro actions --qualifiers --format json"
+ },
+ "stem": {
+  "namespace": "_builtin",
+  "builtin": true,
+  "input_types": [
+   "String"
+  ],
+  "accepts_parameters": false,
+  "description": "Last path component without its extension",
   "source": "aro actions --qualifiers --format json"
  },
  "sum": {
