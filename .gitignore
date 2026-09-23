@@ -15,6 +15,7 @@
 /worktree/
 /Examples/PathOperations/PathOperations
 /Examples/PathOperations/build-stamp.txt
+/Examples/URLUtilities/URLUtilities
 .DS_Store
 /.swiftpm
 /Editor/intellij-aro/gradlew.bat
