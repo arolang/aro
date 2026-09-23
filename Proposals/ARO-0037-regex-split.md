@@ -237,6 +237,86 @@ Extract the <last-three: 0-2> from the <words>.
 
 ---
 
+## 7. Capture Groups
+
+`Split` throws away what the delimiter matched. A pattern with capture groups
+is how you get at the parts of a match rather than the parts around it, and
+until GitLab #858 nothing in ARO could read one back: a named group compiled,
+matched, and was then unreachable. The crawler chapter of *ARO by Example*
+replaced one match with four `Split` statements, which is slower and wrong at
+the edges.
+
+Two Compute qualifiers read a match. Both take their pattern from the same
+`by /pattern/flags` clause `Split` uses — there is one regex spelling in the
+language, and a second would be one to get wrong.
+
+### 7.1 `captures` — the first match
+
+```aro
+Create the <line> with "host=example.com".
+Compute the <parts: captures> from the <line> by /(?<key>\w+)=(?<value>\S+)/.
+(* parts = { match: "host=example.com", key: "host", value: "example.com",
+             "1": "host", "2": "example.com" } *)
+```
+
+The record holds:
+
+| Key | Value |
+|-----|-------|
+| `match` | the whole matched text |
+| a group's name | what that named group matched |
+| `"1"`, `"2"`, … | what each numbered group matched, named or not |
+
+Named and numbered spellings both appear, because a pattern mixes them freely
+and a reader should not have to count parentheses to find out that `key` is
+also `1`.
+
+### 7.2 `all-captures` — every match
+
+```aro
+Create the <line> with "host=example.com port=8080".
+Compute the <pairs: all-captures> from the <line> by /(?<key>\w+)=(?<value>\S+)/.
+(* pairs = [ { match: "host=example.com", key: "host", … },
+             { match: "port=8080", key: "port", … } ] *)
+
+for each <pair> in <pairs> {
+    Log "${<pair: key>} -> ${<pair: value>}" to the <console>.
+}
+```
+
+Repeated matching is the same operation over a different extent, so it is the
+same action with a different qualifier rather than a second verb. A list of the
+records `captures` binds is the only shape that composes with `for each`,
+`length` and the rest of the collection vocabulary.
+
+### 7.3 What a non-match binds
+
+**`captures` binds an empty record; `all-captures` binds an empty list.**
+Neither fails.
+
+This follows the call ARO-0006 already makes for a `Retrieve` that matches
+nothing (GitLab #835): finding nothing is an answer, not an error, and the
+program guards on it.
+
+```aro
+Compute the <parts: captures> from the <line> by /(?<key>\w+)=(?<value>.*)/.
+Compute the <found: length> from <parts>.
+Log "unparsed: ${<line>}" to the <console> when <found> is 0.
+```
+
+A group that took part in no match — the unmatched branch of an alternation —
+is **absent** from the record rather than present and empty. The difference
+between "matched the empty string" and "did not participate" is exactly the one
+a caller needs, and an absent key is how ARO says the second.
+
+### 7.4 Flags
+
+The same four as `Split`: `i`, `s`, `m`, `g`. `g` is implied by
+`all-captures` and ignored by `captures`, which reads the first match by
+definition.
+
+---
+
 ## Grammar Extension
 
 ```ebnf
@@ -260,11 +340,14 @@ flags = { "i" | "s" | "m" | "g" } ;
 | **Result** | `List<String>` |
 | **No match** | Returns single-element array with original string |
 | **Flags** | `i` (case-insensitive), `s` (dotall), `m` (multiline) |
+| **Capture groups** | `Compute the <r: captures> from the <s> by /…/.` — §7 |
+| **Non-match (captures)** | An empty record; an empty list for `all-captures` |
 
 ---
 
 ## References
 
 - `Sources/ARORuntime/Actions/BuiltIn/SplitAction.swift` - Implementation
+- `Sources/ARORuntime/Actions/BuiltIn/ComputeAction.swift` - `captures` / `all-captures` (§7)
 - `Examples/Split/` - Split action examples
 - ARO-0010: Advanced Features - Regex support

@@ -378,6 +378,8 @@ public func aro_runtime_init() -> UnsafeMutableRawPointer? {
             let writableStores = discoveredStoreFiles.filter { $0.isWritable }
             if !writableStores.isEmpty {
                 let flushService = StoreFlushService(storage: InMemoryRepositoryStorage.shared)
+                // Where `Commit the <r> to the <stores>.` finds it (GitLab #863).
+                StoreFlushRegistry.current = flushService
                 await flushService.register(stores: discoveredStoreFiles)
                 handle.storeFlushService = flushService
 
@@ -469,6 +471,25 @@ public func aro_load_plugins(_ path: UnsafePointer<CChar>?) -> Int32 {
         print("[aro_load_plugins] Failed to load plugins: \(error)")
         return 0
     }
+}
+
+/// Declare the entry point's positional command-line arguments (ARO-0047
+/// §Positional Arguments, GitLab #857).
+///
+/// The names come from the `Application-Start` header and are baked into the
+/// binary at build time, because the AST is gone by the time this runs. Emitted
+/// before `aro_parse_arguments`; `ParameterStorage` joins names to values on
+/// read, so either order works.
+/// - Parameter names: comma-separated positional names, in declaration order
+@_cdecl("aro_declare_positional_parameters")
+public func aro_declare_positional_parameters(_ names: UnsafePointer<CChar>?) {
+    guard let names else { return }
+    let list = String(cString: names)
+        .split(separator: ",")
+        .map { $0.trimmingCharacters(in: .whitespaces) }
+        .filter { !$0.isEmpty }
+    guard !list.isEmpty else { return }
+    ParameterStorage.shared.declarePositionals(list)
 }
 
 /// Parse command-line arguments into ParameterStorage (ARO-0047)
