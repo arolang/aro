@@ -437,11 +437,20 @@ struct ReplNotebookControllerTests {
     func saveDebounces() async throws {
         let (nb, _, url) = try makeNotebook(["one"], saveDebounce: .milliseconds(80))
         nb.updateSource("edited", for: nb.cells[0].id)
+
+        // The negative half is read back immediately, with no sleep: "the
+        // debounce has not fired yet" at this instant is true however loaded
+        // the machine is, and gets *more* true the slower it gets.
         let immediate = try ReplNotebookDocument.load(from: url)
         #expect(immediate.cells[0].source == "one")
-        try? await Task.sleep(for: .milliseconds(250))
-        let settled = try ReplNotebookDocument.load(from: url)
-        #expect(settled.cells[0].source == "edited")
+
+        // The positive half polls (GitLab #849). Sleeping 250ms and asserting
+        // asserted two things — that the save lands, and that the machine was
+        // fast enough — and only the first is this test's subject.
+        let landed = await eventually {
+            try ReplNotebookDocument.load(from: url).cells[0].source == "edited"
+        }
+        #expect(landed)
     }
 
     @Test("Edits inside the window coalesce into one write")
@@ -453,8 +462,10 @@ struct ReplNotebookControllerTests {
             try? await Task.sleep(for: .milliseconds(5))
         }
         #expect(try ReplNotebookDocument.load(from: url).cells[0].source == "one")
-        try? await Task.sleep(for: .milliseconds(250))
-        #expect(try ReplNotebookDocument.load(from: url).cells[0].source == "step5")
+        let coalesced = await eventually {
+            try ReplNotebookDocument.load(from: url).cells[0].source == "step5"
+        }
+        #expect(coalesced)
     }
 
     @Test("saveNow writes immediately and cancels the pending debounce")

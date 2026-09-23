@@ -189,8 +189,11 @@ struct ExternalFileWatcherTests {
         #expect(watcher.watchedCount == 1)
 
         try "two\n".write(to: file, atomically: true, encoding: .utf8)
-        try await Task.sleep(for: .milliseconds(400))
-        #expect(seen.contains(file.standardizedFileURL))
+        // Poll rather than sleep 400ms and hope (GitLab #849). The subject is
+        // that the watcher fires at all; how long kqueue and a 20ms debounce
+        // take under full-suite load is not this test's business.
+        let fired = await eventually { seen.contains(file.standardizedFileURL) }
+        #expect(fired)
         watcher.stop()
         #expect(watcher.watchedCount == 0)
     }
@@ -213,13 +216,24 @@ struct ExternalFileWatcherTests {
         watcher.watch([file])
 
         try "two\n".write(to: file, atomically: true, encoding: .utf8)
-        try await Task.sleep(for: .milliseconds(400))
+        let sawFirst = await eventually { count >= 1 }
+        #expect(sawFirst)
         let afterFirst = count
-        try "three\n".write(to: file, atomically: true, encoding: .utf8)
-        try await Task.sleep(for: .milliseconds(400))
 
-        #expect(afterFirst >= 1)
-        #expect(count > afterFirst)
+        // Wait for the re-arm, not for a clock (GitLab #849). An atomic write
+        // is unlink+rename, so `reinstall` drops the entry and re-opens the
+        // path a moment later; `watchedCount` going back to 1 is that moment,
+        // observable rather than guessed at. The 400ms sleep this replaces was
+        // only ever "long enough, probably" — and writing the second file
+        // during the gap is a change the watcher genuinely cannot see.
+        let rearmed = await eventually { watcher.watchedCount == 1 }
+        #expect(rearmed)
+
+        try "three\n".write(to: file, atomically: true, encoding: .utf8)
+        // The point of the test: the *second* change arrives only because the
+        // watcher re-armed on the path after the inode was replaced.
+        let sawSecond = await eventually { count > afterFirst }
+        #expect(sawSecond)
         watcher.stop()
     }
 

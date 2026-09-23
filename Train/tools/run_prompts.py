@@ -35,6 +35,11 @@ import tempfile
 import time
 from pathlib import Path
 
+# The sandbox that generated ARO is executed in lives with the pipeline
+# (GitLab #804).
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / 'script'))
+import sandbox  # noqa: E402
+
 TOOLS_DIR = Path(__file__).resolve().parent
 MATERIAL_DIR = TOOLS_DIR.parent / 'Material'
 PROMPTS = MATERIAL_DIR / 'prompts.txt'
@@ -74,14 +79,12 @@ def extract_aro_blocks(text: str):
 
 
 def run_aro_check(code: str, aro: str):
+    """Sandboxed `aro check` over model output (GitLab #804)."""
     if not code.strip():
         return None
     try:
-        with tempfile.TemporaryDirectory() as tmp:
-            (Path(tmp) / 'main.aro').write_text(code)
-            r = subprocess.run([aro, 'check', tmp],
-                               capture_output=True, text=True, timeout=15)
-            return r.returncode == 0
+        r = sandbox.run_program_dir([aro, 'check'], code, timeout=15)
+        return r.returncode == 0
     except FileNotFoundError:
         return None
     except subprocess.TimeoutExpired:

@@ -120,6 +120,34 @@ else
   "${PYTHON}" -m pip install --quiet nbconvert nbclient nbformat ipykernel
 fi
 
+# ── mlx preflight (GitLab #793) ───────────────────────────────────────────
+# LoRA on the 30B MoE teacher used to die inside its first validation pass
+# because the metallib mlx shipped had no float32 `steel_gather_mm_rhs_nax`
+# kernel (Train/ISSUE-MLX.md). The workaround was a source build of mlx with a
+# one-line patch — which the `pip install --upgrade` just above was free to
+# replace, silently, with a wheel that would crash again hours later.
+#
+# Run the check here, immediately after the install and before any GPU time is
+# spent. It takes about a second: it looks for the kernel inside the metallib
+# this interpreter will load, rather than trusting the version string, because
+# a cached wheel or a hand-built mlx can make those two disagree.
+#
+# Exit 2 means "not applicable" (not Apple Silicon, mlx not installed) and is
+# not a failure. Set ARO_TRAIN_SKIP_MLX_PREFLIGHT=1 to run anyway.
+if [[ "${ARO_TRAIN_SKIP_MLX_PREFLIGHT:-0}" != "1" ]]; then
+  echo "==> mlx preflight"
+  set +e
+  "${PYTHON}" "${NB_DIR}/mlx_preflight.py"
+  PREFLIGHT_STATUS=$?
+  set -e
+  if [[ ${PREFLIGHT_STATUS} -eq 1 ]]; then
+    echo
+    echo "Refusing to start: this mlx build cannot train the MoE teacher." >&2
+    echo "See ${SCRIPT_DIR}/ISSUE-MLX.md. Override with ARO_TRAIN_SKIP_MLX_PREFLIGHT=1." >&2
+    exit 3
+  fi
+fi
+
 # Register a Jupyter kernel inside the venv so nbconvert can resolve
 # 'python3' to *our* interpreter instead of the system one. Idempotent.
 "${PYTHON}" -m ipykernel install --user --name=aro-train --display-name='ARO Train' \

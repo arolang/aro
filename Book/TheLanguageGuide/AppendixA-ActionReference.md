@@ -781,14 +781,18 @@ Makes variables globally available.
 
 **Syntax:**
 ```aro
-Publish as <alias> <variable>.
+Publish as <alias> <variable> [when <condition>].
 ```
 
 **Examples:**
 ```aro
 Publish as <app-config> <config>.
 Publish as <current-user> <user>.
+Publish as <headline-score> <score> when <score> > 50.
 ```
+
+Publishing is an effect, and it takes the same `when` guard every action
+statement takes. A false guard leaves the alias unpublished.
 
 **Valid Prepositions:** `as`
 

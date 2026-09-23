@@ -38,6 +38,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from config import (  # noqa: E402
     DATA_ROOT, PAIRS_FILE, extract_aro_blocks,
 )
+import stage_runner  # noqa: E402
 
 FAILURES = DATA_ROOT / 'generation_failures.jsonl'
 OUT = DATA_ROOT / 'dpo' / 'failure_pairs.jsonl'
@@ -74,8 +75,9 @@ def load_validated() -> list[tuple[set, str, str]]:
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument('--dry-run', action='store_true')
+    stage_runner.add_stage_arguments(ap)   # --dry-run / --limit (GitLab #803)
     args = ap.parse_args()
+    opts = stage_runner.StageOptions.from_args(args)
 
     if not FAILURES.exists():
         sys.exit(f'no {FAILURES} — nothing to mine')
@@ -127,6 +129,7 @@ def main():
         })
         seen_prompts.add(key)
 
+    pairs = opts.apply(pairs)
     print(f'preference pairs: {len(pairs)}  '
           f'(unmatched: {unmatched}, malformed: {malformed})')
 

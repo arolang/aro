@@ -102,6 +102,33 @@ public struct ARODate: Sendable, Equatable, CustomStringConvertible {
         timezone.identifier
     }
 
+    /// The same instant, rendered in another zone (ARO-0041 §7, GitLab #865).
+    ///
+    /// The instant does not move. `date` is absolute and is copied unchanged;
+    /// only `timezone` differs, so every component, the ISO string and the
+    /// day-of-week are recomputed for the new zone while `timestamp` stays
+    /// identical. That is what makes a comparison between two dates in
+    /// different zones mean what it looks like it means — they are the same
+    /// two moments, rendered differently.
+    public func converted(to zone: TimeZone) -> ARODate {
+        ARODate(date: date, timezone: zone)
+    }
+
+    /// The UTC offset of this instant in its own zone, in seconds.
+    ///
+    /// Read from the zone *at this instant*, not from a stored constant, which
+    /// is the whole reason a fixed offset is the wrong way to do this: for
+    /// `Europe/Berlin` it is 3600 in January and 7200 in July, and an
+    /// implementation that picks one is wrong for half the year.
+    public var utcOffsetSeconds: Int {
+        timezone.secondsFromGMT(for: date)
+    }
+
+    /// Whether daylight saving time is in effect at this instant in this zone.
+    public var isDaylightSavingTime: Bool {
+        timezone.isDaylightSavingTime(for: date)
+    }
+
     // MARK: - Comparison
 
     /// Check if this date is before another date
@@ -131,6 +158,8 @@ public struct ARODate: Sendable, Equatable, CustomStringConvertible {
         case "timestamp": return timestamp
         case "iso": return iso
         case "timezone": return timezoneIdentifier
+        case "offset", "utcoffset": return utcOffsetSeconds
+        case "dst", "isdst": return isDaylightSavingTime
         default: return nil
         }
     }
@@ -149,7 +178,9 @@ public struct ARODate: Sendable, Equatable, CustomStringConvertible {
             "dayOfYear": dayOfYear,
             "weekOfYear": weekOfYear,
             "timestamp": timestamp,
-            "timezone": timezoneIdentifier
+            "timezone": timezoneIdentifier,
+            "offset": utcOffsetSeconds,
+            "dst": isDaylightSavingTime
         ]
     }
 
@@ -176,26 +207,69 @@ extension ARODate {
     /// - "local" -> System local timezone
     /// - "Europe/Berlin" -> IANA timezone
     public static func parseTimezone(_ qualifier: String?) -> TimeZone {
-        guard let qualifier = qualifier else { return .gmt }
+        resolveTimezone(qualifier) ?? .gmt
+    }
 
-        let normalized = qualifier.lowercased().trimmingCharacters(in: .whitespaces)
+    /// Parse a timezone, or `nil` when the name is not one.
+    ///
+    /// The nil-returning form is what a *conversion* needs: silently falling
+    /// back to GMT is how `<now: timezone>` came to answer GMT whatever was
+    /// asked for (GitLab #865), and a misspelled zone should say so rather
+    /// than quietly render the wrong time.
+    public static func resolveTimezone(_ qualifier: String?) -> TimeZone? {
+        guard let qualifier else { return nil }
 
-        switch normalized {
-        case "utc", "gmt":
+        let trimmed = qualifier.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else { return nil }
+
+        switch trimmed.lowercased() {
+        case "utc", "gmt", "z":
             return .gmt
-        case "local":
+        case "local", "system":
             return .current
         default:
-            // Try IANA timezone identifier
-            if let tz = TimeZone(identifier: qualifier) {
-                return tz
-            }
-            // Try common abbreviations
-            if let tz = TimeZone(abbreviation: qualifier.uppercased()) {
-                return tz
-            }
-            return .gmt
+            break
         }
+
+        // IANA identifier ("Europe/Berlin"), case as written — identifiers are
+        // case-sensitive and `TimeZone` will not normalise them.
+        if let tz = TimeZone(identifier: trimmed) { return tz }
+        // A common abbreviation ("CET", "PST"). These are ambiguous worldwide
+        // and are accepted only because a program that writes one means the
+        // one Foundation picks.
+        if let tz = TimeZone(abbreviation: trimmed.uppercased()) { return tz }
+        // A fixed offset ("+02:00", "-0800", "UTC+2"): not a zone, so it does
+        // not observe DST — but it is what an offset in a data feed means.
+        if let tz = fixedOffsetZone(trimmed) { return tz }
+        return nil
+    }
+
+    /// A `TimeZone` for a written UTC offset, or nil.
+    private static func fixedOffsetZone(_ raw: String) -> TimeZone? {
+        var text = raw.uppercased()
+        for prefix in ["UTC", "GMT"] where text.hasPrefix(prefix) {
+            text = String(text.dropFirst(prefix.count))
+        }
+        guard let sign = text.first, sign == "+" || sign == "-" else { return nil }
+        let digits = String(text.dropFirst()).replacingOccurrences(of: ":", with: "")
+        guard !digits.isEmpty, digits.allSatisfy(\.isNumber) else { return nil }
+
+        let hours: Int
+        let minutes: Int
+        switch digits.count {
+        case 1, 2:
+            hours = Int(digits) ?? 0
+            minutes = 0
+        case 3, 4:
+            let padded = String(repeating: "0", count: 4 - digits.count) + digits
+            hours = Int(padded.prefix(2)) ?? 0
+            minutes = Int(padded.suffix(2)) ?? 0
+        default:
+            return nil
+        }
+        guard hours <= 18, minutes < 60 else { return nil }
+        let seconds = (hours * 3600 + minutes * 60) * (sign == "-" ? -1 : 1)
+        return TimeZone(secondsFromGMT: seconds)
     }
 }
 

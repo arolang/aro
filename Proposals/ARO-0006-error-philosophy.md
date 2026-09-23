@@ -252,7 +252,8 @@ throw_statement = "<Throw>" , [ article ] , "<" , error_descriptor , ">" ,
 
 error_descriptor = status_code , ":" , "error" ;
 status_code      = "BadRequest" | "Unauthorized" | "Forbidden" | "NotFound"
-                 | "Conflict" | "Unprocessable" | "InternalError" ;
+                 | "MethodNotAllowed" | "Conflict" | "Unprocessable"
+                 | "TooManyRequests" | "InternalError" | "Unavailable" ;
 ```
 
 ### Status Codes
@@ -265,7 +266,26 @@ status_code      = "BadRequest" | "Unauthorized" | "Forbidden" | "NotFound"
 | `NotFound: error` | 404 | Resource does not exist |
 | `Conflict: error` | 409 | State conflict |
 | `Unprocessable: error` | 422 | Invalid data |
+| `TooManyRequests: error` | 429 | Rate limit exceeded |
 | `InternalError: error` | 500 | System failure |
+| `Unavailable: error` | 503 | Dependency down, shutting down |
+
+The same names are the `status` of a `Return`, and the full set — with the
+redirects, `MethodNotAllowed`, `PreconditionFailed` and the rest — is
+`HTTPStatusCatalog` in AROParser. One catalog, read by the interpreter, by the
+compiled binary, and by `aro check`.
+
+It is one catalog because it used to be two that disagreed: the interpreter
+knew twelve names, the compiled binary five, and **both answered 200 for
+anything else**. `Return a <TooManyRequests: status>` was a 200 with a
+rate-limit body, and so was `<NotFoudn: status>`, because the name was never
+looked up at all (GitLab #830).
+
+Case and separators are not distinctions: `NoContent`, `no-content` and
+`no_content` are one name. A name within a typo's distance of a real one is a
+check-time warning naming the one that was meant. A name nowhere near one is a
+**domain status** — ARO-0002 §7's `PendingVerification` — which is a 200 on the
+wire, deliberately, and is left alone.
 
 ### Custom Error Messages
 
