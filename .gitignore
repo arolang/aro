@@ -12,6 +12,8 @@
 /Examples/WebhookReceiver/WebhookReceiver
 /Vendor/
 /worktree/
+/Examples/PathOperations/PathOperations
+/Examples/PathOperations/build-stamp.txt
 /Examples/GuardsAndDefaults/GuardsAndDefaults
 .DS_Store
 /.swiftpm

@@ -161,6 +161,70 @@ public enum ConfigurableSettings {
         return nil
     }
 
+    /// Whether the statement configures a file — `Configure the <r> for the
+    /// <file: "./run.sh"> with { permissions: "755" }.` (ARO-0036 §10,
+    /// GitLab #861). Reaches the file service, so it needs `await`.
+    ///
+    /// The path is the *object*, matching `Stat`, `Exists` and `Delete`, and
+    /// not the result — which is what keeps this out of the way of
+    /// `Configure the <category: key>`, where the category is the result.
+    static func isFileSetting(object: ObjectDescriptor) -> Bool {
+        (object.base == "file" || object.base == "directory") && !object.specifiers.isEmpty
+    }
+
+    /// `Configure the <mode> for the <file: "./run.sh"> with { permissions: "755" }.`
+    ///
+    /// Binds `{ path, permissions, octal, previous }` — the previous mode
+    /// because a chmod cannot be read back once it has happened, and a program
+    /// that changes a mode usually wants to report what it changed.
+    static func applyFileSetting(
+        result: ResultDescriptor,
+        object: ObjectDescriptor,
+        context: ExecutionContext
+    ) async throws -> any Sendable {
+        let path = try context.resolveString(
+            base: object.base,
+            specifiers: object.specifiers,
+            excluding: ["file", "directory"],
+            field: "a file or directory path",
+            action: "Configure"
+        )
+
+        let settings = context.resolveAny("_with_") ?? context.resolveAny("_literal_")
+        guard let fields = settings as? [String: any Sendable] else {
+            throw ActionError.missingRequiredField(
+                field: "with { permissions: \"755\" }", action: "Configure the <file: …>")
+        }
+        guard let raw = fields["permissions"] ?? fields["mode"] else {
+            let known = fields.keys.sorted().joined(separator: ", ")
+            throw ActionError.invalidInput(
+                "Configure the <\(object.base): …>: the only file setting is 'permissions'",
+                received: known.isEmpty ? "{}" : known)
+        }
+        let text = raw as? String ?? String(describing: raw)
+        guard let mode = FileMode.parse(text) else {
+            throw ActionError.invalidInput(
+                "Configure the <\(object.base): …> with { permissions: … }: \(FileMode.expected)",
+                received: text)
+        }
+
+        guard let fileService = context.service(FileSystemService.self) else {
+            throw ActionError.missingService("FileSystemService")
+        }
+        let previous = try await fileService.setPermissions(path: path, mode: mode)
+
+        var record: [String: any Sendable] = [
+            "path": path,
+            "permissions": mode.symbolic,
+            "octal": mode.octal
+        ]
+        if let previous {
+            record["previous"] = previous.symbolic
+        }
+        context.bind(result.base, value: record, allowRebind: true)
+        return record
+    }
+
     /// `Configure the <application: concurrency> with 8.` and
     /// `Configure the <http-client: rate> with "10/s".` (ARO-0088 §10a,
     /// GitLab #862).
@@ -374,10 +438,12 @@ public struct ConfigureAction: SynchronousAction {
     ) throws -> any Sendable {
         try validatePreposition(object.preposition)
 
-        // Repository configuration reaches storage, which is an actor; so
-        // does store write-back, which reaches the flush service.
+        // Repository configuration reaches storage, which is an actor; store
+        // write-back reaches the flush service, and a file permission change
+        // reaches the file service. All three need `await`.
         if ConfigurableSettings.isRepositorySetting(result: result)
-            || ConfigurableSettings.isStoreSetting(result: result) {
+            || ConfigurableSettings.isStoreSetting(result: result)
+            || ConfigurableSettings.isFileSetting(object: object) {
             throw NeedsAsyncExecution()
         }
 
@@ -404,6 +470,11 @@ public struct ConfigureAction: SynchronousAction {
         // Decided before the synchronous body runs rather than by letting it
         // throw `NeedsAsyncExecution` and starting over — the sync path is
         // still the one the compiled runtime takes directly.
+        if ConfigurableSettings.isFileSetting(object: object) {
+            try validatePreposition(object.preposition)
+            return try await ConfigurableSettings.applyFileSetting(
+                result: result, object: object, context: context)
+        }
         if ConfigurableSettings.isRepositorySetting(result: result) {
             try validatePreposition(object.preposition)
             return try await ConfigurableSettings.applyRepositorySetting(

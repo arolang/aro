@@ -512,6 +512,26 @@ public final class AROFileSystemService: FileSystemService, FileMonitorService, 
         }
     }
 
+    /// Set POSIX permissions, returning what they were (ARO-0036 §10,
+    /// GitLab #861).
+    ///
+    /// The previous mode comes back because a chmod is not reversible from the
+    /// outside once it has happened, and a program that changes a mode is
+    /// usually one that wants to say what it changed.
+    public func setPermissions(path: String, mode: FileMode) async throws -> FileMode? {
+        let url = AROWorkingDirectory.url(path)
+        guard fileManager.fileExists(atPath: url.path) else {
+            throw FileSystemError.fileNotFound(path)
+        }
+        let previous = (try? fileManager.attributesOfItem(atPath: url.path))?[.posixPermissions] as? Int
+        do {
+            try fileManager.setAttributes([.posixPermissions: mode.bits], ofItemAtPath: url.path)
+        } catch {
+            throw FileSystemError.writeError(path, error.localizedDescription)
+        }
+        return previous.flatMap { FileMode(bits: $0 & 0o7777) }
+    }
+
     /// Delete file
     public func delete(path: String) async throws {
         guard fileManager.fileExists(atPath: path) else {
@@ -558,12 +578,16 @@ public final class AROFileSystemService: FileSystemService, FileMonitorService, 
             try fileManager.createDirectory(atPath: parentDir, withIntermediateDirectories: true, attributes: nil)
         }
 
-        if fileManager.fileExists(atPath: path) {
+        // `url`, not `path`: the parent directory above was created relative
+        // to the working directory and these two were not, so a relative path
+        // under a non-default working directory made the parent in one place
+        // and the file in another (GitLab #861).
+        if fileManager.fileExists(atPath: url.path) {
             // Update modification time
-            try fileManager.setAttributes([.modificationDate: Date()], ofItemAtPath: path)
+            try fileManager.setAttributes([.modificationDate: Date()], ofItemAtPath: url.path)
         } else {
             // Create empty file
-            fileManager.createFile(atPath: path, contents: nil, attributes: nil)
+            fileManager.createFile(atPath: url.path, contents: nil, attributes: nil)
         }
     }
 
@@ -1144,6 +1168,16 @@ public final class AROFileSystemService: FileSystemService, @unchecked Sendable 
         }
     }
 
+    /// Set POSIX permissions (ARO-0036 §10, GitLab #861).
+    ///
+    /// Windows has no POSIX mode. Rather than pretend, this reports that the
+    /// platform cannot honour the request — a chmod that silently did nothing
+    /// would leave a program believing it had made a file executable.
+    public func setPermissions(path: String, mode: FileMode) async throws -> FileMode? {
+        throw FileSystemError.writeError(
+            path, "setting POSIX permissions is not supported on Windows")
+    }
+
     /// Delete file
     public func delete(path: String) async throws {
         guard fileManager.fileExists(atPath: path) else {
@@ -1190,12 +1224,16 @@ public final class AROFileSystemService: FileSystemService, @unchecked Sendable 
             try fileManager.createDirectory(atPath: parentDir, withIntermediateDirectories: true, attributes: nil)
         }
 
-        if fileManager.fileExists(atPath: path) {
+        // `url`, not `path`: the parent directory above was created relative
+        // to the working directory and these two were not, so a relative path
+        // under a non-default working directory made the parent in one place
+        // and the file in another (GitLab #861).
+        if fileManager.fileExists(atPath: url.path) {
             // Update modification time
-            try fileManager.setAttributes([.modificationDate: Date()], ofItemAtPath: path)
+            try fileManager.setAttributes([.modificationDate: Date()], ofItemAtPath: url.path)
         } else {
             // Create empty file
-            fileManager.createFile(atPath: path, contents: nil, attributes: nil)
+            fileManager.createFile(atPath: url.path, contents: nil, attributes: nil)
         }
     }
 
