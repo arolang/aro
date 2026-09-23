@@ -42,7 +42,7 @@
     Log "# Standup digest" to the <console>.
     Log "" to the <console>.
     Log "## Landed yesterday" to the <console>.
-    For each <commit> in <commits> {
+    for each <commit> in <commits> {
         Extract the <message> from the <commit: message>.
         Extract the <author> from the <commit: author>.
         Log "- " to the <console>.
@@ -53,14 +53,14 @@
     }
     Log "" to the <console>.
     Log "## Open pull requests" to the <console>.
-    For each <pull> in <pulls> {
+    for each <pull> in <pulls> {
         Extract the <title> from the <pull: title>.
         Log "- " to the <console>.
         Log <title> to the <console>.
     }
     Log "" to the <console>.
     Log "## Assigned today" to the <console>.
-    For each <issue> in <issues> {
+    for each <issue> in <issues> {
         Extract the <title> from the <issue: title>.
         Extract the <assignee> from the <issue: assignee>.
         Log "- " to the <console>.

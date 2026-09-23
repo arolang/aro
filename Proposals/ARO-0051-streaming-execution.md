@@ -482,7 +482,7 @@ func fuseAggregations(_ statements: [AROStatement]) -> [AROStatement] {
 ### Phase 5: Streaming Drains
 
 **Files to modify:**
-- `Sources/ARORuntime/Actions/BuiltIn/ResponseActions.swift` - Log, Write, Send
+- `Sources/ARORuntime/Actions/BuiltIn/LogAction.swift`, `WriteAction.swift`, `SendAction.swift`
 - `Sources/ARORuntime/HTTP/Server/OpenAPIHTTPHandler.swift` - Chunked responses
 
 ### Phase 6: Pipeline Optimizer

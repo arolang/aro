@@ -42,24 +42,24 @@ This separation is necessary — the compiled binary cannot execute arbitrary Sw
 
 There is no `storeVerbs`: `store`, `save` and `persist` live in `responseVerbs`.
 
-Any future code that classifies verbs has one authoritative source — no more duplication. Which makes the *next* section the cautionary tale, because there is a second per-statement list that never got the same treatment.
+Any future code that classifies verbs has one authoritative source — no more duplication. Which makes the *next* section the interesting one, because there is a second per-statement list, and it took a wrong answer in the field before it got the same treatment.
 
 ---
 
-## Source of Divergence 2: The List That Did Not Get Shared
+## Source of Divergence 2: The Framework-Variable List
 
-`VerbSets` worked. The lesson did not generalize, and the counter-example is one screen away in the same code.
+Between statements, both modes unbind twenty-one framework variables — the `_literal_`, `_expression_`, `_with_`, `_where_value_` channel through which a statement's modifiers reach its action.
 
-Between statements, the interpreter unbinds twenty-one framework variables — the `_literal_`, `_expression_`, `_with_`, `_where_value_` channel through which a statement's modifiers reach its action — and opens a fresh statement scope first. The code generator emits `aro_variable_unbind` for fourteen of them and opens no scope. Seven names are never cleared in a compiled binary:
+The list lives in one place: `FrameworkVariables.transientKeys`, in `AROParser`. That module was chosen deliberately. `AROCompiler` depends on `AROParser` and not on `ARORuntime`, so it is the only place both `FeatureSetExecutor.executeAROStatement` and `LLVMCodeGenerator.generateAROStatement` can read the same array — the same reasoning that put `ComputeQualifierCatalog` there.
+
+For a while the two modes kept private lists instead. The compiler's covered fourteen names; the interpreter's covered twenty-one and opened a fresh statement scope besides. Seven names were therefore never cleared in a compiled binary:
 
 ```
 _literal_   _expression_   _expression_name_   _result_expression_
 _to_        _with_         _against_
 ```
 
-The comment above the compiler's list says it "mirrors FeatureSetExecutor lines 248-256". It does not mirror it, and the line reference is itself stale — the interpreter's list has since moved. Two hand-maintained lists, one comment asserting a relationship that no code enforces.
-
-It produces a wrong answer, not a crash:
+It produced a wrong answer, not a crash:
 
 ```aro
 Compute the <j1: join> from <one> with { separator: "-" }.
@@ -72,7 +72,9 @@ a-b                     a-b
 cd                      c-d      ← the previous statement's separator
 ```
 
-Filed as GitLab #552. The fix is the `VerbSets` fix again: one constant both paths iterate, plus a test asserting the emitted unbind list equals it. What makes this worth a section rather than a footnote is that the defense described at the end of this chapter did not catch it — no example calls the same qualifier twice, once with `with` and once without, so `mode: both` had nothing to compare.
+The fix was the `VerbSets` fix again — one constant both paths iterate — plus the part `VerbSets` had left to habit: `FrameworkVariableParityTests` asserts that the emitted IR unbinds exactly the names in `transientKeys`, so adding a modifier variable to one mode and forgetting the other fails the suite rather than shipping two answers for one program.
+
+What makes this worth a section rather than a footnote is that the defense described at the end of this chapter did not catch it — no example calls the same qualifier twice, once with `with` and once without, so `mode: both` had nothing to compare. Sharing the list is what closed it; the example corpus never would have.
 
 ---
 
@@ -197,7 +199,9 @@ Handler feature sets can have a `when` guard:
 
 This JSON is passed as a string constant to the registration function. At runtime, `evaluateExpressionJSON()` in `Bridge/RuntimeExecutionBridge.swift` deserializes and evaluates it against a `RuntimeContext` populated with the event payload.
 
-The serializer handles more forms than the evaluator does. `ExpressionSerializer` emits `$lit`, `$var`, `$binary`, `$interpolated` **and `$unary`**; `evaluateExpressionJSON` knows the first four. `ConstantFolder` runs first and folds constant unaries away, so the gap only opens for a non-constant `not <flag>` in a compiled guard — which is precisely the kind of edge that stays hidden until someone writes it.
+The two ends of that protocol are hand-written in separate modules, which is exactly the shape that drifts. It did: `ExpressionSerializer` emitted `$lit`, `$var`, `$binary`, `$interpolated` and `$unary`, and `evaluateExpressionJSON` knew only the first four. `ConstantFolder` folds constant unaries away, so the gap opened only for a non-constant `not <flag>` in a compiled guard — precisely the kind of edge that stays hidden until someone writes it.
+
+Both halves are closed now. `evaluateExpressionJSON` decodes `$unary` for `not` and for unary minus, and the surrounding walk no longer names the node kinds it recognizes: a dictionary with any `$`-prefixed key is an expression node and goes to the evaluator, so the *next* serialized form lands in a switch that can complain rather than in the plain-object branch that cannot.
 
 This means the binary `when` guard evaluates against a flat payload dictionary, so the payload must spread the target object's fields at top level.
 

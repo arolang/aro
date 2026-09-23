@@ -261,6 +261,18 @@ vscode-aro/
 └── README.md                 # This file
 ```
 
+This is the **canonical** ARO grammar: the IntelliJ plugin ships a generated
+copy of it rather than a second hand-maintained list (GitLab #695). Its
+`repository.actions` node is derived from the runtime's action registry — do
+not hand-edit it. After changing anything else in the file, run
+
+```bash
+python3 Scripts/generate-editor-grammars.py     # from the repository root
+```
+
+to regenerate the verb patterns and refresh the IntelliJ copy. CI runs the
+same script with `--check`.
+
 ### Testing the Grammar
 
 1. Open VS Code with the extension loaded

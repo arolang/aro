@@ -72,6 +72,15 @@ sub build_example {
     my $aro_bin = find_aro_binary();
     my $start_time = time;
 
+    # Python-plugin examples (MarkdownRenderer, QualifierPluginPython) are
+    # refused by `aro build --static` unless an embeddable CPython is
+    # available, because the binary would otherwise depend on the build
+    # machine's interpreter (GitLab #856). Here the build machine *is* the
+    # run machine, so that dependency is satisfied by construction and the
+    # honest answer is "build it, and print what it depends on". The
+    # refusal itself is covered by EmbeddedPythonPolicyTests.
+    local $ENV{ARO_ALLOW_EMBEDDED_PYTHON} = 1;
+
     # --keep-intermediate preserves LLVM IR so CI can publish it for debugging.
     my ($in, $out, $err) = ('', '', '');
     my $handle = eval {

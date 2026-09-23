@@ -230,6 +230,151 @@ action-reference:
   script:
     - python3 Scripts/generate-action-reference.py --check
 
+# The Construction Studies' grammar appendix had the same problem in its
+# precedence, preposition and reserved-word tables — `not` was documented as
+# binding tighter than the comparisons, which is the opposite of what the
+# parser does. Those three tables are now derived from Parser.swift,
+# Token.swift and Lexer.swift, and this job fails when they stop matching.
+grammar-appendix:
+  stage: test
+  image: python:3.12-slim
+  script:
+    - python3 Book/TheConstructionStudies/generate-grammar-appendix.py --check
+
+# =============================================================================
+# Editor grammars are generated, not hand-maintained (GitLab #695)
+# =============================================================================
+# The VS Code and IntelliJ TextMate grammars listed 67 of 130 runtime verbs and
+# none of the Git verbs, while every other surface reads AROCatalog. They are
+# now derived from the same scrape as the action reference, with the IntelliJ
+# bundle a byte-identical copy of the canonical grammar. This job fails if the
+# committed grammars no longer match the registry.
+editor-grammars:
+  stage: test
+  image: python:3.12-slim
+  script:
+    - python3 Scripts/generate-editor-grammars.py --check
+
+# =============================================================================
+# The integration harness has logic of its own, and it is testable
+# =============================================================================
+# Unit tests for Tests/IntegrationTestsRunner/lib — pure Perl, no toolchain,
+# no examples, no build. They pin behaviour that used to be discovered only by
+# an example failing in the wrong executor (GitLab #837). Core Perl only, so
+# any perl image works and nothing needs installing.
+harness:unit:
+  stage: test
+  image: perl:5.38-slim
+  script:
+    - prove -I Tests/IntegrationTestsRunner/lib -r Tests/IntegrationTestsRunner/t
+
+# =============================================================================
+# The model promotion gate is a decision procedure, and it was never tested
+# =============================================================================
+# Train/script/release_gate.py decides whether a fine-tuned model may be
+# distributed (GitLab #796). The gate it replaces could not fail: it asked for a
+# 40% syntax pass rate from a model that measured 75.5%.
+#
+# This job is now just the demo. When this branch was written it also ran
+# test_release_gate/test_release_metadata/test_system_prompt, with a note
+# saying it could fold into train:unit once !591 landed. !591 has landed, and
+# `train:unit` below runs all of Train/script/tests — those three included — so
+# running them twice would only be two places to update.
+#
+# The demo stays either way: it exits non-zero unless the gate actually
+# demonstrates a refusal, which is the one thing a passing unit test cannot
+# tell you about a gate that is wired up wrong.
+train:release-gate:
+  stage: test
+  image: python:3.12-slim
+  needs:
+    - job: train:unit
+  script:
+    - python3 Train/script/release_gate.py --demo
+
+# =============================================================================
+# The training pipeline's own helpers are testable, and were untested in CI
+# =============================================================================
+# Train/script/tests/ has existed for a while and nothing ran it. The
+# evaluation statistics (GitLab #786), the fusion gate (#791) and the grounded
+# fact-checker (#801) are decision procedures — they decide whether a model is
+# promoted — so they need to stay correct without anyone remembering to run
+# them. Everything under Train/script/tests is stdlib-only by construction: no
+# mlx, no model, no aro binary (the tests that would need one skip), so a slim
+# python image and pytest are the whole environment.
+#
+# `git` is installed because config.build_artifact_metadata stamps every
+# generated corpus artifact with the ARO-Lang commit, and its test asserts that
+# the commit resolves. python:3.12-slim ships without a git binary, so
+# `_git_commit` returned None and the provenance test failed on a checkout that
+# is a perfectly good git repository. safe.directory is the usual companion:
+# the runner's build directory is not owned by the user the container runs as.
+train:unit:
+  stage: test
+  image: python:3.12-slim
+  before_script:
+    # The git-history miner and the artefact-metadata helper both shell out to
+    # git, which python:3.12-slim does not ship. Without this the suite fails
+    # on the image rather than on the code.
+    - apt-get update -qq && apt-get install -y -qq --no-install-recommends git
+    - git config --global --add safe.directory "$CI_PROJECT_DIR"
+  script:
+    - pip install --no-cache-dir --quiet pytest PyYAML
+    - python3 -m pytest Train/script/tests -q
+    # Train/ is Apple-Silicon-only where it touches mlx, but everything that
+    # decides what the pipeline PRODUCES — the shared helpers, the
+    # hyper-parameter table, the stall watchdog, the sandbox, the run archive —
+    # is ordinary Python a Linux runner can prove (GitLab #803).
+    - python3 Train/script/check_hparams.py
+    - python3 Train/script/run_archive.py --dry-run --release ci || true
+    # Not applicable off Apple Silicon: exit 2 is the expected answer here, and
+    # asserting it keeps the preflight honest about saying so.
+    #
+    # Captured with `|| rc=$?` rather than `; test $? -eq 2`: the runner's
+    # shell has `set -e`, so the bare `;` form aborted the line the moment the
+    # preflight exited 2 — the very outcome being asserted — and the job failed
+    # with that same exit code, which read as the preflight being broken rather
+    # than the assertion never running. `|| …` is a condition context, where
+    # `set -e` does not fire.
+    - rc=0; python3 Train/script/mlx_preflight.py --no-record || rc=$?; test "$rc" -eq 2
+
+# =============================================================================
+# Fenced ARO blocks in the documentation must parse (GitLab #834)
+# =============================================================================
+# The proposals and the examples are the reference *and* the corpus `aro ask`
+# is trained on, so a block the parser rejects teaches syntax the language does
+# not have. #834 catalogued thirteen invented verbs presented as built-ins,
+# `if … then { }` where the language has `when`, and method-call syntax that
+# does not exist.
+#
+# It runs against a real `aro`, so it needs build:linux's artifact and sits in
+# the integration stage. It is baselined
+# (`Scripts/doc-examples-baseline.txt`): every failure that existed when the
+# check was introduced is listed there, and the job fails only on failures that
+# are not. The baseline is debt to burn down, not a set of exemptions — a block
+# that is deliberately not ARO belongs behind an `aro-check: skip` directive
+# where a reader of the document can see it.
+#
+# `Book/` is not in the default roots yet; its own sweep is #836, and
+# baselining a tree someone is actively editing fights that work, because the
+# baseline is keyed on line numbers. Add "Book" to DEFAULT_ROOTS once #836 has
+# landed.
+doc-examples:
+  stage: integration
+  image: $CI_REGISTRY_IMAGE/aro-ci:latest
+  rules:
+    - if: $CI_COMMIT_TAG
+    - if: $CI_COMMIT_BRANCH == "main"
+    - if: $CI_COMMIT_BRANCH =~ /^release\/.*/
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+  needs:
+    - job: build:linux
+      artifacts: true
+  script:
+    - chmod +x aro-dist/aro
+    - ARO_BIN=aro-dist/aro python3 Scripts/check-doc-examples.py
+
+
 # =============================================================================
 # Test Stage - Gate for all builds (main branch only)
 # =============================================================================
@@ -409,6 +554,16 @@ build:linux:
 
     # Release build with static Swift stdlib
     - *resolve-with-retry
+    # `ar` updates an archive in place: members not named by this build stay
+    # in it. `.build/` is cached on Package.resolved, which does not change
+    # when a source file is deleted — so a branch that splits or removes one
+    # produced a libARORuntime.a holding BOTH the old object and the new
+    # ones, and `aro build` then failed with ld.gold reporting every symbol
+    # twice (240 of them, ResponseActions.swift.o against LogAction.swift.o).
+    #
+    # Removing the archive first costs one re-archive and makes its contents
+    # a function of the sources that actually exist.
+    - rm -f .build/release/libARORuntime.a .build/*/release/libARORuntime.a
     - swift build -c release --static-swift-stdlib
     - swift build -c release --product ARORuntime
 
@@ -819,6 +974,78 @@ repl:smoke:
       echo "=== summary: startup=$rc_startup compute=$rc_compute ==="
       test "$rc_startup" -eq 0
       test "$rc_compute" -eq 0
+
+# =============================================================================
+# The training catalogs are generated from the runtime, not hand-maintained
+# (GitLab #779)
+# =============================================================================
+# Train/script/aro_action_catalog.json and its two siblings are the ground
+# truth the corpus is graded against: the verb-authority gate, the syntax-QA
+# answers and the hallucination metric all read them. They were extracted by
+# scanning Swift sources and had drifted a month behind — `Reverse` was
+# missing, so valid code counted as hallucinated, and `Store … in` was listed
+# as valid although `aro check` rejects it. They come from
+# `aro actions --format json` now, and this job fails when the committed JSON
+# no longer matches the binary that built alongside it.
+train:catalogs:
+  stage: integration
+  image: $CI_REGISTRY_IMAGE/aro-ci:latest
+  rules:
+    - if: $CI_COMMIT_TAG
+    - if: $CI_COMMIT_BRANCH == "main"
+    - if: $CI_COMMIT_BRANCH =~ /^release\/.*/
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+  needs:
+    - job: build:linux
+      artifacts: true
+  before_script:
+    - chmod +x ./aro-dist/aro
+    - export LD_LIBRARY_PATH="/usr/lib/llvm-20/lib:$LD_LIBRARY_PATH"
+    - export ARO_BIN="$CI_PROJECT_DIR/aro-dist/aro"
+    - "$ARO_BIN --version"
+  script:
+    - export LD_LIBRARY_PATH="/usr/lib/llvm-20/lib:$LD_LIBRARY_PATH"
+    - export ARO_BIN="$CI_PROJECT_DIR/aro-dist/aro"
+    - python3 Train/script/extract_action_catalog.py --check
+    - python3 Train/script/extract_action_verbs.py --check
+    - python3 Train/script/extract_qualifier_catalog.py --check
+
+# =============================================================================
+# The corpus is re-validated when the language changes (GitLab #783)
+# =============================================================================
+# Training data was validated against the binary of the day it was generated
+# and then never asked again, so rows survived teaching a `where` form, a
+# qualifier and a `Compare` shape the language had since changed. This runs
+# the re-validator over the training data that lives in the repository —
+# Train/Material/curated.jsonl, the highest-weighted source in the mixture —
+# against the binary from this very pipeline. The generated corpora under
+# Train/data/ are not in the repository; the same command validates them on
+# the training host.
+train:corpus:
+  stage: integration
+  image: $CI_REGISTRY_IMAGE/aro-ci:latest
+  rules:
+    - if: $CI_COMMIT_TAG
+    - if: $CI_COMMIT_BRANCH == "main"
+    - if: $CI_COMMIT_BRANCH =~ /^release\/.*/
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+  needs:
+    - job: build:linux
+      artifacts: true
+  before_script:
+    - chmod +x ./aro-dist/aro
+    - export LD_LIBRARY_PATH="/usr/lib/llvm-20/lib:$LD_LIBRARY_PATH"
+    - export ARO_BIN="$CI_PROJECT_DIR/aro-dist/aro"
+    - "$ARO_BIN --version"
+  script:
+    - export LD_LIBRARY_PATH="/usr/lib/llvm-20/lib:$LD_LIBRARY_PATH"
+    - export ARO_BIN="$CI_PROJECT_DIR/aro-dist/aro"
+    - python3 Train/script/revalidate_corpus.py Train/Material/curated.jsonl --jobs 4 --fail-under 100 --report corpus-validation.json
+  artifacts:
+    when: always
+    paths:
+      - corpus-validation.json
+    expire_in: 1 week
 
 # =============================================================================
 # Documentation Stage

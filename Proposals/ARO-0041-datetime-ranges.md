@@ -46,6 +46,24 @@ Extract the <total-hours: hours> from the <range>.
 | `minutes` | Total minutes in range |
 | `seconds` | Total seconds in range |
 
+### 1.4 Range Membership
+
+`in` tests whether an instant falls inside a range, **inclusive of both
+endpoints**:
+
+```aro
+when <order-date> in <sale-period> {
+    Compute the <discount> from <price> * 0.2.
+}
+```
+
+`in` dispatches on its right operand — a date-range tests interval membership,
+a list tests element membership, a string tests substring containment, a map
+tests key membership — and is the inverse of `contains`, which dispatches on the
+left. ARO-0002 §2.2 has the full operator table and used to cite "ARO-0041 §7"
+for this, which is Timezone Support; the semantics were documented nowhere here
+(GitLab #832).
+
 ---
 
 ## 2. Date Arithmetic
@@ -155,22 +173,26 @@ Create the <report-schedule> with "every last friday".
 
 ### 5.1 Magic Variables
 
-| Variable | Description |
-|----------|-------------|
-| `<now>` | Current date/time |
-| `<today>` | Today at midnight |
-| `<yesterday>` | Yesterday at midnight |
-| `<tomorrow>` | Tomorrow at midnight |
+| Variable | Description | Status |
+|----------|-------------|--------|
+| `<now>` | Current date/time | **resolves** |
+| `<today>` | Today at midnight | not implemented |
+| `<yesterday>` | Yesterday at midnight | not implemented |
+| `<tomorrow>` | Tomorrow at midnight | not implemented |
+
+**Only `<now>` resolves.** The other three fail with `Undefined variable:
+today` (GitLab #833). Until they land, derive them from `<now>` with a date
+offset qualifier:
 
 ### 5.2 Examples
 
 ```aro
-(* Check if date is in the past *)
-Compare the <event-date> < <now>.
+(* Midnight today, and midnight yesterday *)
+Compute the <today: date> from <now>.
+Compute the <yesterday: -1d|date> from <now>.
 
 (* Get items from today *)
-Retrieve the <orders> from the <order-repository>
-    where created >= <today>.
+Retrieve the <orders> from the <order-repository> where created >= <today>.
 ```
 
 ---
@@ -204,6 +226,11 @@ Compute the <display-date: format> from <now> with "MMMM d, yyyy".
 
 ## 7. Timezone Support
 
+An instant is absolute. A timezone is a way of *writing one down*. Everything
+in this section follows from that, and the implementation used to contradict
+it: `ARODate` carried a zone, nothing could set it, and `<now: timezone>`
+answered `GMT` whatever was asked for (GitLab #865).
+
 ### 7.1 Timezone Qualifiers
 
 ```aro
@@ -211,14 +238,79 @@ Extract the <local-time: timezone> from <now> with "America/New_York".
 Extract the <utc-time: UTC> from <now>.
 ```
 
-### 7.2 Examples
+Two spellings of one operation. The `with` clause form is the general one; the
+zone as the qualifier reads better when it is a constant, and is accepted for
+any name the qualifier form accepts.
+
+A zone may be written as:
+
+| Form | Example |
+|------|---------|
+| IANA identifier | `"Europe/Berlin"`, `"America/Los_Angeles"` |
+| `UTC` / `GMT` / `Z` | `"UTC"` |
+| `local` / `system` | the machine's own zone |
+| Abbreviation | `"CET"`, `"PST"` |
+| Fixed UTC offset | `"+02:00"`, `"-0800"`, `"UTC+2"` |
+
+A name that is none of these **fails the statement**. It does not fall back to
+UTC: quietly rendering the wrong time is how the original defect went unnoticed
+for as long as it did.
+
+Conversion is an `Extract`, not a `Compute` qualifier, even though every other
+date operation (`date`, `format`, `distance`) is a Compute qualifier. It reads
+one rendering of an instant out of another, which is what `Extract` is for.
+`Compute the <t: timezone> …` is rejected at check time with a hint naming the
+`Extract` spelling, because it is the first thing people try.
+
+### 7.2 What conversion does and does not change
 
 ```aro
-(* Convert to different timezone *)
 Create the <utc-event> with "2024-01-15T10:00:00Z".
-Extract the <pacific-time: timezone> from <utc-event> with "America/Los_Angeles".
+Compute the <event: date> from <utc-event>.
+Extract the <pacific-time: timezone> from <event> with "America/Los_Angeles".
 (* pacific-time = 2024-01-15T02:00:00-08:00 *)
 ```
+
+| Changes | Stays the same |
+|---------|----------------|
+| `iso`, `hour`, `day`, `dayOfWeek`, `weekOfYear`, `offset`, `dst` | `timestamp` — it is the instant |
+
+Converting to a zone and back is the identity. There is no arithmetic in a
+conversion, so there is nothing to round or lose.
+
+Two properties exist for reasoning about the zone itself:
+
+```aro
+Extract the <berlin: timezone> from <now> with "Europe/Berlin".
+Log <berlin: offset> to the <console>.   (* seconds from UTC, at this instant *)
+Log <berlin: dst> to the <console>.      (* is DST in effect, at this instant *)
+```
+
+Both are read **at the instant**, not stored. That is the whole reason a fixed
+offset is the wrong way to do this: `Europe/Berlin` is `+01:00` in January and
+`+02:00` in July, and a program that hardcodes either is wrong for half the
+year. It is also why a DST transition is worth an explicit test — a naive
+offset implementation passes every other case.
+
+### 7.3 Comparison across zones
+
+**A comparison between two instants means the same thing whatever zone each is
+written in.** Instants are ordered by when they happened; the rendering is not
+part of the value being compared.
+
+```aro
+(* The same moment, written two ways. Neither is before the other. *)
+Extract the <berlin: timezone> from <event> with "Europe/Berlin".
+Extract the <tokyo: timezone> from <event> with "Asia/Tokyo".
+Compare the <same> from <berlin> against <tokyo>.
+(* <same: matches> is true *)
+```
+
+This is not a design choice so much as the only coherent one: if rendering
+affected ordering, sorting a list of timestamps would depend on where each was
+formatted. What a zone *does* affect is which local day an instant falls in —
+so "orders placed on Tuesday" is a question about a zone, and the conversion is
+how you ask it in the right one.
 
 ---
 
@@ -230,7 +322,7 @@ Extract the <pacific-time: timezone> from <utc-event> with "America/Los_Angeles"
 (* Check if booking is within valid range *)
 Create the <range> from <check-in> to <check-out>.
 Extract the <nights: days> from the <range>.
-Compare the <nights> >= 1.
+Return an <OK: status> with <range> when <nights> >= 1.
 ```
 
 ### 8.2 Expiration Check
@@ -238,7 +330,7 @@ Compare the <nights> >= 1.
 ```aro
 (* Check if subscription expired *)
 Compute the <days-until: distance> from <now> to <expiry-date>.
-Compare the <days-until> <= 0 then <expired> = true.
+Log "Subscription expired" to the <console> when <days-until> <= 0.
 ```
 
 ### 8.3 Scheduling
@@ -251,9 +343,9 @@ Compute the <next-day> from <now> + 1d.
 
 ---
 
-## Implementation
+## 9. Implementation
 
-### 8.1 ARODate
+### 9.1 ARODate
 
 ```swift
 public struct ARODate: Sendable {
@@ -266,7 +358,7 @@ public struct ARODate: Sendable {
 }
 ```
 
-### 8.2 ARODateRange
+### 9.2 ARODateRange
 
 ```swift
 public struct ARODateRange: Sendable {
@@ -279,7 +371,7 @@ public struct ARODateRange: Sendable {
 }
 ```
 
-### 8.3 ARORecurrence
+### 9.3 ARORecurrence
 
 ```swift
 public struct ARORecurrence: Sendable {

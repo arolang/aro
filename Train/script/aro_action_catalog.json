@@ -1,7 +1,7 @@
 {
  "accept": {
   "role": "own",
-  "role_label": "OWN (Internal \u2192 Internal)",
+  "role_label": "OWN (Internal → Internal)",
   "prepositions": [
    "on"
   ],
@@ -12,10 +12,10 @@
  },
  "append": {
   "role": "response",
-  "role_label": "RESPONSE (Internal \u2192 External)",
+  "role_label": "RESPONSE (Internal → External)",
   "prepositions": [
-   "to",
-   "into"
+   "into",
+   "to"
   ],
   "aliases": [
    "append"
@@ -24,7 +24,7 @@
  },
  "assert": {
   "role": "own",
-  "role_label": "OWN (Internal \u2192 Internal)",
+  "role_label": "OWN (Internal → Internal)",
   "prepositions": [
    "for",
    "with"
@@ -36,7 +36,7 @@
  },
  "broadcast": {
   "role": "response",
-  "role_label": "RESPONSE (Internal \u2192 External)",
+  "role_label": "RESPONSE (Internal → External)",
   "prepositions": [
    "to",
    "via"
@@ -48,12 +48,12 @@
  },
  "call": {
   "role": "own",
-  "role_label": "OWN (Internal \u2192 Internal)",
+  "role_label": "OWN (Internal → Internal)",
   "prepositions": [
    "from",
    "to",
-   "with",
-   "via"
+   "via",
+   "with"
   ],
   "aliases": [
    "call",
@@ -63,7 +63,7 @@
  },
  "checkout": {
   "role": "own",
-  "role_label": "OWN (Internal \u2192 Internal)",
+  "role_label": "OWN (Internal → Internal)",
   "prepositions": [
    "from",
    "to",
@@ -76,7 +76,7 @@
  },
  "clear": {
   "role": "own",
-  "role_label": "OWN (Internal \u2192 Internal)",
+  "role_label": "OWN (Internal → Internal)",
   "prepositions": [
    "for"
   ],
@@ -87,11 +87,11 @@
  },
  "clone": {
   "role": "request",
-  "role_label": "REQUEST (External \u2192 Internal)",
+  "role_label": "REQUEST (External → Internal)",
   "prepositions": [
    "from",
-   "with",
-   "to"
+   "to",
+   "with"
   ],
   "aliases": [
    "clone"
@@ -102,8 +102,8 @@
   "role": "server",
   "role_label": "SERVER (service lifecycle operations)",
   "prepositions": [
-   "with",
-   "from"
+   "from",
+   "with"
   ],
   "aliases": [
    "close",
@@ -126,12 +126,12 @@
  },
  "compare": {
   "role": "own",
-  "role_label": "OWN (Internal \u2192 Internal)",
+  "role_label": "OWN (Internal → Internal)",
   "prepositions": [
-   "from",
    "against",
-   "with",
-   "to"
+   "from",
+   "to",
+   "with"
   ],
   "aliases": [
    "compare",
@@ -141,18 +141,33 @@
  },
  "compute": {
   "role": "own",
-  "role_label": "OWN (Internal \u2192 Internal)",
+  "role_label": "OWN (Internal → Internal)",
   "prepositions": [
-   "from",
    "for",
+   "from",
    "with"
   ],
   "aliases": [
-   "compute",
    "calculate",
+   "compute",
    "derive"
   ],
   "source": "Sources/ARORuntime/Actions/BuiltIn/ComputeAction.swift"
+ },
+ "configure": {
+  "role": "own",
+  "role_label": "OWN (Internal → Internal)",
+  "prepositions": [
+   "for",
+   "from",
+   "into",
+   "to",
+   "with"
+  ],
+  "aliases": [
+   "configure"
+  ],
+  "source": "Sources/ARORuntime/Actions/BuiltIn/ConfigureAction.swift"
  },
  "connect": {
   "role": "server",
@@ -179,32 +194,32 @@
  },
  "create": {
   "role": "own",
-  "role_label": "OWN (Internal \u2192 Internal)",
+  "role_label": "OWN (Internal → Internal)",
   "prepositions": [
-   "with",
-   "from",
    "for",
-   "to"
+   "from",
+   "to",
+   "with"
   ],
   "aliases": [
-   "create",
    "build",
-   "construct"
+   "construct",
+   "create"
   ],
   "source": "Sources/ARORuntime/Actions/BuiltIn/ComputeAction.swift"
  },
  "delete": {
   "role": "own",
-  "role_label": "OWN (Internal \u2192 Internal)",
+  "role_label": "OWN (Internal → Internal)",
   "prepositions": [
-   "from",
-   "for"
+   "for",
+   "from"
   ],
   "aliases": [
+   "clear",
    "delete",
-   "remove",
    "destroy",
-   "clear"
+   "remove"
   ],
   "source": "Sources/ARORuntime/Actions/BuiltIn/ComputeAction.swift"
  },
@@ -212,25 +227,25 @@
   "role": "export",
   "role_label": "EXPORT (makes symbols global / exports data)",
   "prepositions": [
-   "with",
-   "to"
+   "to",
+   "with"
   ],
   "aliases": [
    "emit"
   ],
-  "source": "Sources/ARORuntime/Actions/BuiltIn/ResponseActions.swift"
+  "source": "Sources/ARORuntime/Actions/BuiltIn/EmitAction.swift"
  },
  "execute": {
   "role": "own",
-  "role_label": "OWN (Internal \u2192 Internal)",
+  "role_label": "OWN (Internal → Internal)",
   "prepositions": [
+   "for",
    "on",
-   "with",
-   "for"
+   "with"
   ],
   "aliases": [
-   "execute",
    "exec",
+   "execute",
    "run",
    "shell"
   ],
@@ -238,7 +253,7 @@
  },
  "exists": {
   "role": "request",
-  "role_label": "REQUEST (External \u2192 Internal)",
+  "role_label": "REQUEST (External → Internal)",
   "prepositions": [
    "for"
   ],
@@ -249,7 +264,7 @@
  },
  "extract": {
   "role": "request",
-  "role_label": "REQUEST (External \u2192 Internal)",
+  "role_label": "REQUEST (External → Internal)",
   "prepositions": [
    "from",
    "via"
@@ -262,7 +277,7 @@
  },
  "filter": {
   "role": "own",
-  "role_label": "OWN (Internal \u2192 Internal)",
+  "role_label": "OWN (Internal → Internal)",
   "prepositions": [
    "from"
   ],
@@ -273,7 +288,7 @@
  },
  "given": {
   "role": "own",
-  "role_label": "OWN (Internal \u2192 Internal)",
+  "role_label": "OWN (Internal → Internal)",
   "prepositions": [
    "with"
   ],
@@ -284,7 +299,7 @@
  },
  "group": {
   "role": "own",
-  "role_label": "OWN (Internal \u2192 Internal)",
+  "role_label": "OWN (Internal → Internal)",
   "prepositions": [
    "from"
   ],
@@ -295,20 +310,20 @@
  },
  "include": {
   "role": "own",
-  "role_label": "OWN (Internal \u2192 Internal)",
+  "role_label": "OWN (Internal → Internal)",
   "prepositions": [
    "from"
   ],
   "aliases": [
-   "include",
    "embed",
+   "include",
    "insert"
   ],
   "source": "Sources/ARORuntime/Templates/IncludeAction.swift"
  },
  "join": {
   "role": "own",
-  "role_label": "OWN (Internal \u2192 Internal)",
+  "role_label": "OWN (Internal → Internal)",
   "prepositions": [
    "from"
   ],
@@ -319,7 +334,7 @@
  },
  "list": {
   "role": "request",
-  "role_label": "REQUEST (External \u2192 Internal)",
+  "role_label": "REQUEST (External → Internal)",
   "prepositions": [
    "from"
   ],
@@ -332,51 +347,51 @@
   "role": "server",
   "role_label": "SERVER (service lifecycle operations)",
   "prepositions": [
-   "on",
    "for",
+   "on",
    "to"
   ],
   "aliases": [
-   "listen",
-   "await"
+   "await",
+   "listen"
   ],
   "source": "Sources/ARORuntime/Actions/BuiltIn/ServerActions.swift"
  },
  "log": {
   "role": "response",
-  "role_label": "RESPONSE (Internal \u2192 External)",
+  "role_label": "RESPONSE (Internal → External)",
   "prepositions": [
    "for",
    "to",
    "with"
   ],
   "aliases": [
+   "debug",
    "log",
-   "print",
    "output",
-   "debug"
+   "print"
   ],
-  "source": "Sources/ARORuntime/Actions/BuiltIn/ResponseActions.swift"
+  "source": "Sources/ARORuntime/Actions/BuiltIn/LogAction.swift"
  },
  "make": {
   "role": "server",
   "role_label": "SERVER (service lifecycle operations)",
   "prepositions": [
-   "to",
+   "at",
    "for",
-   "at"
+   "to"
   ],
   "aliases": [
-   "make",
-   "touch",
    "createdirectory",
-   "mkdir"
+   "make",
+   "mkdir",
+   "touch"
   ],
   "source": "Sources/ARORuntime/Actions/BuiltIn/FileActions.swift"
  },
  "map": {
   "role": "own",
-  "role_label": "OWN (Internal \u2192 Internal)",
+  "role_label": "OWN (Internal → Internal)",
   "prepositions": [
    "from",
    "to"
@@ -388,14 +403,14 @@
  },
  "merge": {
   "role": "own",
-  "role_label": "OWN (Internal \u2192 Internal)",
+  "role_label": "OWN (Internal → Internal)",
   "prepositions": [
-   "with",
-   "from"
+   "from",
+   "with"
   ],
   "aliases": [
-   "merge",
-   "combine"
+   "combine",
+   "merge"
   ],
   "source": "Sources/ARORuntime/Actions/BuiltIn/ComputeAction.swift"
  },
@@ -413,22 +428,22 @@
  },
  "notify": {
   "role": "response",
-  "role_label": "RESPONSE (Internal \u2192 External)",
+  "role_label": "RESPONSE (Internal → External)",
   "prepositions": [
-   "to",
    "for",
+   "to",
    "with"
   ],
   "aliases": [
-   "notify",
    "alert",
+   "notify",
    "signal"
   ],
-  "source": "Sources/ARORuntime/Actions/BuiltIn/ResponseActions.swift"
+  "source": "Sources/ARORuntime/Actions/BuiltIn/NotifyAction.swift"
  },
  "parse": {
   "role": "request",
-  "role_label": "REQUEST (External \u2192 Internal)",
+  "role_label": "REQUEST (External → Internal)",
   "prepositions": [
    "from"
   ],
@@ -439,7 +454,7 @@
  },
  "parsehtml": {
   "role": "own",
-  "role_label": "OWN (Internal \u2192 Internal)",
+  "role_label": "OWN (Internal → Internal)",
   "prepositions": [
    "from"
   ],
@@ -450,7 +465,7 @@
  },
  "probe": {
   "role": "request",
-  "role_label": "REQUEST (External \u2192 Internal)",
+  "role_label": "REQUEST (External → Internal)",
   "prepositions": [
    "from",
    "with"
@@ -462,14 +477,14 @@
  },
  "prompt": {
   "role": "request",
-  "role_label": "REQUEST (External \u2192 Internal)",
+  "role_label": "REQUEST (External → Internal)",
   "prepositions": [
-   "with",
-   "from"
+   "from",
+   "with"
   ],
   "aliases": [
-   "prompt",
-   "ask"
+   "ask",
+   "prompt"
   ],
   "source": "Sources/ARORuntime/Actions/BuiltIn/TerminalActions.swift"
  },
@@ -480,16 +495,16 @@
    "with"
   ],
   "aliases": [
-   "publish",
    "export",
    "expose",
+   "publish",
    "share"
   ],
-  "source": "Sources/ARORuntime/Actions/BuiltIn/ResponseActions.swift"
+  "source": "Sources/ARORuntime/Actions/BuiltIn/PublishAction.swift"
  },
  "pull": {
   "role": "request",
-  "role_label": "REQUEST (External \u2192 Internal)",
+  "role_label": "REQUEST (External → Internal)",
   "prepositions": [
    "from"
   ],
@@ -512,7 +527,7 @@
  },
  "read": {
   "role": "request",
-  "role_label": "REQUEST (External \u2192 Internal)",
+  "role_label": "REQUEST (External → Internal)",
   "prepositions": [
    "from"
   ],
@@ -523,7 +538,7 @@
  },
  "receive": {
   "role": "request",
-  "role_label": "REQUEST (External \u2192 Internal)",
+  "role_label": "REQUEST (External → Internal)",
   "prepositions": [
    "from",
    "via"
@@ -535,20 +550,20 @@
  },
  "reduce": {
   "role": "own",
-  "role_label": "OWN (Internal \u2192 Internal)",
+  "role_label": "OWN (Internal → Internal)",
   "prepositions": [
    "from",
    "with"
   ],
   "aliases": [
-   "reduce",
-   "aggregate"
+   "aggregate",
+   "reduce"
   ],
   "source": "Sources/ARORuntime/Actions/BuiltIn/QueryActions.swift"
  },
  "render": {
   "role": "response",
-  "role_label": "RESPONSE (Internal \u2192 External)",
+  "role_label": "RESPONSE (Internal → External)",
   "prepositions": [
    "to"
   ],
@@ -559,20 +574,20 @@
  },
  "repaint": {
   "role": "response",
-  "role_label": "RESPONSE (Internal \u2192 External)",
+  "role_label": "RESPONSE (Internal → External)",
   "prepositions": [
    "at",
    "to"
   ],
   "aliases": [
-   "repaint",
-   "patch"
+   "patch",
+   "repaint"
   ],
   "source": "Sources/ARORuntime/Actions/BuiltIn/TerminalActions.swift"
  },
  "request": {
   "role": "request",
-  "role_label": "REQUEST (External \u2192 Internal)",
+  "role_label": "REQUEST (External → Internal)",
   "prepositions": [
    "from",
    "to",
@@ -580,50 +595,50 @@
    "with"
   ],
   "aliases": [
-   "request",
-   "http"
+   "http",
+   "request"
   ],
   "source": "Sources/ARORuntime/Actions/BuiltIn/RequestAction.swift"
  },
  "retrieve": {
   "role": "request",
-  "role_label": "REQUEST (External \u2192 Internal)",
+  "role_label": "REQUEST (External → Internal)",
   "prepositions": [
    "from"
   ],
   "aliases": [
-   "retrieve",
    "fetch",
+   "find",
    "load",
-   "find"
+   "retrieve"
   ],
   "source": "Sources/ARORuntime/Actions/BuiltIn/ExtractAction.swift"
  },
  "return": {
   "role": "response",
-  "role_label": "RESPONSE (Internal \u2192 External)",
+  "role_label": "RESPONSE (Internal → External)",
   "prepositions": [
    "for",
    "to",
    "with"
   ],
   "aliases": [
-   "return",
-   "respond"
+   "respond",
+   "return"
   ],
-  "source": "Sources/ARORuntime/Actions/BuiltIn/ResponseActions.swift"
+  "source": "Sources/ARORuntime/Actions/BuiltIn/ReturnAction.swift"
  },
  "reverse": {
   "role": "own",
-  "role_label": "OWN (Internal \u2192 Internal)",
+  "role_label": "OWN (Internal → Internal)",
   "prepositions": [
    "for",
    "from",
    "with"
   ],
   "aliases": [
-   "reverse",
-   "flip"
+   "flip",
+   "reverse"
   ],
   "source": "Sources/ARORuntime/Actions/BuiltIn/ComputeAction.swift"
  },
@@ -640,34 +655,34 @@
  },
  "select": {
   "role": "request",
-  "role_label": "REQUEST (External \u2192 Internal)",
+  "role_label": "REQUEST (External → Internal)",
   "prepositions": [
    "from",
    "with"
   ],
   "aliases": [
-   "select",
-   "choose"
+   "choose",
+   "select"
   ],
   "source": "Sources/ARORuntime/Actions/BuiltIn/TerminalActions.swift"
  },
  "send": {
   "role": "response",
-  "role_label": "RESPONSE (Internal \u2192 External)",
+  "role_label": "RESPONSE (Internal → External)",
   "prepositions": [
    "to",
    "via",
    "with"
   ],
   "aliases": [
-   "send",
-   "dispatch"
+   "dispatch",
+   "send"
   ],
-  "source": "Sources/ARORuntime/Actions/BuiltIn/ResponseActions.swift"
+  "source": "Sources/ARORuntime/Actions/BuiltIn/SendAction.swift"
  },
  "show": {
   "role": "own",
-  "role_label": "OWN (Internal \u2192 Internal)",
+  "role_label": "OWN (Internal → Internal)",
   "prepositions": [
    "for"
   ],
@@ -678,36 +693,36 @@
  },
  "sleep": {
   "role": "own",
-  "role_label": "OWN (Internal \u2192 Internal)",
+  "role_label": "OWN (Internal → Internal)",
   "prepositions": [
    "for",
    "with"
   ],
   "aliases": [
-   "sleep",
    "delay",
-   "pause"
+   "pause",
+   "sleep"
   ],
   "source": "Sources/ARORuntime/Actions/BuiltIn/SleepAction.swift"
  },
  "sort": {
   "role": "own",
-  "role_label": "OWN (Internal \u2192 Internal)",
+  "role_label": "OWN (Internal → Internal)",
   "prepositions": [
    "for",
-   "with",
-   "from"
+   "from",
+   "with"
   ],
   "aliases": [
-   "sort",
+   "arrange",
    "order",
-   "arrange"
+   "sort"
   ],
   "source": "Sources/ARORuntime/Actions/BuiltIn/ComputeAction.swift"
  },
  "split": {
   "role": "own",
-  "role_label": "OWN (Internal \u2192 Internal)",
+  "role_label": "OWN (Internal → Internal)",
   "prepositions": [
    "from"
   ],
@@ -718,10 +733,10 @@
  },
  "stage": {
   "role": "own",
-  "role_label": "OWN (Internal \u2192 Internal)",
+  "role_label": "OWN (Internal → Internal)",
   "prepositions": [
-   "to",
-   "for"
+   "for",
+   "to"
   ],
   "aliases": [
    "stage"
@@ -741,7 +756,7 @@
  },
  "stat": {
   "role": "request",
-  "role_label": "REQUEST (External \u2192 Internal)",
+  "role_label": "REQUEST (External → Internal)",
   "prepositions": [
    "for"
   ],
@@ -763,21 +778,21 @@
  },
  "store": {
   "role": "response",
-  "role_label": "RESPONSE (Internal \u2192 External)",
+  "role_label": "RESPONSE (Internal → External)",
   "prepositions": [
    "into",
    "to"
   ],
   "aliases": [
-   "store",
+   "persist",
    "save",
-   "persist"
+   "store"
   ],
-  "source": "Sources/ARORuntime/Actions/BuiltIn/ResponseActions.swift"
+  "source": "Sources/ARORuntime/Actions/BuiltIn/StoreAction.swift"
  },
  "stream": {
   "role": "request",
-  "role_label": "REQUEST (External \u2192 Internal)",
+  "role_label": "REQUEST (External → Internal)",
   "prepositions": [
    "from",
    "with"
@@ -802,7 +817,7 @@
  },
  "then": {
   "role": "own",
-  "role_label": "OWN (Internal \u2192 Internal)",
+  "role_label": "OWN (Internal → Internal)",
   "prepositions": [
    "with"
   ],
@@ -813,63 +828,62 @@
  },
  "throw": {
   "role": "response",
-  "role_label": "RESPONSE (Internal \u2192 External)",
+  "role_label": "RESPONSE (Internal → External)",
   "prepositions": [
    "for"
   ],
   "aliases": [
-   "throw",
+   "fail",
    "raise",
-   "fail"
+   "throw"
   ],
-  "source": "Sources/ARORuntime/Actions/BuiltIn/ResponseActions.swift"
+  "source": "Sources/ARORuntime/Actions/BuiltIn/ThrowAction.swift"
  },
  "transform": {
   "role": "own",
-  "role_label": "OWN (Internal \u2192 Internal)",
+  "role_label": "OWN (Internal → Internal)",
   "prepositions": [
    "from",
    "into",
    "to"
   ],
   "aliases": [
-   "transform",
    "convert",
-   "map"
+   "map",
+   "transform"
   ],
   "source": "Sources/ARORuntime/Actions/BuiltIn/ComputeAction.swift"
  },
  "update": {
   "role": "own",
-  "role_label": "OWN (Internal \u2192 Internal)",
+  "role_label": "OWN (Internal → Internal)",
   "prepositions": [
-   "with",
-   "to",
    "for",
    "from",
-   "into"
-  ],
-  "aliases": [
-   "update",
-   "modify",
-   "change",
-   "set",
-   "configure"
-  ],
-  "source": "Sources/ARORuntime/Actions/BuiltIn/ComputeAction.swift"
- },
- "validate": {
-  "role": "own",
-  "role_label": "OWN (Internal \u2192 Internal)",
-  "prepositions": [
-   "for",
-   "against",
+   "into",
+   "to",
    "with"
   ],
   "aliases": [
+   "change",
+   "modify",
+   "set",
+   "update"
+  ],
+  "source": "Sources/ARORuntime/Actions/BuiltIn/UpdateAction.swift"
+ },
+ "validate": {
+  "role": "own",
+  "role_label": "OWN (Internal → Internal)",
+  "prepositions": [
+   "against",
+   "for",
+   "with"
+  ],
+  "aliases": [
+   "check",
    "validate",
-   "verify",
-   "check"
+   "verify"
   ],
   "source": "Sources/ARORuntime/Actions/BuiltIn/ComputeAction.swift"
  },
@@ -880,15 +894,15 @@
    "for"
   ],
   "aliases": [
-   "wait",
+   "block",
    "keepalive",
-   "block"
+   "wait"
   ],
   "source": "Sources/ARORuntime/Actions/BuiltIn/ServerActions.swift"
  },
  "when": {
   "role": "own",
-  "role_label": "OWN (Internal \u2192 Internal)",
+  "role_label": "OWN (Internal → Internal)",
   "prepositions": [
    "from"
   ],
@@ -899,14 +913,14 @@
  },
  "write": {
   "role": "response",
-  "role_label": "RESPONSE (Internal \u2192 External)",
+  "role_label": "RESPONSE (Internal → External)",
   "prepositions": [
-   "to",
-   "into"
+   "into",
+   "to"
   ],
   "aliases": [
    "write"
   ],
-  "source": "Sources/ARORuntime/Actions/BuiltIn/ResponseActions.swift"
+  "source": "Sources/ARORuntime/Actions/BuiltIn/WriteAction.swift"
  }
 }

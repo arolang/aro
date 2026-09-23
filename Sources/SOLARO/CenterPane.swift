@@ -108,7 +108,14 @@ struct CenterPaneView: View {
         var sidecar = LayoutSidecar.load(for: url)
         sidecar.breakpoints.insert(line)
         sidecar.setBreakpointConfig(config, forLine: line)
-        try? sidecar.save(for: url)
+        do {
+            try sidecar.save(for: url)
+        } catch {
+            // A failed layout save loses node positions, breakpoints and
+            // the pane mode without a word (#755).
+            SolaroDiagnostics.shared.report("the canvas layout", error: error)
+        }
+        controller.noteSidecarWritten()
         // The caller clears `editingBreakpoint` right after this, which
         // re-evaluates the pane body → the editor re-reads the config
         // binding (fresh from disk) → `updateNSView` re-stamps the
@@ -248,6 +255,10 @@ struct CenterPaneView: View {
     /// about.
     private func cachedText(for url: URL) -> String {
         if fileTextURL == url { return fileText }
+        // A debounced autosave is newer than the file (#748).
+        if let pending = EditorWriteQueue.shared.pendingText(for: url) {
+            return pending
+        }
         guard !LargeFilePolicy.isLarge(url) else { return "" }
         return StreamReader(url: url).readAll()
     }
@@ -535,7 +546,7 @@ struct CenterPaneView: View {
     private func appendNewFeatureSet(_ draft: NewFeatureSetDraft,
                                      to url: URL) {
         let block = FeatureSetTemplate.render(draft)
-        let existing = (try? String(contentsOf: url, encoding: .utf8)) ?? ""
+        let existing = (controller.liveText(for: url)) ?? ""
         let glue: String
         if existing.isEmpty {
             glue = ""
@@ -601,7 +612,7 @@ struct CenterPaneView: View {
                     caretMoveTick: controller.caretMoveTick,
                     findSelection: controller.editorFindSelection,
                     findSelectionTick: controller.editorFindSelectionTick,
-                    lastExecutedAt: controller.lastExecutedAt,
+                    lastExecutedAt: controller.lastExecutedAt.inFile(url),
                     executionTick: controller.executionTick,
                     testMarkers: testGutterMarkers(for: url),
                     bufferEdit: controller.pendingBufferEdit.flatMap {
@@ -701,7 +712,14 @@ struct CenterPaneView: View {
                 guard let url = controller.currentFile else { return }
                 var sidecar = LayoutSidecar.load(for: url)
                 sidecar.breakpoints = newValue
-                try? sidecar.save(for: url)
+                do {
+            try sidecar.save(for: url)
+        } catch {
+            // A failed layout save loses node positions, breakpoints and
+            // the pane mode without a word (#755).
+            SolaroDiagnostics.shared.report("the canvas layout", error: error)
+        }
+                controller.noteSidecarWritten()
             }
         )
     }
@@ -729,7 +747,14 @@ struct CenterPaneView: View {
                     configs[String(line)] = config
                 }
                 sidecar.breakpointConfigs = configs
-                try? sidecar.save(for: url)
+                do {
+            try sidecar.save(for: url)
+        } catch {
+            // A failed layout save loses node positions, breakpoints and
+            // the pane mode without a word (#755).
+            SolaroDiagnostics.shared.report("the canvas layout", error: error)
+        }
+                controller.noteSidecarWritten()
             }
         )
     }
@@ -739,7 +764,7 @@ struct CenterPaneView: View {
     /// whitespace from every line and ensures exactly one trailing
     /// newline. Full AST round-trip pretty-printing is a follow-up.
     private func formatIfEnabled(_ text: String, for url: URL) -> String {
-        let enabled = UserDefaults.standard.bool(forKey: SolaroPrefs.formatOnSave.rawValue)
+        let enabled = Preferences.formatOnSave
         guard enabled else { return text }
         let suffix = url.lastPathComponent.lowercased()
         if !(suffix.hasSuffix(".aro")
@@ -774,9 +799,15 @@ struct CenterPaneView: View {
     private func scheduleOpenAPIParse(for url: URL, yaml: String) {
         yamlParseTask?.cancel()
         yamlParseTask = Task { @MainActor in
+            // A cancelled sleep is the point of the debounce: the next
+            // keystroke arrived, and the check below returns.
             try? await Task.sleep(for: .milliseconds(200))
             if Task.isCancelled { return }
             let box = await Task.detached(priority: .utility) {
+                // Invalid YAML mid-keystroke is the normal state of a
+                // file being typed into. `root` is left alone rather
+                // than being blanked, so the canvas does not flicker
+                // between every two valid states.
                 YAMLDictBox(value: try? Yams.load(yaml: yaml) as? [String: Any])
             }.value
             if Task.isCancelled { return }
@@ -846,14 +877,19 @@ struct CenterPaneView: View {
                 // checkout` with the pre-checkout text. Keep typing,
                 // keep the caches current, write nothing until the
                 // conflict bar is answered.
+                //
+                // The write itself is debounced (#748): `autosave` takes the
+                // text into the live buffer synchronously and lets the bytes
+                // reach disk when the typing pauses. An atomic write per
+                // character re-installed the kqueue watcher on every rename
+                // and refreshed git behind it, per character.
                 if !controller.isConflicted(url) {
-                    controller.writeToDisk(newValue, to: url)
+                    controller.autosave(newValue, to: url)
+                } else {
+                    // Conflicted: still mirror the buffer, just never write.
+                    controller.liveEditorText[url.standardizedFileURL] = newValue
                 }
                 if fileTextURL == url { fileText = newValue }
-                // Keep the controller's live-buffer mirror current so the AI
-                // co-pilot sees unsaved edits and so a co-pilot write that
-                // matches the buffer skips the destructive reload.
-                controller.liveEditorText[url.standardizedFileURL] = newValue
 
                 // openapi.yaml: keep the canvas in sync with the
                 // text editor by pushing the parsed YAML into
@@ -887,7 +923,11 @@ struct CenterPaneView: View {
                 // stale content (the bug behind the alphabetical
                 // "Accept, Aggregate…" dump even after typing "Lo").
                 controller.lsp.didChange(url: url, text: newValue)
-                reparse(url: url)
+                // Parse what the user typed rather than re-reading the file
+                // we were about to write (#748). The old path did a
+                // `String(contentsOf:)` here, which on the debounced write
+                // path would also have read the *previous* contents.
+                reparse(url: url, text: newValue)
             }
         )
     }
@@ -913,6 +953,26 @@ struct CenterPaneView: View {
         return out
     }
 
+    /// Write a structural edit — a canvas or inspector change — back to a
+    /// file, mirror it into the live buffer, and reparse.
+    ///
+    /// The conflict guard is the point (#754). `saveAndReparse` has always
+    /// had one; the two paths that wrote directly did not, so a canvas edit
+    /// made while the conflict bar was up went to disk and overwrote
+    /// whatever had changed underneath. The buffer is updated either way:
+    /// refusing the write is not a reason to throw away the edit, and
+    /// answering the conflict bar is what sends it on.
+    private func applyStructuralEdit(_ text: String, to url: URL) {
+        guard LargeFilePolicy.allowsWriteBack(url) else { return }
+        if !controller.isConflicted(url) {
+            controller.writeToDisk(text, to: url)
+        }
+        controller.liveEditorText[url.standardizedFileURL] = text
+        if fileTextURL == url { fileText = text }
+        controller.lsp.didChange(url: url, text: text)
+        reparse(url: url, text: text)
+    }
+
     private func saveAndReparse(text: String, url: URL) {
         // Never write back a buffer that may still be streaming in
         // (#487) — the same truncation hazard as `editableBinding`.
@@ -921,6 +981,9 @@ struct CenterPaneView: View {
         let formatted = formatIfEnabled(text, for: url)
         // Same conflict guard as the keystroke path (GitLab #536).
         guard !controller.isConflicted(url) else { return }
+        // Drop any debounced copy of this file first (#748) — it holds the
+        // unformatted text and would land after us, undoing the formatter.
+        EditorWriteQueue.shared.cancel(url)
         controller.writeToDisk(formatted, to: url)
         if fileTextURL == url { fileText = formatted }
         controller.liveEditorText[url.standardizedFileURL] = formatted
@@ -1172,6 +1235,8 @@ struct CenterPaneView: View {
         }
     }
 
+    /// Reparse `url` from disk. For callers that did not do the edit
+    /// themselves — a git checkout, an external change, a reload.
     private func reparse(url: URL) {
         // Skip entirely above the parse threshold: lexing a
         // multi-MB buffer on the main thread is the freeze in #487,
@@ -1182,9 +1247,36 @@ struct CenterPaneView: View {
             controller.parseErrors.removeValue(forKey: url)
             return
         }
-        guard let text = try? String(contentsOf: url, encoding: .utf8) else {
+        // A pending autosave is newer than the file (#748), so prefer it —
+        // otherwise a reparse during the debounce window would resurrect the
+        // pre-edit program and blank the canvas for a moment.
+        let pending = EditorWriteQueue.shared.pendingText(for: url)
+        guard let text = pending
+                ?? (try? String(contentsOf: url, encoding: .utf8))
+        else {
+            // The read failed: the file was deleted or renamed under us, or
+            // it is not UTF-8. Either way there is no AST to show, and the
+            // banner says so rather than leaving the last one stale.
             controller.parseErrors[url] = "Could not read file."
             controller.programs.removeValue(forKey: url)
+            return
+        }
+        reparse(url: url, text: text)
+        // Git status may have changed when the file's bytes changed
+        // — refresh the cached status so the sidebar + branch chip
+        // catch the update. The keystroke path does not come through
+        // here; its refresh rides the debounced write instead.
+        controller.gitMonitor.refresh(for: controller.project)
+    }
+
+    /// Reparse `url` from text already in hand — the editor buffer.
+    ///
+    /// No disk read and no git refresh: the caller has the bytes, and the
+    /// write that would change git status has not necessarily happened yet.
+    private func reparse(url: URL, text: String) {
+        guard LargeFilePolicy.shouldParse(url) else {
+            controller.programs.removeValue(forKey: url)
+            controller.parseErrors.removeValue(forKey: url)
             return
         }
         do {
@@ -1193,10 +1285,6 @@ struct CenterPaneView: View {
         } catch {
             controller.parseErrors[url] = "\(error)"
         }
-        // Git status may have changed when the file's bytes changed
-        // — refresh the cached status so the sidebar + branch chip
-        // catch the update.
-        controller.gitMonitor.refresh(for: controller.project)
     }
 
     // MARK: - Canvas
@@ -1205,6 +1293,11 @@ struct CenterPaneView: View {
     private var canvasMode: some View {
         if let url = controller.currentFile, isOpenAPIFile(url) {
             openAPICanvas(for: url)
+        } else if let url = controller.currentFile,
+                  StoreFile.isStoreFile(url) {
+            // A store file is a table (#766). Editing ARO-0073 seed
+            // data by hand in a YAML pane is the pre-IDE experience.
+            StoreFileView(url: url, text: editableBinding(for: url))
         } else {
             CanvasView(
                 controller: controller,
@@ -1213,10 +1306,12 @@ struct CenterPaneView: View {
                 currentLine: currentLineBinding,
                 pausedLine: controller.pausedLine,
                 pauseSymbols: controller.pauseSymbols,
-                lastExecutedAt: controller.lastExecutedAt,
+                lastExecutedAt:
+                    controller.lastExecutedAt.inFile(controller.currentFile),
                 lastExecutedAtPerFeatureSet:
                     controller.lastExecutedAtPerFeatureSet,
-                errorLines: controller.errorLines,
+                errorLines:
+                    controller.errorLines.inFile(controller.currentFile),
                 repositoryValues: controller.repositoryValues,
                 repositoryHistory: controller.repositoryHistory,
                 repositoryRecords: controller.repositoryRecords,
@@ -1257,8 +1352,11 @@ struct CenterPaneView: View {
         // (Yams.dump's input) bypass the disk → SwiftUI re-render
         // is driven by the @Observable's didSet.
         let yaml = document.flatMap { d in
+            // A dictionary Yams cannot serialise falls through to the
+            // buffer's own text, which is what the user typed and is a
+            // better answer than nothing.
             try? Yams.dump(object: d.root, sortKeys: false)
-        } ?? (try? String(contentsOf: url, encoding: .utf8)) ?? ""
+        } ?? (controller.liveText(for: url)) ?? ""
         let graph = OpenAPIGraphBuilder.build(yaml: yaml)
         let warnings: [OpenAPILintWarning] = {
             guard let document else { return [] }
@@ -1322,6 +1420,13 @@ struct CenterPaneView: View {
         controller.currentLine = line
     }
 
+    /// The canvas graph for the active file.
+    ///
+    /// Read from the canvas body, which re-evaluates on `executionTick` —
+    /// once per live event batch — so this used to rebuild the whole graph
+    /// and re-read `.layout.json` many times a second during a run (#749).
+    /// The controller now caches it against the program and the sidecar,
+    /// and the closure below runs only when one of them has changed.
     private var canvasGraph: CanvasGraph {
         guard
             let url = controller.currentFile,
@@ -1329,13 +1434,15 @@ struct CenterPaneView: View {
         else {
             return CanvasGraph(nodes: [], edges: [])
         }
-        let sidecar = LayoutSidecar.load(for: url)
-        // Build one graph spanning every feature set in the file —
-        // statements are tagged with their parent feature-set name
-        // so the canvas can group them in colored containers.
-        let built = CanvasGraph.build(program: program, fileKey: url.path)
-            .withPositions(from: sidecar)
-        return StackLayout.place(built)
+        return controller.canvasGraph(for: url) {
+            let sidecar = LayoutSidecar.load(for: url)
+            // Build one graph spanning every feature set in the file —
+            // statements are tagged with their parent feature-set name
+            // so the canvas can group them in colored containers.
+            let built = CanvasGraph.build(program: program, fileKey: url.path)
+                .withPositions(from: sidecar)
+            return StackLayout.place(built)
+        }
     }
 
     /// Insert a dropped Actions-tab template into the source file.
@@ -1354,7 +1461,7 @@ struct CenterPaneView: View {
         guard
             let name = target,
             let fs = program.featureSets.first(where: { $0.name == name }),
-            let text = try? String(contentsOf: url, encoding: .utf8)
+            let text = controller.liveText(for: url)
         else { return }
 
         let nsText = text as NSString
@@ -1371,46 +1478,24 @@ struct CenterPaneView: View {
         // A dropped payload that declares its own feature sets (a
         // Snippets-tab pattern, #242) can't go *inside* one —
         // append it at the end of the file instead.
-        if declaresFeatureSet(template) {
-            var appended = text
-            if !appended.hasSuffix("\n") { appended += "\n" }
-            appended += "\n" + template
-            if !appended.hasSuffix("\n") { appended += "\n" }
-            controller.writeToDisk(appended, to: url)
-            controller.liveEditorText[url.standardizedFileURL] = appended
-            reparse(url: url)
+        if SourceMutations.declaresFeatureSet(template) {
+            applyStructuralEdit(SourceMutations.appending(template, to: text),
+                                to: url)
             return
         }
 
-        let indent = inferIndent(in: nsText, around: insertAt)
-        // Indent every line, not just the first: the Snippets tab
+        // Indenting every line, not just the first: the Snippets tab
         // drops multi-line statement groups through this same path.
-        var snippet = template
-            .split(omittingEmptySubsequences: false, whereSeparator: \.isNewline)
-            .map { $0.isEmpty ? "" : indent + $0 }
-            .joined(separator: "\n")
-        if !snippet.hasSuffix("\n") { snippet += "\n" }
-
-        let updated = nsText.replacingCharacters(
-            in: NSRange(location: insertAt, length: 0),
-            with: snippet
-        )
-        controller.writeToDisk(updated, to: url)
-        controller.liveEditorText[url.standardizedFileURL] = updated
-        reparse(url: url)
+        guard let updated = SourceMutations.inserting(template, at: insertAt,
+                                                      in: text)
+        else { return }
+        applyStructuralEdit(updated, to: url)
     }
 
     /// True when a dropped payload opens a feature set of its own —
     /// `(Name: Business Activity) {` at the start of some line.
     private func declaresFeatureSet(_ text: String) -> Bool {
-        text.split(omittingEmptySubsequences: true, whereSeparator: \.isNewline)
-            .contains { line in
-                let trimmed = line.trimmingCharacters(in: .whitespaces)
-                guard trimmed.hasPrefix("("), trimmed.hasSuffix("{"),
-                      let close = trimmed.firstIndex(of: ")")
-                else { return false }
-                return trimmed[trimmed.startIndex..<close].contains(":")
-            }
+        SourceMutations.declaresFeatureSet(text)
     }
 
     /// Find the feature set whose laid-out node bounding box
@@ -1432,29 +1517,6 @@ struct CenterPaneView: View {
         return bounds.first(where: { $0.value.contains(point) })?.key
     }
 
-    /// Sniff a reasonable indentation string by walking back to
-    /// the previous newline and copying any leading whitespace.
-    /// Fallback: four spaces.
-    private func inferIndent(in text: NSString, around offset: Int) -> String {
-        var i = offset - 1
-        while i >= 0, text.character(at: i) != 0x0A /* \n */ {
-            i -= 1
-        }
-        var start = i + 1
-        var end = start
-        while end < text.length {
-            let c = text.character(at: end)
-            if c == 0x20 /* space */ || c == 0x09 /* tab */ {
-                end += 1
-            } else {
-                break
-            }
-        }
-        if end > start {
-            return text.substring(with: NSRange(location: start, length: end - start))
-        }
-        return "    "
-    }
 
     /// Right-click context-menu dispatcher on a canvas node card.
     /// Reveal jumps the caret to the statement's line; duplicate
@@ -1489,13 +1551,16 @@ struct CenterPaneView: View {
     /// it to the general pasteboard. Order follows source order
     /// across the program, not the click order.
     private func copySelectionAsARO() {
-        let chunks = collectSelectedSpans().compactMap { hit -> String? in
-            let lo = max(0, hit.start)
-            let hi = max(lo, hit.end)
-            guard hi <= hit.text.utf8.count else { return nil }
-            let utf8 = hit.text.utf8
-            return String(decoding: utf8.dropFirst(lo).prefix(hi - lo),
-                          as: UTF8.self)
+        // Grouped by file, because the spans are offsets into a
+        // particular text and mixing two files' offsets is the bug
+        // this extraction exists to make impossible (#773).
+        var perFile: [URL: (text: String, spans: [Range<Int>])] = [:]
+        for hit in collectSelectedSpans() {
+            perFile[hit.url, default: (hit.text, [])]
+                .spans.append(hit.start ..< hit.end)
+        }
+        let chunks = perFile.values.flatMap { entry in
+            SourceMutations.extracting(from: entry.text, spans: entry.spans)
         }
         guard !chunks.isEmpty else { return }
         let joined = chunks.joined(separator: "\n")
@@ -1513,19 +1578,11 @@ struct CenterPaneView: View {
         for hit in collectSelectedSpans() {
             perFile[hit.url, default: []].append((hit.start, hit.end))
         }
-        for (url, var spans) in perFile {
-            guard var text = try? String(contentsOf: url, encoding: .utf8)
-            else { continue }
-            spans.sort { $0.start > $1.start }
-            let ns = (text as NSString).mutableCopy() as! NSMutableString
-            for s in spans {
-                let lo = max(0, s.start)
-                let hi = max(lo, s.end)
-                guard hi <= ns.length else { continue }
-                ns.deleteCharacters(in: NSRange(location: lo, length: hi - lo))
-            }
-            text = ns as String
-            saveAndReparse(text: text, url: url)
+        for (url, spans) in perFile {
+            guard let text = controller.liveText(for: url) else { continue }
+            let updated = SourceMutations.deletingStatements(
+                in: text, spans: spans.map { $0.start ..< $0.end })
+            saveAndReparse(text: updated, url: url)
         }
         controller.selectedNodeIDs.removeAll()
     }
@@ -1546,7 +1603,7 @@ struct CenterPaneView: View {
             guard let startOffset = Int(offsetStr) else { continue }
             let url = URL(fileURLWithPath: path)
             guard let program = controller.programs[url],
-                  let text = try? String(contentsOf: url, encoding: .utf8)
+                  let text = controller.liveText(for: url)
             else { continue }
             for fs in program.featureSets {
                 for s in fs.statements {
@@ -1571,55 +1628,22 @@ struct CenterPaneView: View {
         guard
             let url = controller.currentFile,
             let program = controller.programs[url],
-            let text = try? String(contentsOf: url, encoding: .utf8)
+            let text = controller.liveText(for: url)
         else { return }
 
-        // Find the statement whose start.line == node.lineHint.
-        var hit: (start: Int, end: Int)? = nil
-        for fs in program.featureSets {
-            for statement in fs.statements {
-                if statement.span.start.line == node.lineHint {
-                    hit = (statement.span.start.offset,
-                           statement.span.end.offset)
-                    break
-                }
-            }
-            if hit != nil { break }
-        }
-        guard let (startOff, endOff) = hit else { return }
-        let nsText = text as NSString
-        guard startOff >= 0, endOff <= nsText.length, endOff > startOff
+        guard let span = SourceMutations.span(startingOnLine: node.lineHint,
+                                              in: program)
         else { return }
-
-        // Walk back to the start of the line so we delete the
-        // indentation too, and forward to (and including) the
-        // trailing newline so the gap closes cleanly.
-        var lineStart = startOff
-        while lineStart > 0, nsText.character(at: lineStart - 1) != 0x0A {
-            lineStart -= 1
-        }
-        var lineEnd = endOff
-        while lineEnd < nsText.length, nsText.character(at: lineEnd) != 0x0A {
-            lineEnd += 1
-        }
-        if lineEnd < nsText.length { lineEnd += 1 }  // consume newline
-
-        let removalRange = NSRange(location: lineStart, length: lineEnd - lineStart)
-        let statementText = nsText.substring(with: removalRange)
-
-        var updated: String
+        let range = span.start.offset ..< span.end.offset
+        let updated: String?
         switch mode {
         case .delete:
-            updated = nsText.replacingCharacters(in: removalRange, with: "")
+            updated = SourceMutations.deletingStatement(in: text, span: range)
         case .duplicate:
-            updated = nsText.replacingCharacters(
-                in: NSRange(location: lineEnd, length: 0),
-                with: statementText
-            )
+            updated = SourceMutations.duplicatingStatement(in: text, span: range)
         }
-        controller.writeToDisk(updated, to: url)
-        controller.liveEditorText[url.standardizedFileURL] = updated
-        reparse(url: url)
+        guard let updated else { return }
+        applyStructuralEdit(updated, to: url)
     }
 
     /// Drag-end callback: persist this node's new `(x, y)` to the
@@ -1630,7 +1654,14 @@ struct CenterPaneView: View {
         sidecar.nodes[id] = LayoutSidecar.NodePosition(
             x: Double(point.x), y: Double(point.y)
         )
-        try? sidecar.save(for: url)
+        do {
+            try sidecar.save(for: url)
+        } catch {
+            // A failed layout save loses node positions, breakpoints and
+            // the pane mode without a word (#755).
+            SolaroDiagnostics.shared.report("the canvas layout", error: error)
+        }
+        controller.noteSidecarWritten()
     }
 
     /// Apply an inline-editor edit by replacing the AROStatement's
@@ -1647,7 +1678,7 @@ struct CenterPaneView: View {
               let program = controller.programs[url],
               let span = span(forNodeID: nodeID, in: program)
         else { return }
-        guard let source = try? String(contentsOf: url, encoding: .utf8)
+        guard let source = controller.liveText(for: url)
         else { return }
         let newSource = replacingStatement(
             in: source,
@@ -1669,18 +1700,7 @@ struct CenterPaneView: View {
     /// editor's apply path and the drag-reorder drop path.
     private func span(forNodeID nodeID: CanvasNode.ID,
                       in program: Program) -> SourceSpan? {
-        let parts = nodeID.split(separator: ":")
-        guard let lastSlice = parts.last,
-              let startOffset = Int(String(lastSlice)) else { return nil }
-        for fs in program.featureSets {
-            if let found = locateStatement(
-                inStatements: fs.statements,
-                matching: startOffset
-            ) {
-                return found
-            }
-        }
-        return nil
+        SourceMutations.span(forNodeID: nodeID, in: program)
     }
 
     /// Drag-reorder drop (#376): move `source`'s statement so its
@@ -1696,7 +1716,7 @@ struct CenterPaneView: View {
               source.featureSetName == target.featureSetName,
               let url = controller.currentFile,
               let program = controller.programs[url],
-              let text = try? String(contentsOf: url, encoding: .utf8),
+              let text = controller.liveText(for: url),
               let sourceSpan = span(forNodeID: source.id, in: program),
               let targetSpan = span(forNodeID: target.id, in: program)
         else { return }
@@ -1725,23 +1745,7 @@ struct CenterPaneView: View {
         inStatements statements: [Statement],
         matching offset: Int
     ) -> SourceSpan? {
-        for statement in statements {
-            if let aro = statement as? AROStatement,
-               aro.span.start.offset == offset {
-                return aro.span
-            }
-            if let loop = statement as? ForEachLoop {
-                if let nested = locateStatement(
-                    inStatements: loop.body, matching: offset
-                ) { return nested }
-            }
-            if let loop = statement as? RangeLoop {
-                if let nested = locateStatement(
-                    inStatements: loop.body, matching: offset
-                ) { return nested }
-            }
-        }
-        return nil
+        SourceMutations.locateStatement(in: statements, matching: offset)
     }
 
     /// "Auto Layout" callback fired by the canvas's right-click
@@ -1754,7 +1758,14 @@ struct CenterPaneView: View {
         guard let url = controller.currentFile else { return }
         var sidecar = LayoutSidecar.load(for: url)
         sidecar.nodes.removeAll()
-        try? sidecar.save(for: url)
+        do {
+            try sidecar.save(for: url)
+        } catch {
+            // A failed layout save loses node positions, breakpoints and
+            // the pane mode without a word (#755).
+            SolaroDiagnostics.shared.report("the canvas layout", error: error)
+        }
+        controller.noteSidecarWritten()
     }
 
     // MARK: - Split
@@ -1786,7 +1797,7 @@ struct CenterPaneView: View {
                     caretMoveTick: controller.caretMoveTick,
                     findSelection: controller.editorFindSelection,
                     findSelectionTick: controller.editorFindSelectionTick,
-                    lastExecutedAt: controller.lastExecutedAt,
+                    lastExecutedAt: controller.lastExecutedAt.inFile(url),
                     executionTick: controller.executionTick,
                     testMarkers: testGutterMarkers(for: url),
                     bufferEdit: controller.pendingBufferEdit.flatMap {
@@ -1864,6 +1875,11 @@ struct CenterPaneView: View {
     private var splitLeftPane: some View {
         if let url = controller.currentFile, isOpenAPIFile(url) {
             openAPICanvas(for: url)
+        } else if let url = controller.currentFile,
+                  StoreFile.isStoreFile(url) {
+            // A store file is a table (#766). Editing ARO-0073 seed
+            // data by hand in a YAML pane is the pre-IDE experience.
+            StoreFileView(url: url, text: editableBinding(for: url))
         } else {
             CanvasView(
                 controller: controller,
@@ -1872,10 +1888,12 @@ struct CenterPaneView: View {
                 currentLine: currentLineBinding,
                 pausedLine: controller.pausedLine,
                 pauseSymbols: controller.pauseSymbols,
-                lastExecutedAt: controller.lastExecutedAt,
+                lastExecutedAt:
+                    controller.lastExecutedAt.inFile(controller.currentFile),
                 lastExecutedAtPerFeatureSet:
                     controller.lastExecutedAtPerFeatureSet,
-                errorLines: controller.errorLines,
+                errorLines:
+                    controller.errorLines.inFile(controller.currentFile),
                 repositoryValues: controller.repositoryValues,
                 repositoryHistory: controller.repositoryHistory,
                 repositoryRecords: controller.repositoryRecords,
@@ -1919,7 +1937,8 @@ struct CenterPaneView: View {
         let map = ProjectMap.build(from: controller.allPrograms)
         ProjectMapView(
             map: map,
-            testResults: controller.testResults
+            testResults: controller.testResults,
+            activity: controller.projectMapActivity
         ) { node in
             // Phase 10: locate which source file declares this
             // feature set and switch to it. The text editor's

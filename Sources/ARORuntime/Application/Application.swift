@@ -191,6 +191,8 @@ public final class Application: @unchecked Sendable {
             let writableStores = storeFiles.filter { $0.isWritable }
             if !writableStores.isEmpty {
                 let flushService = StoreFlushService(storage: InMemoryRepositoryStorage.shared)
+                // Where `Commit the <r> to the <stores>.` finds it (GitLab #863).
+                StoreFlushRegistry.current = flushService
                 await flushService.register(stores: storeFiles)
                 self.storeFlushService = flushService
 
@@ -251,6 +253,18 @@ public final class Application: @unchecked Sendable {
         await runtime.register(service: service)
     }
 
+    /// Bind the entry point's declared positional arguments (ARO-0047 §Positional
+    /// Arguments, GitLab #857).
+    ///
+    /// The names come from the `Application-Start` header; the values were
+    /// parsed out of `argv` before the application was built. `ParameterStorage`
+    /// joins the two on read, so this may run either side of the parse.
+    private func declarePositionalParameters(of program: AnalyzedProgram) {
+        guard let entry = program.featureSets.first(where: { $0.featureSet.name == entryPoint }),
+              !entry.featureSet.positionalParameters.isEmpty else { return }
+        ParameterStorage.shared.declarePositionals(entry.featureSet.positionalParameters)
+    }
+
     // MARK: - Execution
 
     /// Run the application
@@ -264,6 +278,12 @@ public final class Application: @unchecked Sendable {
         guard let mainProgram = mergedProgram() else {
             throw ApplicationError.noPrograms
         }
+
+        // ARO-0047: the entry point's `takes` clause names its positional
+        // command-line arguments (GitLab #857). Declared here, once the
+        // programs are merged and before the entry point runs, so
+        // `<parameter: url>` resolves against argv the same way a flag does.
+        declarePositionalParameters(of: mainProgram)
 
         // Validate OpenAPI contract against feature sets before opening port
         if let spec = openAPISpec {
@@ -924,32 +944,17 @@ public final class Application: @unchecked Sendable {
         return nil
     }
 
-    /// Map ARO status string to HTTP status code
+    /// Map ARO status string to HTTP status code.
+    ///
+    /// One catalog, shared with the compiled binary and with `aro check`
+    /// (GitLab #830). This used to be a local switch knowing twelve names
+    /// while `ServiceBridge` knew five, and both answered 200 for anything
+    /// else — so `Return a <TooManyRequests: status>` was a 200 with a
+    /// rate-limit body. An unknown name still answers 200 here, because a
+    /// response is already being written and there is nothing better to
+    /// send; `aro check` is where it is caught, before it runs.
     private func mapStatusToHTTPCode(_ status: String) -> Int {
-        switch status.lowercased() {
-        case "ok", "success":
-            return 200
-        case "created":
-            return 201
-        case "accepted":
-            return 202
-        case "nocontent", "no-content":
-            return 204
-        case "badrequest", "bad-request", "invalid":
-            return 400
-        case "unauthorized":
-            return 401
-        case "forbidden":
-            return 403
-        case "notfound", "not-found":
-            return 404
-        case "conflict":
-            return 409
-        case "error", "servererror", "server-error":
-            return 500
-        default:
-            return 200
-        }
+        HTTPStatusCatalog.code(for: status) ?? 200
     }
 
     // MARK: - Private

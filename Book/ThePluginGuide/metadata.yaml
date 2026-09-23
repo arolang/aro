@@ -2,7 +2,8 @@
 title: "ARO: Business Logic as Language"
 subtitle: "The Plugin Developer's Guide"
 author: "ARO Project"
-date: "February 2026"
+date: "@ARO_DATE@"
+version: "@ARO_VERSION@"
 lang: en
 documentclass: book
 classoption:

@@ -22,7 +22,8 @@ public struct HoverHandler: Sendable {
     ) -> [String: Any]? {
         guard let result = compilationResult else { return nil }
 
-        let aroPosition = PositionConverter.fromLSP(position)
+        let lines = LineIndex(content)
+        let aroPosition = PositionConverter.fromLSP(position, using: lines)
 
         // Try to find what's at this position
         // 1. Check if it's inside a feature set name
@@ -33,7 +34,7 @@ public struct HoverHandler: Sendable {
             let fs = analyzed.featureSet
 
             // Check statements first (more specific)
-            if let hover = findHoverInStatements(fs.statements, position: aroPosition, featureSet: fs, analyzed: analyzed) {
+            if let hover = findHoverInStatements(fs.statements, position: aroPosition, featureSet: fs, analyzed: analyzed, lines: lines) {
                 return hover
             }
 
@@ -42,7 +43,7 @@ public struct HoverHandler: Sendable {
             if aroPosition.line == fs.span.start.line &&
                aroPosition.line < (fs.statements.first?.span.start.line ?? Int.max) {
                 let hoverContent = formatFeatureSetHover(fs, analyzed: analyzed)
-                return createHoverResponse(hoverContent, range: fs.span)
+                return createHoverResponse(hoverContent, lines: lines, range: fs.span)
             }
         }
 
@@ -55,74 +56,75 @@ public struct HoverHandler: Sendable {
         _ statements: [Statement],
         position: SourceLocation,
         featureSet: FeatureSet,
-        analyzed: AnalyzedFeatureSet
+        analyzed: AnalyzedFeatureSet,
+        lines: LineIndex
     ) -> [String: Any]? {
         for statement in statements {
             if let aro = statement as? AROStatement {
-                if isPositionInSpan(position, aro.span) {
-                    if isPositionInSpan(position, aro.action.span) {
+                if aro.span.contains(position) {
+                    if aro.action.span.contains(position) {
                         let hoverContent = formatActionHover(aro.action, statement: aro, featureSet: featureSet, analyzed: analyzed)
-                        return createHoverResponse(hoverContent, range: aro.action.span)
+                        return createHoverResponse(hoverContent, lines: lines, range: aro.action.span)
                     }
-                    if isPositionInSpan(position, aro.result.span) {
+                    if aro.result.span.contains(position) {
                         let symbol = analyzed.symbolTable.lookup(aro.result.base)
                         let hoverContent = formatVariableHover(
                             aro.result.base, symbol: symbol, isResult: true,
                             statement: aro, featureSet: featureSet, analyzed: analyzed
                         )
-                        return createHoverResponse(hoverContent, range: aro.result.span)
+                        return createHoverResponse(hoverContent, lines: lines, range: aro.result.span)
                     }
-                    if isPositionInSpan(position, aro.object.noun.span) {
+                    if aro.object.noun.span.contains(position) {
                         let objectName = aro.object.noun.base
                         let symbol = analyzed.symbolTable.lookup(objectName)
                         let hoverContent = formatVariableHover(
                             objectName, symbol: symbol, isResult: false,
                             statement: aro, featureSet: featureSet, analyzed: analyzed
                         )
-                        return createHoverResponse(hoverContent, range: aro.object.noun.span)
+                        return createHoverResponse(hoverContent, lines: lines, range: aro.object.noun.span)
                     }
                 }
             } else if let forEachLoop = statement as? ForEachLoop {
-                if let hover = findHoverInStatements(forEachLoop.body, position: position, featureSet: featureSet, analyzed: analyzed) {
+                if let hover = findHoverInStatements(forEachLoop.body, position: position, featureSet: featureSet, analyzed: analyzed, lines: lines) {
                     return hover
                 }
             } else if let rangeLoop = statement as? RangeLoop {
-                if let hover = findHoverInStatements(rangeLoop.body, position: position, featureSet: featureSet, analyzed: analyzed) {
+                if let hover = findHoverInStatements(rangeLoop.body, position: position, featureSet: featureSet, analyzed: analyzed, lines: lines) {
                     return hover
                 }
             } else if let whileLoop = statement as? WhileLoop {
-                if let hover = findHoverInStatements(whileLoop.body, position: position, featureSet: featureSet, analyzed: analyzed) {
+                if let hover = findHoverInStatements(whileLoop.body, position: position, featureSet: featureSet, analyzed: analyzed, lines: lines) {
                     return hover
                 }
             } else if let matchStmt = statement as? MatchStatement {
                 for caseClause in matchStmt.cases {
-                    if let hover = findHoverInStatements(caseClause.body, position: position, featureSet: featureSet, analyzed: analyzed) {
+                    if let hover = findHoverInStatements(caseClause.body, position: position, featureSet: featureSet, analyzed: analyzed, lines: lines) {
                         return hover
                     }
                 }
             } else if let pipeline = statement as? PipelineStatement {
                 for stage in pipeline.stages {
-                    if isPositionInSpan(position, stage.span) {
-                        if isPositionInSpan(position, stage.action.span) {
+                    if stage.span.contains(position) {
+                        if stage.action.span.contains(position) {
                             let hoverContent = formatActionHover(stage.action, statement: stage, featureSet: featureSet, analyzed: analyzed)
-                            return createHoverResponse(hoverContent, range: stage.action.span)
+                            return createHoverResponse(hoverContent, lines: lines, range: stage.action.span)
                         }
-                        if isPositionInSpan(position, stage.result.span) {
+                        if stage.result.span.contains(position) {
                             let symbol = analyzed.symbolTable.lookup(stage.result.base)
                             let hoverContent = formatVariableHover(
                                 stage.result.base, symbol: symbol, isResult: true,
                                 statement: stage, featureSet: featureSet, analyzed: analyzed
                             )
-                            return createHoverResponse(hoverContent, range: stage.result.span)
+                            return createHoverResponse(hoverContent, lines: lines, range: stage.result.span)
                         }
-                        if isPositionInSpan(position, stage.object.noun.span) {
+                        if stage.object.noun.span.contains(position) {
                             let objectName = stage.object.noun.base
                             let symbol = analyzed.symbolTable.lookup(objectName)
                             let hoverContent = formatVariableHover(
                                 objectName, symbol: symbol, isResult: false,
                                 statement: stage, featureSet: featureSet, analyzed: analyzed
                             )
-                            return createHoverResponse(hoverContent, range: stage.object.noun.span)
+                            return createHoverResponse(hoverContent, lines: lines, range: stage.object.noun.span)
                         }
                     }
                 }
@@ -132,23 +134,6 @@ public struct HoverHandler: Sendable {
     }
 
     // MARK: - Position Helpers
-
-    private func isPositionInSpan(_ position: SourceLocation, _ span: SourceSpan) -> Bool {
-        // Check if position is within span
-        if position.line < span.start.line || position.line > span.end.line {
-            return false
-        }
-
-        if position.line == span.start.line && position.column < span.start.column {
-            return false
-        }
-
-        if position.line == span.end.line && position.column > span.end.column {
-            return false
-        }
-
-        return true
-    }
 
     // MARK: - Hover Content Formatting
 
@@ -289,8 +274,8 @@ public struct HoverHandler: Sendable {
 
     // MARK: - Response Creation
 
-    private func createHoverResponse(_ content: String, range: SourceSpan) -> [String: Any] {
-        let lspRange = PositionConverter.toLSP(range)
+    private func createHoverResponse(_ content: String, lines: LineIndex, range: SourceSpan) -> [String: Any] {
+        let lspRange = PositionConverter.toLSP(range, using: lines)
 
         return [
             "contents": [

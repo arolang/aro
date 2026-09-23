@@ -60,39 +60,33 @@ struct WelcomeView: View {
                     .allowsHitTesting(false)
                 )
 
-            VStack(spacing: SolaroSpace.xxl) {
-                Spacer()
-                wordmark
-                if let crash = unseenCrash {
-                    crashBanner(crash)
+            // The welcome content is centred, and it grows: a crash
+            // banner, the Learn ARO card and a long recents list can
+            // together outrun a window shorter than the content. A
+            // centred overflow is clipped at *both* ends, so the card
+            // — which sits above the tiles — went off the top edge
+            // where no amount of resizing would reveal it. Scrolling
+            // keeps every part reachable at any window or screen size;
+            // minHeight keeps it centred while it still fits, so the
+            // ordinary case looks exactly as it did.
+            GeometryReader { geo in
+                ScrollView(.vertical) {
+                    ScrollViewReader { proxy in
+                        welcomeContent
+                            .frame(minWidth: geo.size.width,
+                                   minHeight: geo.size.height)
+                            .onChange(of: showLearningCard) { _, shown in
+                                // Bring the card to the user rather than
+                                // leaving them to find it.
+                                guard shown else { return }
+                                withAnimation(.easeOut(duration: 0.25)) {
+                                    proxy.scrollTo(Self.learningCardID, anchor: .center)
+                                }
+                            }
+                    }
                 }
-                if showLearningCard {
-                    learningCard
-                }
-                actionTiles
-                if !recents.isEmpty {
-                    recentsSection
-                }
-                Spacer()
-                if let errorText {
-                    Text(errorText)
-                        .font(SolaroFont.caption)
-                        .foregroundStyle(SolaroColor.stateError)
-                        .padding(.bottom, SolaroSpace.m)
-                }
-                VStack(spacing: SolaroSpace.xs) {
-                    Text("v\(runtimeVersion)  ·  ARO runtime embedded")
-                        .font(SolaroFont.caption)
-                        .foregroundStyle(SolaroColor.textTertiary)
-                    updateFooter
-                }
-                .padding(.bottom, SolaroSpace.l)
+                .scrollBounceBehavior(.basedOnSize)
             }
-            // 860, not the original 760: three action tiles are
-            // 262pt each once their padding is counted, and at 760
-            // the third one (Learn ARO) got squeezed out of the row.
-            .frame(maxWidth: 860)
-            .padding(.horizontal, SolaroSpace.xl)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onAppear {
@@ -106,6 +100,48 @@ struct WelcomeView: View {
                 hasRecentProjects: !recents.isEmpty,
                 isInstalled: learning.isInstalled)
         }
+    }
+
+    /// Anchor for scrolling the Learn ARO card into view.
+    private static let learningCardID = "learning-card"
+
+    /// The centred column. Lifted out of `body` so the scroll
+    /// container above can measure and centre it.
+    private var welcomeContent: some View {
+        VStack(spacing: SolaroSpace.xxl) {
+            Spacer()
+            wordmark
+            if let crash = unseenCrash {
+                crashBanner(crash)
+            }
+            if showLearningCard {
+                learningCard
+                    .id(Self.learningCardID)
+            }
+            actionTiles
+            if !recents.isEmpty {
+                recentsSection
+            }
+            Spacer()
+            if let errorText {
+                Text(errorText)
+                    .font(SolaroFont.caption)
+                    .foregroundStyle(SolaroColor.stateError)
+                    .padding(.bottom, SolaroSpace.m)
+            }
+            VStack(spacing: SolaroSpace.xs) {
+                Text("v\(runtimeVersion)  ·  ARO runtime embedded")
+                    .font(SolaroFont.caption)
+                    .foregroundStyle(SolaroColor.textTertiary)
+                updateFooter
+            }
+            .padding(.bottom, SolaroSpace.l)
+        }
+        // 860, not the original 760: three action tiles are
+        // 262pt each once their padding is counted, and at 760
+        // the third one (Learn ARO) got squeezed out of the row.
+        .frame(maxWidth: 860)
+        .padding(.horizontal, SolaroSpace.xl)
     }
 
     // MARK: - Learning notebooks
@@ -398,6 +434,26 @@ struct WelcomeView: View {
             entrypoint: main.aro
             """
             try yamlStub.write(to: aroYaml, atomically: true, encoding: .utf8)
+
+            // SOLARO writes into the project as you use it: `.solaro/` holds
+            // the run's event log, the OpenAPI try-it-out history and saved
+            // environments, and `.layout.json` holds this user's canvas
+            // coordinates. None of it belongs to the project — the first
+            // `git add -A` in a new project committed all of it (GitLab #777).
+            let gitignore = url.appendingPathComponent(".gitignore")
+            if !FileManager.default.fileExists(atPath: gitignore.path) {
+                let ignoreStub = """
+                # SOLARO working files — per-user, per-machine, not the project
+                .solaro/
+                .layout.json
+
+                # `aro build` output
+                \(url.lastPathComponent)
+                .build/
+                """
+                try ignoreStub.write(to: gitignore, atomically: true, encoding: .utf8)
+            }
+
             let project = Project(rootPath: url)
             RecentProjects.remember(project)
             onOpen(project)

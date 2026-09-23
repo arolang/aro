@@ -11,6 +11,25 @@ distDirs.forEach(dir => {
 
 // Read partials
 const headPartial = fs.readFileSync('src/partials/head.html', 'utf8');
+
+// ---------------------------------------------------------------------------
+// Share-card (Open Graph / Twitter) metadata. The site default describes ARO;
+// a page listed here describes itself instead, so a link to it previews as
+// that page rather than as the landing page.
+// ---------------------------------------------------------------------------
+const SITE = 'https://arolang.github.io/aro/';
+const defaultMeta = {
+    title: 'ARO - The Language AI Was Waiting For',
+    description: 'ARO is the programming language where features become code. Built for humans. Perfected for AI.',
+    image: 'social.png',
+};
+const pageMeta = {
+    'solaro.html': {
+        title: 'Solaro - The ARO IDE',
+        description: "The editor that stops lying about your code. A canvas that lights up as your program runs, with every value the runtime bound printed on it.",
+        image: 'img/solaro-share.png',
+    },
+};
 const footerPartial = fs.readFileSync('src/partials/footer.html', 'utf8');
 
 // Copy animation files to dist
@@ -70,10 +89,19 @@ function processHtmlFile(srcPath, destPath, basePath = '') {
     const subpageStylesheetPath = basePath + 'subpage.css';
 
     // Replace {{head}} placeholder with head partial content
+    const pageName = path.basename(destPath);
+    const meta = { ...defaultMeta, ...(pageMeta[pageName] || {}) };
+    const pageUrl = pageName === 'index.html' && basePath === ''
+        ? SITE
+        : SITE + path.relative('dist', destPath).split(path.sep).join('/');
     let headContent = headPartial
         .replace('{{stylesheet}}', stylesheetPath)
         .replace('{{animations-stylesheet}}', animationsStylesheetPath)
-        .replace('{{subpage-stylesheet}}', subpageStylesheetPath);
+        .replace('{{subpage-stylesheet}}', subpageStylesheetPath)
+        .replace(/\{\{og-url\}\}/g, pageUrl)
+        .replace(/\{\{og-title\}\}/g, meta.title)
+        .replace(/\{\{og-description\}\}/g, meta.description)
+        .replace(/\{\{og-image\}\}/g, SITE + meta.image);
     content = content.replace('{{head}}', headContent);
 
     // Replace {{footer}} placeholder with footer partial content

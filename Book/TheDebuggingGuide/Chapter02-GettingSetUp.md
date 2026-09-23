@@ -8,25 +8,13 @@
 
 The debugger ships inside the `aro` binary. There is no separate package. If you can run `aro --help` and see a `debug` subcommand listed, you are done with installation.
 
-**macOS (Homebrew):**
+<!-- ARO:INCLUDE Install.md -->
+*See [the shared installation instructions](../Install.md).*
+<!-- /ARO:INCLUDE -->
+
+If you are reading this book because you are contributing to the debugger itself, build from source and check the subcommand directly:
 
 ```bash
-brew tap arolang/aro
-brew install aro
-```
-
-**Linux (binary release):**
-
-Pick the artifact that matches your distribution from the [Releases page](https://github.com/arolang/aro/releases) and put `aro` on your `PATH`. The CI publishes signed `.deb` and `.rpm` flavors plus a portable tarball.
-
-**From source:**
-
-If you are reading this book because you are contributing to the debugger itself, the source path is:
-
-```bash
-git clone https://git.ausdertechnik.de/arolang/aro
-cd aro
-swift build -c release
 ./.build/release/aro --help | grep debug
 ```
 

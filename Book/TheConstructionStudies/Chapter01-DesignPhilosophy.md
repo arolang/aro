@@ -101,11 +101,11 @@ We classify every action by its data flow direction. This is not just documentat
 
 | Role | Direction | Examples |
 |------|-----------|---------|
-| `request` | External → Internal | Extract, Retrieve, Read, Request, Stream, List |
-| `own` | Internal → Internal | Compute, Validate, Compare, Create, Transform |
-| `response` | Internal → External | Return, Throw, Log, Send, Write, Store, Broadcast, Notify |
-| `export` | Internal → Global | Publish, Emit, Schedule |
-| `server` | Service lifecycle | Start, Stop, Listen, Connect, Close, Keepalive |
+| `request` | External → Internal | Extract, Retrieve, Read, Request, Stream, List, Probe, Pull, Clone |
+| `own` | Internal → Internal | Compute, Validate, Compare, Create, Transform, Stage, Checkout |
+| `response` | Internal → External | Return, Throw, Log, Send, Write, Store, Broadcast, Notify, Render |
+| `export` | Internal → Global | Publish, Emit, Schedule, Commit, Push, Tag |
+| `server` | Service lifecycle | Start, Stop, Listen, Connect, Close, Keepalive, Make, Copy, Move |
 
 <svg viewBox="0 0 700 350" xmlns="http://www.w3.org/2000/svg">
   <style>
@@ -176,7 +176,7 @@ We classify every action by its data flow direction. This is not just documentat
   <line x1="290" y1="260" x2="290" y2="320" class="arrow" style="marker-end: none;"/>
   <line x1="290" y1="320" x2="600" y2="320" class="arrow" style="marker-end: none;"/>
   <line x1="600" y1="320" x2="600" y2="180" class="arrow"/>
-  <text x="445" y="340" class="role" text-anchor="middle">EXPORT: Publish, Store, Emit</text>
+  <text x="445" y="340" class="role" text-anchor="middle">EXPORT: Publish, Emit, Schedule</text>
 
   <!-- Persistent Storage -->
   <rect x="560" y="80" width="100" height="100" rx="5" class="box"/>
@@ -186,7 +186,9 @@ We classify every action by its data flow direction. This is not just documentat
   <text x="610" y="160" class="label" text-anchor="middle">Events</text>
 </svg>
 
-**Figure 1.2**: Action role data flow. Every action in ARO belongs to exactly one of five roles, determining where data flows. The fifth role, `server`, manages service lifecycle (Start, Stop, Listen, Connect, Close, Keepalive, Broadcast, Make, Copy, Move) and is not shown in this diagram for clarity.
+**Figure 1.2**: Action role data flow. Every action in ARO belongs to exactly one of five roles, determining where data flows. The fifth role, `server`, manages service and filesystem-object lifecycle (Start, Stop, Listen, Connect, Close, Keepalive, Make, Copy, Move) and is not shown in this diagram for clarity.
+
+The roles in this table and in the diagram are not prose: `ActionRoleCatalog` is the single definition both the runtime and the parser read, and `aro actions` prints it. If a role here and a role there disagree, `aro actions` is the one to believe — the table used to be maintained by hand in four places that disagreed on 25 of 136 verbs.
 
 ### Why Roles Matter
 

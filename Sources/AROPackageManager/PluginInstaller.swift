@@ -101,24 +101,11 @@ public final class PluginInstaller: Sendable {
         }
 
         // Update manifest with source info
-        let updatedManifest = PluginManifest(
-            name: manifest.name,
-            version: manifest.version,
-            handle: manifest.handle,
-            description: manifest.description,
-            author: manifest.author,
-            license: manifest.license,
-            aroVersion: manifest.aroVersion,
-            source: SourceInfo(
-                git: url,
-                ref: cloneResult.ref,
-                commit: cloneResult.commit
-            ),
-            provides: manifest.provides,
-            dependencies: manifest.dependencies,
-            system: manifest.system,
-            build: manifest.build
-        )
+        let updatedManifest = manifest.with(source: SourceInfo(
+            git: url,
+            ref: cloneResult.ref,
+            commit: cloneResult.commit
+        ))
 
         // Write updated manifest
         try updatedManifest.write(to: manifestPath)
@@ -279,25 +266,14 @@ public final class PluginInstaller: Sendable {
         let newCommit = try git.getHeadCommit(in: pluginDir)
         let currentRef = ref ?? (try? git.getCurrentBranch(in: pluginDir)) ?? source.ref ?? "HEAD"
 
-        // Update manifest with new commit info
+        // Update manifest with new commit info. Re-read it first: the pull may
+        // have brought a new version, description or handle with it.
         let updatedManifest = try PluginManifest.parse(from: manifestPath)
-        let finalManifest = PluginManifest(
-            name: updatedManifest.name,
-            version: updatedManifest.version,
-            description: updatedManifest.description,
-            author: updatedManifest.author,
-            license: updatedManifest.license,
-            aroVersion: updatedManifest.aroVersion,
-            source: SourceInfo(
-                git: gitURL,
-                ref: currentRef,
-                commit: newCommit
-            ),
-            provides: updatedManifest.provides,
-            dependencies: updatedManifest.dependencies,
-            system: updatedManifest.system,
-            build: updatedManifest.build
-        )
+        let finalManifest = updatedManifest.with(source: SourceInfo(
+            git: gitURL,
+            ref: currentRef,
+            commit: newCommit
+        ))
         try finalManifest.write(to: manifestPath)
 
         // Rebuild if necessary
@@ -387,7 +363,7 @@ public final class PluginInstaller: Sendable {
     /// Build a Swift package
     private func buildSwiftPackage(at path: URL) throws {
         let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/swift")
+        process.executableURL = URL(fileURLWithPath: try ToolchainLocator.require("swift"))
         process.currentDirectoryURL = path
         process.arguments = ["build", "-c", "release"]
 
@@ -423,9 +399,11 @@ public final class PluginInstaller: Sendable {
     /// Build a Rust plugin
     private func buildRustPlugin(at path: URL, config: ProvideEntryBuild) throws {
         let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+        // `/usr/bin/env cargo` found cargo on PATH but does not exist on
+        // Windows; resolving the tool ourselves works everywhere (GitLab #669).
+        process.executableURL = URL(fileURLWithPath: try ToolchainLocator.require("cargo"))
         process.currentDirectoryURL = path
-        process.arguments = ["cargo", "build", "--release"]
+        process.arguments = ["build", "--release"]
         process.environment = Self.environmentForExternalToolchain()
 
         let pipe = Pipe()
@@ -446,7 +424,10 @@ public final class PluginInstaller: Sendable {
     private func buildCPlugin(at path: URL, config: ProvideEntryBuild, isCpp: Bool) throws {
         let compiler = config.compiler ?? (isCpp ? "clang++" : "clang")
         let flags = config.flags ?? ["-O2", "-shared", "-fPIC"]
-        let output = config.output ?? "libplugin.dylib"
+        // The default used to be `libplugin.dylib` everywhere, so a Linux
+        // build produced an ELF object under a Mach-O name and the runtime's
+        // extension-keyed scan never found it (GitLab #669).
+        let output = config.output ?? PlatformLibrary.defaultPluginLibraryName()
 
         // Find source files
         let sources = try FileManager.default.contentsOfDirectory(at: path, includingPropertiesForKeys: nil)
@@ -457,7 +438,7 @@ public final class PluginInstaller: Sendable {
         }
 
         let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/\(compiler)")
+        process.executableURL = URL(fileURLWithPath: try ToolchainLocator.require(compiler))
         process.currentDirectoryURL = path
         process.arguments = flags + sources.map { $0.path } + ["-o", output]
 
@@ -478,8 +459,8 @@ public final class PluginInstaller: Sendable {
     /// Install Python dependencies
     private func installPythonDependencies(at requirementsPath: URL) throws {
         let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        process.arguments = ["pip3", "install", "-r", requirementsPath.path, "--quiet"]
+        process.executableURL = URL(fileURLWithPath: try ToolchainLocator.require("pip3"))
+        process.arguments = ["install", "-r", requirementsPath.path, "--quiet"]
 
         let pipe = Pipe()
         process.standardError = pipe

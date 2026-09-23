@@ -17,6 +17,7 @@ import ArgumentParser
 import Foundation
 import AROCompiler
 import ARORuntime
+import AROPackageManager
 
 /// Pre-compiles managed plugins (from a `Plugins/` directory) for inclusion in
 /// a native binary produced by `aro build`.
@@ -38,13 +39,25 @@ struct PluginCompiler: Sendable {
     let outputPluginsDir: URL
     /// Directory under `.build` where renamed static object files are staged.
     let staticBuildDir: URL
+    /// How the binary will be linked. Baking a plugin's object files into the
+    /// executable is what `--static` means; a `--dynamic` build leaves the
+    /// plugin's shared library beside the binary and loads it at startup. The
+    /// stage used to run without knowing which it was in (GitLab #815).
+    let linkMode: CCompiler.LinkMode
     /// Whether to print progress to stdout.
     let verbose: Bool
 
-    init(sourcePluginsDir: URL, outputPluginsDir: URL, staticBuildDir: URL, verbose: Bool) {
+    init(
+        sourcePluginsDir: URL,
+        outputPluginsDir: URL,
+        staticBuildDir: URL,
+        linkMode: CCompiler.LinkMode,
+        verbose: Bool
+    ) {
         self.sourcePluginsDir = sourcePluginsDir
         self.outputPluginsDir = outputPluginsDir
         self.staticBuildDir = staticBuildDir
+        self.linkMode = linkMode
         self.verbose = verbose
     }
 
@@ -61,6 +74,11 @@ struct PluginCompiler: Sendable {
         var pythonPluginIRInfos: [EmbeddedPythonPluginIRInfo] = []
         /// Extra linker flags (e.g. `-lpython3.12`) required by embedded Python plugins.
         var pythonLinkerFlags: [String] = []
+        /// Set when an embeddable CPython was found: the standard library to
+        /// copy next to the finished binary, and the version that names the
+        /// directory. Staging happens after linking, because only the build
+        /// command knows where the binary landed (#856).
+        var pythonStdlibToStage: (stdlibPath: String, version: String)?
     }
 
     /// Run the full plugin pre-compilation pipeline.
@@ -80,6 +98,7 @@ struct PluginCompiler: Sendable {
         if verbose { print("Compiling managed plugins...") }
 
         var hasPythonPlugins = false
+        var pythonPluginNames: [String] = []
         var pythonRequirementsFiles: [URL] = []
 
         do {
@@ -116,6 +135,7 @@ struct PluginCompiler: Sendable {
                 // Check if this is a Python plugin
                 let isPythonPlugin = Self.manifestDeclaresPythonPlugin(yamlContent)
                 if isPythonPlugin {
+                    pythonPluginNames.append(pluginName)
                     // Embedded Python: read source, install deps, link libpython
                     let searchDirs = [
                         pluginDir,
@@ -165,6 +185,77 @@ struct PluginCompiler: Sendable {
                     continue
                 }
 
+                // Where the plugin's Swift package lives and builds. Needed by
+                // both link modes, so it is resolved before they diverge.
+                // The managed plugin compiler builds into `.build-aro`.
+                let sourcePluginDir = sourcePluginsDir.appendingPathComponent(pluginName)
+                let spmBuildCandidates = [
+                    pluginDir.appendingPathComponent(".build-aro"),
+                    pluginDir.appendingPathComponent(".build"),
+                    sourcePluginDir.appendingPathComponent(".build-aro"),
+                    sourcePluginDir.appendingPathComponent(".build"),
+                ]
+                let spmBuildDir = spmBuildCandidates.first(where: { FileManager.default.fileExists(atPath: $0.path) })
+                    ?? sourcePluginDir.appendingPathComponent(".build-aro")
+                // Determine which directory contains the Package.swift for --show-bin-path
+                let packageDir = FileManager.default.fileExists(atPath: pluginDir.appendingPathComponent("Package.swift").path) ? pluginDir : sourcePluginDir
+                let hasPackageManifest = FileManager.default.fileExists(
+                    atPath: packageDir.appendingPathComponent("Package.swift").path
+                )
+
+                // Build the package ourselves rather than hoping someone already
+                // did. A Swift plugin's object files and its shared library both
+                // exist only because SPM produced them, and the managed compile
+                // is not a reliable source of either: it looks for a built
+                // library in a layout SwiftPM no longer uses, reports "Built
+                // library not found", and leaves nothing behind — after which
+                // `aro build` said "No object files found … use a Package.swift
+                // so SPM produces .o files" at a plugin that had a Package.swift
+                // all along (GitLab #815).
+                //
+                // `swift build` is idempotent, so on CI — where the plugin
+                // packages are pre-warmed — this costs a manifest check.
+                var packageBinPath: URL? = nil
+                if hasPackageManifest {
+                    let built = Self.buildSwiftPackage(
+                        packageDir: packageDir, scratchPath: spmBuildDir, verbose: verbose
+                    )
+                    if !built, verbose {
+                        print("  swift build failed for '\(pluginName)'; falling back to whatever artifacts exist")
+                    }
+                    packageBinPath = Self.swiftPackageBinPath(packageDir: packageDir, scratchPath: spmBuildDir)
+                }
+
+                // A `--dynamic` build bakes nothing in: the plugin's shared
+                // library ships beside the binary and the runtime dlopens it at
+                // startup, exactly as the interpreter does. So there are no
+                // object files to hunt for and nothing to say about static
+                // linking — which is what this stage used to say regardless,
+                // because it never learned which build it was in (GitLab #815).
+                if linkMode == .dynamicLink {
+                    var searchRoots = [pluginDir, sourcePluginDir]
+                    if let packageBinPath { searchRoots.insert(packageBinPath, at: 0) }
+                    if let library = Self.findPluginSharedLibrary(in: searchRoots) {
+                        let staged = Self.stageDynamicPluginLibrary(
+                            library, pluginName: pluginName, into: pluginDir
+                        )
+                        if verbose {
+                            print("  Dynamic plugin '\(pluginName)' → \(staged.path)")
+                        }
+                    } else {
+                        print("Error: plugin '\(pluginName)' produced no loadable library — cannot bundle it with a --dynamic build.")
+                        if let compileError = pluginCompileFailures[pluginName] {
+                            print("  Root cause — the plugin failed to compile:")
+                            print("  \(compileError)")
+                        } else {
+                            print("  A --dynamic build loads plugins from a shared library next to the binary.")
+                            print("  Expected lib\(pluginName).\(Self.sharedLibraryExtension) (or \(pluginName).\(Self.sharedLibraryExtension)) under the plugin directory.")
+                        }
+                        throw ExitCode.failure
+                    }
+                    continue
+                }
+
                 // Native plugin: find .o files from SPM/cargo build, rename symbols, link statically
                 var objectFiles: [String] = []
 
@@ -177,71 +268,9 @@ struct PluginCompiler: Sendable {
                 try? FileManager.default.removeItem(at: pluginWorkDir)
                 try? FileManager.default.createDirectory(at: pluginWorkDir, withIntermediateDirectories: true)
 
-                // Strategy 1: Find .o files from SPM build directory (Swift package plugins)
-                // After `swift build`, .o files are in .build/<triple>/release/<Module>.build/*.o
-                // The managed plugin compiler uses .build-aro as the build directory
-                let sourcePluginDir = sourcePluginsDir.appendingPathComponent(pluginName)
-                let spmBuildCandidates = [
-                    pluginDir.appendingPathComponent(".build-aro"),
-                    pluginDir.appendingPathComponent(".build"),
-                    sourcePluginDir.appendingPathComponent(".build-aro"),
-                    sourcePluginDir.appendingPathComponent(".build"),
-                ]
-                let spmBuildDir = spmBuildCandidates.first(where: { FileManager.default.fileExists(atPath: $0.path) })
-                    ?? sourcePluginDir.appendingPathComponent(".build")
-                // Determine which directory contains the Package.swift for --show-bin-path
-                let packageDir = FileManager.default.fileExists(atPath: pluginDir.appendingPathComponent("Package.swift").path) ? pluginDir : sourcePluginDir
-                if FileManager.default.fileExists(atPath: spmBuildDir.path) {
-                    // Use `swift build --show-bin-path` to find the correct build directory.
-                    // `/usr/bin/swift` does not exist on every host — the Linux CI image
-                    // installs Swift to /usr/share/swift/usr/bin — so probe known locations
-                    // and respect a $SWIFT override before giving up.
-                    var binPath: String? = nil
-                    let swiftPath = Self.resolveSwiftExecutable() ?? "/usr/bin/swift"
-                    let showBinProcess = Process()
-                    showBinProcess.executableURL = URL(fileURLWithPath: swiftPath)
-                    showBinProcess.arguments = ["build", "-c", "release", "--show-bin-path", "--scratch-path", spmBuildDir.path]
-                    showBinProcess.currentDirectoryURL = packageDir
-                    let binPipe = Pipe()
-                    showBinProcess.standardOutput = binPipe
-                    showBinProcess.standardError = FileHandle.nullDevice
-                    if let _ = try? showBinProcess.run() {
-                        showBinProcess.waitUntilExit()
-                        if showBinProcess.terminationStatus == 0,
-                           let path = String(data: binPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)?
-                               .trimmingCharacters(in: .whitespacesAndNewlines),
-                           !path.isEmpty {
-                            binPath = path
-                        }
-                    }
-
-                    if let releaseDir = binPath {
-                        // Collect .o files from all module build directories
-                        // Include the plugin itself + its dependencies (e.g., AROPluginSDK, AROPluginKit)
-                        let releaseDirURL = URL(fileURLWithPath: releaseDir)
-                        if let buildDirContents = try? FileManager.default.contentsOfDirectory(
-                            at: releaseDirURL, includingPropertiesForKeys: [.isDirectoryKey]
-                        ) {
-                            for dir in buildDirContents where dir.pathExtension == "build" {
-                                let moduleName = dir.deletingPathExtension().lastPathComponent
-                                // Skip compiler plugin / macro modules (they end in -tool or are swift-syntax related)
-                                if moduleName.hasSuffix("-tool") || moduleName.contains("SwiftSyntax") ||
-                                   moduleName.contains("SwiftParser") || moduleName.contains("SwiftOperators") ||
-                                   moduleName.contains("SwiftBasicFormat") || moduleName.contains("SwiftDiagnostics") ||
-                                   moduleName.contains("SwiftLexicalLookup") || moduleName.contains("SwiftCompiler") ||
-                                   moduleName.contains("_SwiftSyntax") || moduleName.contains("SwiftIfConfig") ||
-                                   moduleName.contains("SwiftRefactor") || moduleName.contains("SwiftIDEUtils") ||
-                                   moduleName == "_SwiftSyntaxCShims" || moduleName.contains("GenericTestSupport") {
-                                    continue
-                                }
-                                if let oFiles = try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil) {
-                                    for oFile in oFiles where oFile.pathExtension == "o" {
-                                        objectFiles.append(oFile.path)
-                                    }
-                                }
-                            }
-                        }
-                    }
+                // Strategy 1: harvest .o files from the SPM build.
+                if let releaseDir = packageBinPath {
+                    objectFiles.append(contentsOf: Self.collectPackageObjectFiles(in: releaseDir))
                 }
 
                 // Strategy 2: Find .o from Rust cargo build.
@@ -329,7 +358,16 @@ struct PluginCompiler: Sendable {
                             compileProcess.arguments = ["-c", "-fPIC", "-O2"] + includeFlags + ["-o", oPath, cFile.path]
                             compileProcess.standardOutput = FileHandle.nullDevice
                             compileProcess.standardError = FileHandle.nullDevice
-                            try? compileProcess.run()
+                            // A launch failure (no clang at that path) must not
+                            // fall through: `waitUntilExit` and
+                            // `terminationStatus` on a Process that was never
+                            // started raise, so the old `try?` turned a missing
+                            // compiler into a crash instead of a skipped file.
+                            do {
+                                try compileProcess.run()
+                            } catch {
+                                continue
+                            }
                             compileProcess.waitUntilExit()
                             if compileProcess.terminationStatus == 0 {
                                 objectFiles.append(oPath)
@@ -347,8 +385,10 @@ struct PluginCompiler: Sendable {
                     } else {
                         print("  Static linking requires .o files:")
                         print("    • Rust:  cargo must be installed and the crate must build (`cargo rustc --crate-type=staticlib` is invoked automatically)")
-                        print("    • Swift: use a Package.swift so SPM produces .o files")
+                        print("    • Swift: a Package.swift is built automatically — check that `swift build -c release` succeeds in \(packageDir.path)")
                         print("    • C:     place .c files in the plugin's src/ or root directory")
+                        print("  Or build with `aro build --dynamic`, which ships the plugin's shared library")
+                        print("  next to the binary instead of baking it in.")
                     }
                     throw ExitCode.failure
                 }
@@ -399,11 +439,25 @@ struct PluginCompiler: Sendable {
         // If Python plugins were found, find libpython and prepare deps
         if hasPythonPlugins {
             let pythonFinder = PythonLibraryFinder(verbose: verbose)
-            if let pythonPaths = pythonFinder.findPython() {
-                result.pythonLinkerFlags = pythonPaths.linkerFlags
+            let buildMachinePython = pythonFinder.findPython()
+
+            // GitLab #608 said now what the binary cannot do later; #856
+            // added the case where it *can*, given a CPython to carry. One
+            // decision covers both, so there is one set of rules rather than
+            // two that can drift apart.
+            let embeddingStatically = try applyEmbeddedPythonPolicy(
+                plugins: pythonPluginNames,
+                buildMachinePython: buildMachinePython,
+                into: &result
+            )
+
+            if let pythonPaths = buildMachinePython {
+                if !embeddingStatically {
+                    result.pythonLinkerFlags = pythonPaths.linkerFlags
+                }
                 if verbose {
                     print("Python \(pythonPaths.version) found: \(pythonPaths.executable)")
-                    print("  Linker flags: \(pythonPaths.linkerFlags.joined(separator: " "))")
+                    print("  Linker flags: \(result.pythonLinkerFlags.joined(separator: " "))")
                 }
 
                 // Install requirements to a temporary venv if needed
@@ -434,6 +488,14 @@ struct PluginCompiler: Sendable {
 
                     if verbose { print("  Python dependencies installed") }
                 }
+            } else if embeddingStatically {
+                // The interpreter travels with the binary, so the build
+                // machine not having one of its own is irrelevant — except
+                // for `requirements.txt`, which needs a pip to run.
+                if !pythonRequirementsFiles.isEmpty {
+                    print("Warning: Python plugin requirements cannot be installed — no python3 on this machine")
+                    print("  The embedded interpreter carries the standard library only.")
+                }
             } else {
                 print("Warning: Python plugins found but python3 not available on build machine")
                 print("  Python plugins will use legacy base64 embedding")
@@ -454,25 +516,282 @@ struct PluginCompiler: Sendable {
         return result
     }
 
+    // MARK: - Embedded Python and the standalone contract (#608, #856)
+
+    /// Decide what this build may claim about a Python plugin, and act on it.
+    ///
+    /// `aro build --static` (the default) promises one file you can copy. A
+    /// Python plugin is the one plugin kind that cannot simply be folded in:
+    /// it needs an interpreter, and the interpreter, `libpython` and standard
+    /// library would otherwise be resolved from the machine that ran the
+    /// build. None of those survive the copy, and the failure they cause
+    /// happens on somebody else's machine, at startup, long after the build
+    /// said `[OK]`.
+    ///
+    /// So the build says it instead, while the person who can do something
+    /// about it is still watching — or, given a CPython it can carry
+    /// (`ARO_STATIC_PYTHON`), embeds it, and the promise holds.
+    ///
+    /// The rules live in `EmbeddedPythonPolicy`, in AROCompiler, so they are
+    /// testable without running a build. This method is where the decision
+    /// meets the build: the only place that throws, prints, or writes linker
+    /// flags. #608 and #856 arrived as two separate reporting paths saying
+    /// overlapping things about the same situation; they are one here,
+    /// because two copies of a rule is how the two of them drift apart.
+    ///
+    /// - Returns: whether the interpreter is being embedded, which tells the
+    ///   caller not to overwrite the linker flags with the build machine's.
+    @discardableResult
+    func applyEmbeddedPythonPolicy(
+        plugins: [String],
+        buildMachinePython: PythonLibraryFinder.PythonPaths?,
+        into result: inout Result
+    ) throws -> Bool {
+        let environment = ProcessInfo.processInfo.environment
+        let decision = EmbeddedPythonPolicy.decide(
+            plugins: plugins,
+            linkMode: linkMode,
+            distribution: StaticPythonDistribution.locate(environment: environment),
+            buildMachinePython: buildMachinePython.map {
+                (executable: $0.executable, libraryPath: $0.libraryPath, stdlibPath: $0.stdlibPath)
+            },
+            overrideEnabled: environment[EmbeddedPythonPolicy.overrideEnvironmentVariable] == "1"
+        )
+
+        switch decision {
+        case .notApplicable:
+            return false
+        case .refuse(let reason):
+            print("Error: \(reason)")
+            throw ExitCode.failure
+        case .buildWithWarning(let reason):
+            print("Warning: \(reason)")
+            return false
+        case .embedStatically(let distribution):
+            result.pythonLinkerFlags = distribution.linkerFlags
+            result.pythonStdlibToStage = (stdlibPath: distribution.stdlibPath,
+                                          version: distribution.version)
+            print("Embedding CPython \(distribution.version) from \(distribution.root)")
+            if verbose {
+                print("  Archive: \(distribution.archivePath)")
+                print("  Stdlib:  \(distribution.stdlibPath)")
+            }
+            return true
+        }
+    }
+
     // MARK: - Toolchain Helpers
+
+    /// The shared-library extension this platform's plugins are built with.
+    static var sharedLibraryExtension: String {
+        #if os(Windows)
+        return "dll"
+        #elseif os(Linux)
+        return "so"
+        #else
+        return "dylib"
+        #endif
+    }
+
+    /// Find a plugin's built shared library under any of the given roots.
+    ///
+    /// Mirrors where `compileSingleManagedPlugin` writes one: the plugin root,
+    /// its `Sources/`, `src/`, and cargo's `target/release/`.
+    static func findPluginSharedLibrary(in roots: [URL]) -> URL? {
+        let ext = sharedLibraryExtension
+        var searched: [URL] = []
+        for root in roots {
+            searched.append(root)
+            searched.append(root.appendingPathComponent("Sources"))
+            searched.append(root.appendingPathComponent("src"))
+            searched.append(root.appendingPathComponent("target/release"))
+        }
+        for dir in searched {
+            guard let contents = try? FileManager.default.contentsOfDirectory(
+                at: dir, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles]
+            ) else { continue }
+            if let lib = contents.first(where: { $0.pathExtension == ext }) {
+                return lib
+            }
+        }
+        return nil
+    }
+
+    /// Modules that belong to the macro toolchain rather than to the plugin.
+    ///
+    /// `@AROExport` is a macro, so every Swift plugin package drags swift-syntax
+    /// and a compiler-plugin executable in with it. Those are build-time tools;
+    /// baking their objects into the host binary is both pointless and a source
+    /// of duplicate symbols.
+    static func isToolchainModule(_ moduleName: String) -> Bool {
+        moduleName.hasSuffix("-tool")
+            || moduleName.contains("SwiftSyntax")
+            || moduleName.contains("SwiftParser")
+            || moduleName.contains("SwiftOperators")
+            || moduleName.contains("SwiftBasicFormat")
+            || moduleName.contains("SwiftDiagnostics")
+            || moduleName.contains("SwiftLexicalLookup")
+            || moduleName.contains("SwiftCompiler")
+            || moduleName.contains("_SwiftSyntax")
+            || moduleName.contains("SwiftIfConfig")
+            || moduleName.contains("SwiftRefactor")
+            || moduleName.contains("SwiftIDEUtils")
+            || moduleName == "_SwiftSyntaxCShims"
+            || moduleName.contains("GenericTestSupport")
+    }
+
+    /// Collect the object files SPM produced for a package, from either layout
+    /// its build directory can take.
+    ///
+    /// The build system SwiftPM shipped for years put them in
+    /// `<bin>/<Module>.build/*.o`; the current one emits one merged
+    /// `<bin>/<Module>.o` per module instead. Only the first was ever looked
+    /// for, so on a toolchain using the new build system every Swift plugin
+    /// came back with zero objects and `aro build` blamed the plugin for not
+    /// having a Package.swift (GitLab #815). Read both — they do not coexist,
+    /// so there is nothing to deduplicate.
+    static func collectPackageObjectFiles(in binPath: URL) -> [String] {
+        var objectFiles: [String] = []
+        guard let contents = try? FileManager.default.contentsOfDirectory(
+            at: binPath, includingPropertiesForKeys: [.isDirectoryKey], options: [.skipsHiddenFiles]
+        ) else { return [] }
+
+        // Current layout: one merged object per module, directly in the bin dir.
+        for file in contents where file.pathExtension == "o" {
+            let moduleName = file.deletingPathExtension().lastPathComponent
+            guard !isToolchainModule(moduleName) else { continue }
+            objectFiles.append(file.path)
+        }
+
+        // Previous layout: a <Module>.build directory per module.
+        for dir in contents where dir.pathExtension == "build" {
+            let moduleName = dir.deletingPathExtension().lastPathComponent
+            guard !isToolchainModule(moduleName) else { continue }
+            if let oFiles = try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil) {
+                for oFile in oFiles where oFile.pathExtension == "o" {
+                    objectFiles.append(oFile.path)
+                }
+            }
+        }
+
+        return objectFiles
+    }
+
+    /// Ask SwiftPM where it put this package's products.
+    ///
+    /// `/usr/bin/swift` does not exist on every host — the Linux CI image
+    /// installs Swift to /usr/share/swift/usr/bin — so `resolveSwiftExecutable`
+    /// probes known locations and respects `$SWIFT` before giving up.
+    static func swiftPackageBinPath(packageDir: URL, scratchPath: URL) -> URL? {
+        guard let swiftPath = resolveSwiftExecutable() else { return nil }
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: swiftPath)
+        process.arguments = ["build", "-c", "release", "--show-bin-path", "--scratch-path", scratchPath.path]
+        process.currentDirectoryURL = packageDir
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        process.standardError = FileHandle.nullDevice
+        guard (try? process.run()) != nil else { return nil }
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+        guard process.terminationStatus == 0,
+              let path = String(data: data, encoding: .utf8)?
+                  .trimmingCharacters(in: .whitespacesAndNewlines),
+              !path.isEmpty else { return nil }
+        return URL(fileURLWithPath: path)
+    }
+
+    /// Put the plugin's shared library where the runtime looks for it.
+    ///
+    /// A `--dynamic` binary loads plugins the way the interpreter does: from
+    /// `Plugins/<name>/Sources/lib<name>.<ext>` next to the executable. SwiftPM
+    /// leaves it in its own build directory under the *module's* name, and the
+    /// managed compile that was supposed to copy it across looks in a layout
+    /// SwiftPM no longer writes — so the build succeeded and the binary then
+    /// reported an unknown action verb (GitLab #815).
+    ///
+    /// Returns where the library ended up: the copy if one was made, the
+    /// original if it was already in place or could not be copied.
+    static func stageDynamicPluginLibrary(_ library: URL, pluginName: String, into pluginDir: URL) -> URL {
+        let ext = sharedLibraryExtension
+        let destination = pluginDir
+            .appendingPathComponent("Sources")
+            .appendingPathComponent("lib\(pluginName).\(ext)")
+
+        // Already where the runtime looks — nothing to do.
+        if library.standardizedFileURL == destination.standardizedFileURL { return library }
+
+        do {
+            try FileManager.default.createDirectory(
+                at: destination.deletingLastPathComponent(), withIntermediateDirectories: true
+            )
+            if FileManager.default.fileExists(atPath: destination.path) {
+                try FileManager.default.removeItem(at: destination)
+            }
+            try FileManager.default.copyItem(at: library, to: destination)
+        } catch {
+            // Best effort: report where the library actually is so the failure
+            // at run time is traceable to a copy that did not happen.
+            FileHandle.standardError.write(
+                Data("[PluginCompiler] Warning: could not stage \(library.path) next to the binary: \(error)\n".utf8)
+            )
+            return library
+        }
+
+        // Dependencies the plugin links (AROPluginKit, AROPluginSDK, …) travel
+        // with it, under their own names, so the loader resolves them.
+        let sourceDir = library.deletingLastPathComponent()
+        let destinationDir = destination.deletingLastPathComponent()
+        if let siblings = try? FileManager.default.contentsOfDirectory(
+            at: sourceDir, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles]
+        ) {
+            for sibling in siblings where sibling.pathExtension == ext && sibling != library {
+                let target = destinationDir.appendingPathComponent(sibling.lastPathComponent)
+                if !FileManager.default.fileExists(atPath: target.path) {
+                    try? FileManager.default.copyItem(at: sibling, to: target)
+                }
+            }
+        }
+
+        return destination
+    }
+
+    /// Build a Swift package plugin so its object files exist.
+    ///
+    /// Returns whether `swift build -c release` succeeded. Failure is not fatal
+    /// on its own: the caller still looks for objects, and reports the real
+    /// problem if there are none.
+    static func buildSwiftPackage(packageDir: URL, scratchPath: URL, verbose: Bool) -> Bool {
+        guard let swiftPath = resolveSwiftExecutable() else { return false }
+        if verbose {
+            print("  swift build -c release (\(packageDir.lastPathComponent))")
+        }
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: swiftPath)
+        process.arguments = ["build", "-c", "release", "--scratch-path", scratchPath.path]
+        process.currentDirectoryURL = packageDir
+        // Same reason cargo gets this environment: an installation that points
+        // DYLD_LIBRARY_PATH at our LLVM would force that libLLVM on the Swift
+        // toolchain's own tools.
+        process.environment = ToolchainEnvironment.forExternalToolchain()
+        process.standardOutput = verbose ? FileHandle.standardOutput : FileHandle.nullDevice
+        process.standardError = verbose ? FileHandle.standardError : FileHandle.nullDevice
+        guard (try? process.run()) != nil else { return false }
+        process.waitUntilExit()
+        return process.terminationStatus == 0
+    }
 
     /// Locate the `swift` executable across known install paths so
     /// `swift build --show-bin-path` works on hosts where /usr/bin/swift
     /// does not exist (notably the Linux CI image at /usr/share/swift).
+    ///
+    /// The candidate table this used to carry now lives in
+    /// `AROPackageManager.ToolchainLocator`, which the plugin installer shares:
+    /// the installer was hard-coding `/usr/bin/swift` for exactly the hosts this
+    /// helper existed to handle (GitLab #669). `$SWIFT` still wins, and `PATH` is
+    /// searched after the known locations.
     static func resolveSwiftExecutable() -> String? {
-        if let env = ProcessInfo.processInfo.environment["SWIFT"],
-           !env.isEmpty,
-           FileManager.default.isExecutableFile(atPath: env) {
-            return env
-        }
-        let candidates = [
-            "/usr/bin/swift",
-            "/usr/local/bin/swift",
-            "/usr/share/swift/usr/bin/swift",
-            "/opt/swift/usr/bin/swift",
-            "/Library/Developer/Toolchains/swift-latest.xctoolchain/usr/bin/swift",
-        ]
-        return candidates.first { FileManager.default.isExecutableFile(atPath: $0) }
+        ToolchainLocator.find("swift")
     }
 
     // MARK: - Manifest language detection

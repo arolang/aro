@@ -8,7 +8,8 @@
 {\large A practical, chapter-by-chapter walkthrough of the \texttt{aro debug} runtime — from your first paused statement to recorded replays of production traces.}\\[3cm]
 
 {\itshape ARO Project}\\
-{\itshape June 2026}\\
+{\itshape @ARO_DATE@}\\
+{\itshape ARO @ARO_VERSION@}\\
 
 \vfill
 

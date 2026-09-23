@@ -8,11 +8,16 @@
     (* Supports prepositions: on, for, to *)
     (* Types: port, events, file/directory *)
 
-    (* Example 1: Listen for port events *)
+    (* Example 1: Listen for port events.
+       Listen records the listener and emits a ListenStartedEvent; it does not
+       open a listening socket -- that is what starting a server does. The port
+       below is therefore just a number in the demo, and it is deliberately not
+       8080 so nothing here reads as if a well-known port were held
+       (GitLab #829). *)
     Log "--- Port Listener Setup ---" to the <console>.
-    Create the <port-number> with 8080.
+    Create the <port-number> with 18787.
     Listen the <port-listener> for the <port: port-number>.
-    Log "Port listener configured for port 8080" to the <console>.
+    Log "Port listener configured for port 18787" to the <console>.
     Log <port-listener> to the <console>.
 
     (* Example 2: Listen for custom events *)

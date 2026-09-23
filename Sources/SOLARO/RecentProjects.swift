@@ -44,6 +44,8 @@ enum RecentProjects {
     /// missing or unreadable — never throws into the UI.
     static func load() -> [Project] {
         guard
+            // No recents file, or one we cannot read, means there are
+            // no recents — which is exactly right on a first launch.
             let data = try? Data(contentsOf: fileURL),
             let entries = try? decoder().decode([Entry].self, from: data)
         else { return [] }
@@ -65,11 +67,19 @@ enum RecentProjects {
     /// Insert / refresh a project at the top of the list, capped at 10.
     static func remember(_ project: Project) {
         let now = Date()
+        // Starting from an empty list is correct when there is no
+        // readable file: the entry being added is then the only one.
         var existing = (try? loadEntries()) ?? []
         existing.removeAll { $0.path == project.rootPath.path }
         existing.insert(Entry(path: project.rootPath.path, openedAt: now), at: 0)
         existing = Array(existing.prefix(10))
-        try? save(existing)
+        do {
+            try save(existing)
+        } catch {
+            // Losing the recents list is minor but not nothing — the
+            // welcome window is how most projects get reopened (#755).
+            SolaroDiagnostics.warn("the recent projects list", error: error)
+        }
     }
 
     private static func loadEntries() throws -> [Entry] {
@@ -90,14 +100,25 @@ enum RecentProjects {
     /// Forget all recents. Surfaced through a "Clear recent projects"
     /// menu item in the workspace — privacy-friendly per ADR-007.
     static func clear() {
+        // Deleting a file that is not there is the success case, and
+        // there is nothing else this could fail on that the user could
+        // act on — an unreadable recents file is already forgotten.
         try? FileManager.default.removeItem(at: fileURL)
     }
 
     /// Remove a single project from the list — surfaced as
     /// "Remove from list" on each card's right-click menu.
     static func forget(_ project: Project) {
+        // Starting from an empty list is correct when there is no
+        // readable file: the entry being added is then the only one.
         var existing = (try? loadEntries()) ?? []
         existing.removeAll { $0.path == project.rootPath.path }
-        try? save(existing)
+        do {
+            try save(existing)
+        } catch {
+            // Losing the recents list is minor but not nothing — the
+            // welcome window is how most projects get reopened (#755).
+            SolaroDiagnostics.warn("the recent projects list", error: error)
+        }
     }
 }

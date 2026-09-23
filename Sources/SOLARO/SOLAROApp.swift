@@ -24,6 +24,21 @@ struct SOLAROApp: App {
     /// the version shown in the About panel comes from `AROVersion`.
     let runtimeVersion: String = AROVersion.shortVersion
 
+    /// 1400×900 is the size the workspace wants, but it is a ceiling
+    /// rather than a promise: on a 1440×900 display the menu bar
+    /// alone makes a 900pt window taller than the screen, and the
+    /// welcome column then hangs off both edges. Clamp to what the
+    /// screen actually shows, leaving a small margin so the window
+    /// reads as a window rather than as full screen.
+    @MainActor
+    static var defaultWindowSize: CGSize {
+        guard let visible = NSScreen.main?.visibleFrame else {
+            return CGSize(width: 1400, height: 900)
+        }
+        return CGSize(width: min(1400, visible.width - 40),
+                      height: min(900, visible.height - 40))
+    }
+
     init() {
         // Per ADR-007 / ADR-010: install a local crash logger so
         // we can write a report to disk on fatal signals. No
@@ -48,7 +63,8 @@ struct SOLAROApp: App {
         WindowGroup("Solaro", id: SolaroWindowID.workspace) {
             RootView(runtimeVersion: runtimeVersion)
         }
-        .defaultSize(width: 1400, height: 900)
+        .defaultSize(width: Self.defaultWindowSize.width,
+                     height: Self.defaultWindowSize.height)
         .commands {
             // Custom Undo / Redo (see comment on SolaroUndoCommand
             // — routes between the focused NSTextView's UndoManager
@@ -311,6 +327,14 @@ struct SOLAROApp: App {
                 Label("Go to Definition", systemImage: "arrow.right.circle")
             }
             .solaroShortcut("navigation.goToDefinition")
+            // The question an event-driven language is built around
+            // (#764): where is this event handled?
+            Button {
+                postSolaroMenuAction(.navFindReferences)
+            } label: {
+                Label("Find References", systemImage: "arrow.triangle.branch")
+            }
+            .solaroShortcut("navigation.findReferences")
             Button {
                 postSolaroMenuAction(.navHover)
             } label: {
@@ -361,13 +385,13 @@ struct SOLAROApp: App {
             } label: {
                 Label("Run", systemImage: "play.fill")
             }
-            .keyboardShortcut("r", modifiers: [.command])
+            .solaroShortcut("run.play")
             Button {
                 postSolaroMenuAction(.runDebug)
             } label: {
                 Label("Debug", systemImage: "ant.fill")
             }
-            .keyboardShortcut("y", modifiers: [.command])
+            .solaroShortcut("run.debug")
             Button {
                 postSolaroMenuAction(.runTests)
             } label: {
@@ -379,7 +403,22 @@ struct SOLAROApp: App {
             } label: {
                 Label("Stop", systemImage: "stop.fill")
             }
-            .keyboardShortcut(".", modifiers: [.command])
+            .solaroShortcut("run.stop")
+            Divider()
+            // Shipping a binary is the end of the workflow the book's
+            // own stories describe, and the IDE could not do it (#763).
+            Button {
+                postSolaroMenuAction(.runBuild)
+            } label: {
+                Label("Build…", systemImage: "hammer")
+            }
+            .solaroShortcut("run.build")
+            Button {
+                postSolaroMenuAction(.runCheck)
+            } label: {
+                Label("Check", systemImage: "checkmark.seal")
+            }
+            .solaroShortcut("run.check")
             Divider()
             Button {
                 postSolaroMenuAction(.runAutoLayout)
@@ -630,6 +669,8 @@ enum SolaroMenuAction: String {
     case viewSymbolPalette
     // Navigate
     case navGoToDefinition
+    /// Every use of the symbol under the caret (#764).
+    case navFindReferences
     case navHover
     case navNextTab
     case navPrevTab
@@ -638,6 +679,9 @@ enum SolaroMenuAction: String {
     case runDebug
     case runTests
     case runStop
+    /// Native build and the standalone check (#763).
+    case runBuild
+    case runCheck
     case runAutoLayout
     case runExportCanvas
     case runTimeTravel

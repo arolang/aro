@@ -44,10 +44,8 @@ struct OpenAPIGraphView: View {
     }
 
     @State private var selectedID: String?
-    @State private var pan: CGSize = .zero
-    @State private var zoom: Double = 1.0
-    @GestureState private var dragOffset: CGSize = .zero
-    @GestureState private var magnify: Double = 1.0
+    /// Pan and zoom, shared with every other graph view (#775).
+    @State private var viewport = GraphViewport()
 
     private let routeNodeWidth: CGFloat = 280
     private let schemaNodeMinWidth: CGFloat = 240
@@ -118,17 +116,10 @@ struct OpenAPIGraphView: View {
             }
             .frame(width: contentSize.width, height: contentSize.height,
                    alignment: .topLeading)
-            .offset(x: pan.width + dragOffset.width,
-                    y: pan.height + dragOffset.height)
-            .scaleEffect(zoom * magnify, anchor: .topLeading)
-            .animation(.easeOut(duration: 0.15), value: zoom)
             .layoutCycleGuard(alignment: .topLeading)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .graphViewport($viewport)
         .clipped()
-        .contentShape(Rectangle())
-        .gesture(panGesture)
-        .gesture(magnifyGesture)
         .overlay(alignment: .topLeading) {
             VStack(alignment: .leading, spacing: SolaroSpace.s) {
                 titleBar(graph: graph)
@@ -322,19 +313,18 @@ struct OpenAPIGraphView: View {
 
     private var zoomControls: some View {
         HStack(spacing: SolaroSpace.s) {
-            Button { zoom = max(0.3, zoom - 0.1) } label: {
+            Button { viewport.magnify(by: 0.9) } label: {
                 Image(systemName: "minus.magnifyingglass")
             }
-            Text("\(Int(zoom * 100))%")
+            Text("\(Int(viewport.zoom * 100))%")
                 .font(SolaroFont.monoCaption)
                 .foregroundStyle(SolaroColor.textSecondary)
                 .frame(minWidth: 40)
-            Button { zoom = min(3.0, zoom + 0.1) } label: {
+            Button { viewport.magnify(by: 1.1) } label: {
                 Image(systemName: "plus.magnifyingglass")
             }
             Button {
-                pan = .zero
-                zoom = 1.0
+                viewport.reset()
             } label: {
                 Image(systemName: "scope")
             }
@@ -349,26 +339,6 @@ struct OpenAPIGraphView: View {
         )
     }
 
-    private var panGesture: some Gesture {
-        DragGesture()
-            .updating($dragOffset) { value, state, _ in
-                state = value.translation
-            }
-            .onEnded { value in
-                pan.width += value.translation.width
-                pan.height += value.translation.height
-            }
-    }
-
-    private var magnifyGesture: some Gesture {
-        MagnificationGesture()
-            .updating($magnify) { value, state, _ in
-                state = value
-            }
-            .onEnded { value in
-                zoom = max(0.3, min(3.0, zoom * value))
-            }
-    }
 }
 
 // MARK: - Wires

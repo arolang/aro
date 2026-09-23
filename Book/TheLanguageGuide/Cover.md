@@ -26,7 +26,7 @@ Business Logic as Language
 September 2026
 </div>
 <div style="font-size: 11pt; color: #aaa; margin-top: 1em;">
-ARO 0.8.0
+ARO @ARO_VERSION@
 </div>
 </div>
 

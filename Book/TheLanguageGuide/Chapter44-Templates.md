@@ -367,7 +367,7 @@ output at that point, and `<name>` also holds it.
 > as the preposition the object is an expression, and the executor binds its
 > value without ever dispatching `Include`. The proposal now specifies the
 > `from` form above, and `aro check` reports the `with` spelling with a hint
-> naming it ([GitLab #563](https://git.ausdertechnik.de/arolang/aro/-/issues/563)).
+> naming it (GitLab #563).
 
 ### Passing Variables to Included Templates
 
@@ -661,7 +661,7 @@ the same thing: *I wrote this markup on purpose.*
 
 The shorthand used to behave like S3 — the deliberate opt-out — so the form
 every example reaches for first was the unsafe one
-([GitLab #560](https://git.ausdertechnik.de/arolang/aro/-/issues/560)). Nothing
+(GitLab #560). Nothing
 you have to remember any more: reach for `raw` only when you mean it.
 
 Escaping runs *after* the filters, so a filter that emits markup on purpose —

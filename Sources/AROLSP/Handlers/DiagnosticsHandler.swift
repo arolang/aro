@@ -14,15 +14,16 @@ public struct DiagnosticsHandler: Sendable {
     public init() {}
 
     /// Convert ARO diagnostics to LSP diagnostic dictionaries
-    public func convert(_ diagnostics: [AROParser.Diagnostic]) -> [[String: Any]] {
-        diagnostics.compactMap { convertOne($0) }
+    public func convert(_ diagnostics: [AROParser.Diagnostic], in content: String) -> [[String: Any]] {
+        let lines = LineIndex(content)
+        return diagnostics.compactMap { convertOne($0, lines: lines) }
     }
 
-    private func convertOne(_ diagnostic: AROParser.Diagnostic) -> [String: Any]? {
+    private func convertOne(_ diagnostic: AROParser.Diagnostic, lines: LineIndex) -> [String: Any]? {
         let range: [String: Any]
         if let location = diagnostic.location {
             // Create a range from the location (single character for point diagnostics)
-            let startPos = PositionConverter.toLSP(location)
+            let startPos = PositionConverter.toLSP(location, using: lines)
             range = [
                 "start": ["line": startPos.line, "character": startPos.character],
                 "end": ["line": startPos.line, "character": startPos.character + 1]

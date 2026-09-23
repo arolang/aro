@@ -38,6 +38,8 @@ final class TestRunModel {
     var skipCount: Int  { results.filter { $0.status == .skipped }.count }
 
     func run(project: Project) {
+        // `aro test` reads the project from disk (#748).
+        EditorWriteQueue.flushNow()
         cancel()
         results = []
         isRunning = true

@@ -41,10 +41,14 @@ struct CompiledBinaryOperatorParityTests {
             return ("a", "b")
         case .and, .or:
             return (true, true)
-        case .in:
+        case .in, .notIn:
             return ("a", ["a", "b"] as [any Sendable])
+        case .startsWith, .endsWith:
+            return ("report.aro", "report.aro")
         case .contains:
             return (["a", "b"] as [any Sendable], "a")
+        case .subset:
+            return (["a"] as [any Sendable], ["a", "b"] as [any Sendable])
         case .matches:
             return ("abc", "a.c")
         case .before, .after:
@@ -89,6 +93,15 @@ struct CompiledBinaryOperatorParityTests {
                                  left: "2030-01-01T00:00:00Z",
                                  right: "2020-01-01T00:00:00Z") as? Bool == true)
 
+        // subset of (#864). This test is why it was caught: the first compiled
+        // run of `<a> subset of <b>` warned and answered false.
+        #expect(evaluateBinaryOp(op: "subset of",
+                                 left: ["a"] as [any Sendable],
+                                 right: ["a", "b"] as [any Sendable]) as? Bool == true)
+        #expect(evaluateBinaryOp(op: "subset of",
+                                 left: ["a", "c"] as [any Sendable],
+                                 right: ["a", "b"] as [any Sendable]) as? Bool == false)
+
         // in, over a collection (#558)
         let tags: [any Sendable] = ["red", "green"]
         #expect(evaluateBinaryOp(op: "in", left: "red", right: tags) as? Bool == true)
@@ -97,6 +110,37 @@ struct CompiledBinaryOperatorParityTests {
         // in is the inverse of contains
         #expect(evaluateBinaryOp(op: "in", left: "red", right: tags) as? Bool
                 == evaluateBinaryOp(op: "contains", left: tags, right: "red") as? Bool)
+
+        // not in, starts with, ends with (GitLab #830 item 5)
+        #expect(evaluateBinaryOp(op: "not in", left: "blue", right: tags) as? Bool == true)
+        #expect(evaluateBinaryOp(op: "not in", left: "red", right: tags) as? Bool == false)
+        // Exactly the negation, for every operand shape `in` accepts.
+        for candidate in ["red", "green", "blue"] {
+            let inside = evaluateBinaryOp(op: "in", left: candidate, right: tags) as? Bool
+            let outside = evaluateBinaryOp(op: "not in", left: candidate, right: tags) as? Bool
+            #expect(inside == !(outside ?? true), "in/not in disagree about '\(candidate)'")
+        }
+
+        #expect(evaluateBinaryOp(op: "starts with", left: "/api/users", right: "/api") as? Bool == true)
+        #expect(evaluateBinaryOp(op: "starts with", left: "/api/users", right: "/web") as? Bool == false)
+        #expect(evaluateBinaryOp(op: "ends with", left: "main.aro", right: ".aro") as? Bool == true)
+        #expect(evaluateBinaryOp(op: "ends with", left: "main.md", right: ".aro") as? Bool == false)
+        // A whole string is both its own prefix and its own suffix, and the
+        // empty affix is in every string — the boundary cases a hand-rolled
+        // `matches "^…"` workaround tends to get wrong.
+        #expect(evaluateBinaryOp(op: "starts with", left: "abc", right: "abc") as? Bool == true)
+        #expect(evaluateBinaryOp(op: "ends with", left: "abc", right: "") as? Bool == true)
+    }
+
+    /// The affix operators are not regexes, which is the point of having
+    /// them: `matches "^a.c"` accepts "abc" *and* "axc", and every caller
+    /// who wanted a literal prefix had to remember to escape.
+    @Test("An affix test is literal, where the regex workaround was not")
+    func affixIsLiteralNotPattern() {
+        #expect(evaluateBinaryOp(op: "starts with", left: "a.c-file", right: "a.c") as? Bool == true)
+        #expect(evaluateBinaryOp(op: "starts with", left: "axc-file", right: "a.c") as? Bool == false)
+        // The regex the books taught instead, for contrast.
+        #expect(evaluateBinaryOp(op: "matches", left: "axc-file", right: "^a.c") as? Bool == true)
     }
 
     @Test("A date-range carries membership, in either operand order")

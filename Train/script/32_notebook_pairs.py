@@ -73,6 +73,8 @@ from config import (  # noqa: E402
     save_notebook_pairs, clean_notebook_pairs, aro_check_snippet, auto_wrap_aro,
     _FEATURESET_HEADER_RE,
 )
+import stage_runner  # noqa: E402
+import sandbox  # noqa: E402
 
 NOTEBOOK_TAG = 'NB32_notebooks'
 
@@ -122,10 +124,15 @@ def run_notebook_session(cells, cwd) -> dict:
     ]
     requests.append(json.dumps({'id': len(code_cells) + 1, 'type': 'shutdown'}))
 
-    proc = subprocess.run(
-        [_aro_bin(), 'repl', '--json'],
+    # Sandboxed (GitLab #804). `cwd` is a throwaway copy of the notebook's
+    # directory, so cells can still open the sample data beside them while a
+    # cell that WRITES a file writes into the copy. That write used to land in
+    # `Learning/` and then survive into the second verification pass, where it
+    # changed the cell's output and got the pair dropped as non-reproducible.
+    proc = sandbox.sandboxed_run(
+        [_aro_bin(), 'repl', '--json'], cwd,
         input='\n'.join(requests) + '\n',
-        capture_output=True, text=True, timeout=SESSION_TIMEOUT, cwd=str(cwd),
+        timeout=SESSION_TIMEOUT,
     )
 
     streams: dict[int, list] = {}
@@ -184,7 +191,10 @@ def execute_notebook(path: Path, repeats: int) -> tuple[dict, dict]:
     stats = {'code_cells': 0, 'ok': 0, 'nondeterministic': 0, 'failed': 0}
     stats['code_cells'] = sum(1 for c in cells if c.get('kind') == 'code')
 
-    passes = [run_notebook_session(cells, path.parent) for _ in range(repeats)]
+    passes = []
+    for _ in range(repeats):
+        with sandbox.mirrored_dir(path.parent) as workdir:
+            passes.append(run_notebook_session(cells, workdir))
     first = passes[0]
 
     kept = {}
@@ -666,7 +676,7 @@ def aro_check_audit(pairs: list[dict]) -> dict:
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument('--dry-run', action='store_true')
+    stage_runner.add_stage_arguments(ap)   # --dry-run / --limit (GitLab #803)
     ap.add_argument('--notebook', help='substring match — mine only these notebooks')
     ap.add_argument('--repeats', type=int, default=2,
                     help='executions per notebook; >1 enables the '
@@ -689,6 +699,11 @@ def main():
         notebooks = [n for n in notebooks if args.notebook in n.name]
     if not notebooks:
         sys.exit(f'no .repl notebooks found under {LEARNING_DIR}')
+    # --limit caps the notebooks EXECUTED, not the pairs kept: executing
+    # them is the expensive half, and a smoke test wants the data path
+    # exercised end to end on one notebook (GitLab #803).
+    opts = stage_runner.StageOptions.from_args(args)
+    notebooks = opts.apply(notebooks)
 
     funnel = FunnelCounter('notebook_pairs')
     coverage = {}

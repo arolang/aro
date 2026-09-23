@@ -54,7 +54,7 @@ public actor MCPResourceProvider {
         }
 
         // Current directory (for development)
-        candidates.append(FileManager.default.currentDirectoryPath)
+        candidates.append(AROWorkingDirectory.base)
 
         for candidate in candidates {
             let proposalsPath = (candidate as NSString).appendingPathComponent("Proposals")

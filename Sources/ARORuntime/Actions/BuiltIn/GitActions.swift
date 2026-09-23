@@ -54,12 +54,20 @@ public struct StageAction: ActionImplementation {
 
 // MARK: - Commit Action (Git)
 
-/// Creates a commit with staged changes.
+/// Creates a commit with staged changes — or writes a `.store` file.
 ///
 /// ```aro
 /// Commit the <result> to the <git> with "Fix authentication".
 /// Commit the <result> to the <git> with { message: "feat: auth", author: "ARO <aro@example.com>" }.
+///
+/// Commit the <saved> to the <orders-repository>.   (* one store, now *)
+/// Commit the <checkpoint> to the <stores>.         (* every writable store *)
 /// ```
+///
+/// The two share a verb because they are the same act: taking what is in
+/// memory and making it durable (ARO-0073 §5a, GitLab #863). The object says
+/// which — `<git>` a repository of commits, a `*-repository` or `<stores>` the
+/// file behind a seeded repository.
 public struct GitCommitAction: ActionImplementation {
     public static let role: ActionRole = .export
     public static let verbs: Set<String> = ["commit"]
@@ -68,6 +76,59 @@ public struct GitCommitAction: ActionImplementation {
     public init() {}
 
     public func execute(
+        result: ResultDescriptor,
+        object: ObjectDescriptor,
+        context: ExecutionContext
+    ) async throws -> any Sendable {
+        if let stores = try await Self.commitStores(result: result, object: object, context: context) {
+            return stores
+        }
+        return try await gitCommit(result: result, object: object, context: context)
+    }
+
+    // MARK: - Store checkpoints (ARO-0073 §5a, GitLab #863)
+
+    /// `Commit the <r> to the <stores>.` / `Commit the <r> to the <x-repository>.`
+    ///
+    /// Returns `nil` when the object is not a store target, so the Git path
+    /// runs unchanged.
+    static func commitStores(
+        result: ResultDescriptor,
+        object: ObjectDescriptor,
+        context: ExecutionContext
+    ) async throws -> (any Sendable)? {
+        let target = object.base
+        let isAll = target == "stores" || target == "store"
+        let isRepository = InMemoryRepositoryStorage.isRepositoryName(target)
+        guard isAll || isRepository else { return nil }
+
+        guard let service = StoreFlushRegistry.current else {
+            // No writable `.store` file in this application. Saying so beats
+            // reporting success for a write that could not have happened.
+            throw ActionError.invalidInput(
+                "Commit the <\(result.base)> to the <\(target)>: this application has no "
+                + "writable .store file (ARO-0073 — chmod o+w the .store file)",
+                received: target)
+        }
+
+        if isRepository, await !service.isWritable(repository: target) {
+            throw ActionError.invalidInput(
+                "Commit the <\(result.base)> to the <\(target)>: no writable .store file "
+                + "backs that repository (ARO-0073 — chmod o+w the .store file)",
+                received: target)
+        }
+
+        let checkpoint = try await service.checkpoint(repositories: isAll ? nil : [target])
+        let record: [String: any Sendable] = [
+            "repositories": checkpoint.repositories,
+            "written": checkpoint.written,
+            "items": checkpoint.items
+        ]
+        context.bind(result.base, value: record)
+        return record
+    }
+
+    private func gitCommit(
         result: ResultDescriptor,
         object: ObjectDescriptor,
         context: ExecutionContext
@@ -253,7 +314,7 @@ public struct CloneAction: ActionImplementation {
         if path.hasPrefix("/") {
             destination = URL(fileURLWithPath: path)
         } else {
-            destination = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+            destination = URL(fileURLWithPath: AROWorkingDirectory.base)
                 .appendingPathComponent(path)
         }
 

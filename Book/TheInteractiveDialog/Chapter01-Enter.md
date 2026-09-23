@@ -15,7 +15,7 @@ $ aro repl
 Two lines appear, then a prompt:
 
 ```
-ARO REPL v1.0
+ARO REPL v@ARO_VERSION@
 Type :help or /help for commands, :quit to exit
 
 aro> _
@@ -66,11 +66,9 @@ Control:
 
 Commands that start with `:` talk to the REPL itself. Everything else is ARO.
 
-One warning about that help text: its worked examples still write verbs inside
-angle brackets — `<Set> the <x> to 42.` That spelling was removed from the
-language and no longer parses, so the first thing a new reader copies out of
-`:help` fails (GitLab issue #574). Write the verb bare, as this book does
-throughout: `Set the <x> to 42.`
+The worked examples in that help text are copy-and-paste ready, and they write
+the verb bare — `Set the <x> to 42.` — which is the only spelling the language
+accepts. Angle brackets mark the result and the object, never the action.
 
 ## Leaving
 

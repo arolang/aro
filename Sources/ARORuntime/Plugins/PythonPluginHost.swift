@@ -200,11 +200,20 @@ public final class PythonPluginHost: @unchecked Sendable, PluginHostProtocol {
             name: json["name"] as? String ?? pluginName,
             version: json["version"] as? String ?? "1.0.0",
             actions: registry.actionNames,
-            qualifiers: qualifierDescriptors
+            qualifiers: qualifierDescriptors,
+            // The `@plugin(handle=…)` decorator writes this; older
+            // plugins wrote `handler`.
+            declaredHandle: (json["handle"] as? String)
+                ?? (json["handler"] as? String)
         )
 
         // Register qualifiers using shared helper
         registerQualifiers(qualifierDescriptors)
+    }
+
+    /// The namespace handle this plugin's own code declares, if any.
+    public var declaredHandle: String? {
+        pluginInfo?.declaredHandle
     }
 
     // MARK: - Execution
@@ -509,12 +518,16 @@ struct PythonPluginInfo: Sendable {
     let version: String
     let actions: [String]
     let qualifiers: [PluginQualifierDescriptor]
+    /// The namespace handle the plugin's own code declares (#825).
+    /// Carried so it can be compared with the manifest's, which wins.
+    let declaredHandle: String?
 
-    init(name: String, version: String, actions: [String], qualifiers: [PluginQualifierDescriptor] = []) {
+    init(name: String, version: String, actions: [String], qualifiers: [PluginQualifierDescriptor] = [], declaredHandle: String? = nil) {
         self.name = name
         self.version = version
         self.actions = actions
         self.qualifiers = qualifiers
+        self.declaredHandle = declaredHandle
     }
 }
 

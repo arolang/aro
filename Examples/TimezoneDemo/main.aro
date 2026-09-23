@@ -1,0 +1,36 @@
+(* Timezone conversion — ARO-0041 §7
+ *
+ * An instant is absolute; a timezone is a way of writing one down. Converting
+ * changes the rendering and never the instant, which is why two dates in
+ * different zones still compare as the two moments they are.
+ *)
+
+(Application-Start: Timezone Demo) {
+    Create the <winter-iso> with "2026-01-15T12:00:00Z".
+    Compute the <winter: date> from <winter-iso>.
+
+    Create the <summer-iso> with "2026-07-15T12:00:00Z".
+    Compute the <summer: date> from <summer-iso>.
+
+    (* The same zone, six months apart: +01:00 then +02:00. A fixed offset
+     * gets one of these wrong, and nothing else notices. *)
+    Extract the <berlin-winter: timezone> from <winter> with "Europe/Berlin".
+    Extract the <berlin-summer: timezone> from <summer> with "Europe/Berlin".
+    Log "winter hour ${<berlin-winter: hour>}" to the <console>.
+    Log "summer hour ${<berlin-summer: hour>}" to the <console>.
+    Log "winter dst ${<berlin-winter: dst>}" to the <console>.
+    Log "summer dst ${<berlin-summer: dst>}" to the <console>.
+
+    (* The zone may be the qualifier itself. *)
+    Extract the <tokyo: "Asia/Tokyo"> from <summer>.
+    Log "tokyo hour ${<tokyo: hour>}" to the <console>.
+
+    (* The instant never moved: same timestamp, three renderings. *)
+    Log "same instant ${<tokyo: timestamp>} ${<berlin-summer: timestamp>}" to the <console>.
+
+    (* Converting there and back is the identity. *)
+    Extract the <back: UTC> from <tokyo>.
+    Log "round trip ${<back: hour>}" to the <console>.
+
+    Return an <OK: status> for the <startup>.
+}

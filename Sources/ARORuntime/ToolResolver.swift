@@ -71,7 +71,7 @@ public enum ToolResolver {
         if path.hasPrefix("/") {
             absolute = path
         } else {
-            let cwd = FileManager.default.currentDirectoryPath
+            let cwd = AROWorkingDirectory.base
             absolute = URL(fileURLWithPath: cwd).appendingPathComponent(path).path
         }
         let resolved = URL(fileURLWithPath: absolute).resolvingSymlinksInPath()

@@ -20,6 +20,7 @@ public final class LLVMExternalDeclEmitter {
     private var _runtimeAwaitPendingEvents: Function?
     private var _runtimeRegisterHandler: Function?
     private var _parseArguments: Function?
+    private var _declarePositionalParameters: Function?
     private var _hasKeepAlive: Function?
     private var _registerRepositoryObserver: Function?
     private var _registerRepositoryObserverWithGuard: Function?
@@ -36,6 +37,7 @@ public final class LLVMExternalDeclEmitter {
     private var _contextHasError: Function?
     private var _contextPrintError: Function?
     private var _contextDrainDeferred: Function?
+    private var _setBuildLinkMode: Function?
     private var _loadPrecompiledPlugins: Function?
     private var _setEmbeddedOpenapi: Function?
     private var _httpSetBodyPolicy: Function?
@@ -150,6 +152,12 @@ public final class LLVMExternalDeclEmitter {
             types.voidFunctionType(parameters: [i32, ptr])
         )
 
+        // void @aro_declare_positional_parameters(ptr) - ARO-0047, GitLab #857
+        _declarePositionalParameters = ctx.module.declareFunction(
+            "aro_declare_positional_parameters",
+            types.voidFunctionType(parameters: [ptr])
+        )
+
         // i32 @aro_has_keep_alive() - Check for --keep-alive flag
         _hasKeepAlive = ctx.module.declareFunction(
             "aro_has_keep_alive",
@@ -246,6 +254,15 @@ public final class LLVMExternalDeclEmitter {
         // void @aro_context_drain_deferred(ptr) — ARO-0088 §3 feature-set exit
         _contextDrainDeferred = ctx.module.declareFunction(
             "aro_context_drain_deferred",
+            types.voidFunctionType(parameters: [ptr])
+        )
+
+        // void @aro_set_build_link_mode(ptr mode) — GitLab #618
+        // Records how this binary was linked, so the runtime answers "may I
+        // dlopen a plugin?" from the build's own decision instead of probing
+        // the loader for something else.
+        _setBuildLinkMode = ctx.module.declareFunction(
+            "aro_set_build_link_mode",
             types.voidFunctionType(parameters: [ptr])
         )
 
@@ -578,6 +595,7 @@ public final class LLVMExternalDeclEmitter {
     public var runtimeAwaitPendingEvents: Function { _runtimeAwaitPendingEvents! }
     public var runtimeRegisterHandler: Function { _runtimeRegisterHandler! }
     public var parseArguments: Function { _parseArguments! }
+    public var declarePositionalParameters: Function { _declarePositionalParameters! }
     public var hasKeepAlive: Function { _hasKeepAlive! }
     public var registerRepositoryObserver: Function { _registerRepositoryObserver! }
     public var registerRepositoryObserverWithGuard: Function { _registerRepositoryObserverWithGuard! }
@@ -594,6 +612,7 @@ public final class LLVMExternalDeclEmitter {
     public var contextHasError: Function { _contextHasError! }
     public var contextPrintError: Function { _contextPrintError! }
     public var contextDrainDeferred: Function { _contextDrainDeferred! }
+    public var setBuildLinkMode: Function { _setBuildLinkMode! }
     public var loadPrecompiledPlugins: Function { _loadPrecompiledPlugins! }
     public var setEmbeddedOpenapi: Function { _setEmbeddedOpenapi! }
     public var httpSetBodyPolicy: Function { _httpSetBodyPolicy! }

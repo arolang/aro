@@ -1,0 +1,8 @@
+fetched 1
+fetched 2
+fetched 3
+fetched 4
+fetched 5
+fetched 6
+crawl finished
+startup

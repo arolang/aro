@@ -472,7 +472,7 @@ Clear the <all> from the <message-repository>.
 the preposition: `from` a repository, `for` the terminal. `Clear … from` used
 to reach the terminal action and fail with
 `Cannot clear the all from the message-repository`, because the verb was
-registered last-writer-wins ([GitLab #562](https://git.ausdertechnik.de/arolang/aro/-/issues/562)).
+registered last-writer-wins (GitLab #562).
 
 ## Repository Observers
 
@@ -997,7 +997,7 @@ error: Cannot rebind variable 'cache-repository' - variables are immutable
 
 It used to suggest `<cache-repository-updated>` instead, which names a
 *different* repository — advice that compiles and configures the wrong thing
-([GitLab #564](https://git.ausdertechnik.de/arolang/aro/-/issues/564)).
+(GitLab #564).
 
 Two settings on two *different* repositories are fine, of course:
 

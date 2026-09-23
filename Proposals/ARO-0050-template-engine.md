@@ -714,9 +714,14 @@ print_to_template = "<Print>" , expression , "to" , "the" , "<template>" , "." ;
 ### 13.4 Include Action
 
 ```ebnf
-include_template  = "<Include>" , "the" , "<" , template_reference , ">" ,
+include_template  = "Include" , [ article ] , result_noun ,
+                    "from" , [ article ] , "<" , template_reference , ">" ,
                     [ "with" , object_literal ] , "." ;
 ```
+
+This grammar still showed the retired bracketed `<Include>` spelling with no
+preposition, contradicting §10.1 above, which explains why `from` is the only
+preposition the action accepts (GitLab #563, #832).
 
 ## 14. Implementation Considerations
 
@@ -859,7 +864,7 @@ Error: Can not extract the <name> from the <user: name> in template welcome.tpl
 
 - `Sources/ARORuntime/Core/ExecutionContext.swift` - Context cloning via `createChild()`
 - `Sources/ARORuntime/Core/FeatureSetExecutor.swift` - ForEachLoop execution pattern
-- `Sources/ARORuntime/Actions/BuiltIn/ResponseActions.swift` - LogAction as Print model
+- `Sources/ARORuntime/Actions/BuiltIn/LogAction.swift` - LogAction as Print model
 - `Sources/ARORuntime/FileSystem/FileSystemService.swift` - File reading pattern
 - `Sources/AROParser/AST.swift` - ForEachLoop AST structure
 - `Sources/AROCLI/Commands/BuildCommand.swift` - OpenAPI embedding pattern

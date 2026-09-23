@@ -120,6 +120,9 @@ public final class LLVMCodeGenerator {
     ///   - staticPlugins: Optional array of statically-linked plugin metadata (native plugins)
     ///   - pythonPlugins: Optional array of embedded Python plugin metadata
     ///   - pythonBundle: Optional Python stdlib/deps bundle paths
+    ///   - linkMode: How the binary will be linked ("static" / "dynamic"),
+    ///     baked into `main` so the runtime can answer "may I dlopen a plugin?"
+    ///     from the build's decision rather than probing the loader (GitLab #618)
     /// - Returns: Code generation result with IR text
     /// - Throws: LLVMCodeGenError if generation fails
     public func generate(
@@ -130,6 +133,7 @@ public final class LLVMCodeGenerator {
         staticPlugins: [StaticPluginIRInfo]? = nil,
         pythonPlugins: [EmbeddedPythonPluginIRInfo]? = nil,
         pythonBundle: PythonBundleIRInfo? = nil,
+        linkMode: String? = nil,
         sourceFilename: String? = nil,
         sourceDirectory: String? = nil,
         sourceFileMap: [String: String]? = nil
@@ -181,7 +185,7 @@ public final class LLVMCodeGenerator {
         }
 
         // Generate main function
-        generateMainFunction(program: program, openAPISpecJSON: openAPISpecJSON, templatesJSON: templatesJSON, embeddedPlugins: embeddedPlugins, staticPlugins: staticPlugins, pythonPlugins: pythonPlugins, pythonBundle: pythonBundle)
+        generateMainFunction(program: program, openAPISpecJSON: openAPISpecJSON, templatesJSON: templatesJSON, embeddedPlugins: embeddedPlugins, staticPlugins: staticPlugins, pythonPlugins: pythonPlugins, pythonBundle: pythonBundle, linkMode: linkMode)
 
         // Fail explicitly if any errors were recorded during generation
         if ctx.hasErrors {
@@ -1366,7 +1370,55 @@ public final class LLVMCodeGenerator {
 
     // MARK: - Publish Statement Generation
 
+    /// A bare `<name>` with no qualifier, for the statements whose descriptors
+    /// name a variable rather than a noun the author wrote.
+    ///
+    /// `Publish` and `Require` used to open-code both descriptor structs field
+    /// by field — alloca, base, specifiers, count — although `DescriptorBuilder`
+    /// does exactly that for every other statement. Handing it a synthetic noun
+    /// keeps the layout in one place.
+    private static func plainNoun(_ name: String) -> QualifiedNoun {
+        QualifiedNoun(base: name, span: .unknown)
+    }
+
     private func generatePublishStatement(_ statement: PublishStatement, index: Int, errorBlock: BasicBlock) {
+        // A `when` guard on Publish (GitLab #830 item 14), emitted the same
+        // way `generateAROStatement` emits one: branch past the whole
+        // publish when the condition is false. Interpreter and binary have
+        // to agree here — a publish that happens in one mode and not the
+        // other changes what every reader of that name sees.
+        var guardMergeBlock: BasicBlock?
+        if let condition = statement.statementGuard.condition {
+            let prefix = "pub\(index)"
+            let skipBlock = ctx.module.appendBlock(named: "\(prefix)_skip", to: ctx.currentFunction!)
+            let bodyBlock = ctx.module.appendBlock(named: "\(prefix)_body", to: ctx.currentFunction!)
+            let mergeBlock = ctx.module.appendBlock(named: "\(prefix)_merge", to: ctx.currentFunction!)
+            guardMergeBlock = mergeBlock
+
+            let conditionJSON = ctx.stringConstant(serializer.serializeExpression(condition))
+            let guardResult = ctx.module.insertCall(
+                externals.evaluateWhenGuard,
+                on: [ctx.currentContextVar!, conditionJSON],
+                at: ctx.insertionPoint
+            )
+            let guardPassed = ctx.module.insertIntegerComparison(
+                .ne, guardResult, ctx.i32Type.zero, at: ctx.insertionPoint
+            )
+            ctx.module.insertCondBr(if: guardPassed, then: bodyBlock, else: skipBlock,
+                                    at: ctx.insertionPoint)
+
+            ctx.setInsertionPoint(atEndOf: skipBlock)
+            ctx.module.insertBr(to: mergeBlock, at: ctx.insertionPoint)
+
+            ctx.setInsertionPoint(atEndOf: bodyBlock)
+        }
+        defer {
+            if let mergeBlock = guardMergeBlock {
+                ctx.module.insertBr(to: mergeBlock, at: ctx.insertionPoint)
+                ctx.setInsertionPoint(atEndOf: mergeBlock)
+            }
+        }
+
         let ip = ctx.insertionPoint
 
         // Bind the publish alias
@@ -1387,55 +1439,16 @@ public final class LLVMCodeGenerator {
             at: ip
         )
 
-        // Build result descriptor for the publish action
-        let descType = types.resultDescriptorType
-        let resultDesc = ctx.module.insertAlloca(descType, atEntryOf: ctx.currentFunction!)
-
-        let baseStr = ctx.stringConstant(statement.externalName)
-        let basePtr = ctx.module.insertGetStructElementPointer(
-            of: resultDesc, typed: descType, index: 0, at: ip
+        // Descriptors for the publish action: the alias is the result, the
+        // internal variable the object. Neither carries specifiers.
+        let prefix = "pub\(index)"
+        let resultDesc = descriptors.buildResultDescriptor(
+            Self.plainNoun(statement.externalName), prefix: prefix
         )
-        ctx.module.insertStore(baseStr, to: basePtr, at: ip)
-
-        // Specifiers = null
-        let specsPtr = ctx.module.insertGetStructElementPointer(
-            of: resultDesc, typed: descType, index: 1, at: ip
+        let objectDesc = descriptors.buildObjectDescriptor(
+            ObjectClause(preposition: .from, noun: Self.plainNoun(statement.internalVariable)),
+            prefix: prefix
         )
-        ctx.module.insertStore(ctx.ptrType.null, to: specsPtr, at: ip)
-
-        // Count = 0
-        let countPtr = ctx.module.insertGetStructElementPointer(
-            of: resultDesc, typed: descType, index: 2, at: ip
-        )
-        ctx.module.insertStore(ctx.i32Type.zero, to: countPtr, at: ip)
-
-        // Build object descriptor for the internal variable
-        let objDescType = types.objectDescriptorType
-        let objectDesc = ctx.module.insertAlloca(objDescType, atEntryOf: ctx.currentFunction!)
-
-        let objBaseStr = ctx.stringConstant(statement.internalVariable)
-        let objBasePtr = ctx.module.insertGetStructElementPointer(
-            of: objectDesc, typed: objDescType, index: 0, at: ip
-        )
-        ctx.module.insertStore(objBaseStr, to: objBasePtr, at: ip)
-
-        // Preposition = from (0)
-        let prepPtr = ctx.module.insertGetStructElementPointer(
-            of: objectDesc, typed: objDescType, index: 1, at: ip
-        )
-        ctx.module.insertStore(ctx.i32Type.zero, to: prepPtr, at: ip)
-
-        // Specifiers = null
-        let objSpecsPtr = ctx.module.insertGetStructElementPointer(
-            of: objectDesc, typed: objDescType, index: 2, at: ip
-        )
-        ctx.module.insertStore(ctx.ptrType.null, to: objSpecsPtr, at: ip)
-
-        // Count = 0
-        let objCountPtr = ctx.module.insertGetStructElementPointer(
-            of: objectDesc, typed: objDescType, index: 3, at: ip
-        )
-        ctx.module.insertStore(ctx.i32Type.zero, to: objCountPtr, at: ip)
 
         // Call publish action
         if let publishFunc = externals.actionFunction(for: "publish") {
@@ -1488,55 +1501,16 @@ public final class LLVMCodeGenerator {
             at: ip
         )
 
-        // Build result descriptor for the require action
-        let descType = types.resultDescriptorType
-        let resultDesc = ctx.module.insertAlloca(descType, atEntryOf: ctx.currentFunction!)
-
-        let baseStr = ctx.stringConstant(statement.variableName)
-        let basePtr = ctx.module.insertGetStructElementPointer(
-            of: resultDesc, typed: descType, index: 0, at: ip
+        // Descriptors for the require action: the required name is the result,
+        // the source the object. Neither carries specifiers.
+        let prefix = "req\(index)"
+        let resultDesc = descriptors.buildResultDescriptor(
+            Self.plainNoun(statement.variableName), prefix: prefix
         )
-        ctx.module.insertStore(baseStr, to: basePtr, at: ip)
-
-        // Specifiers = null
-        let specsPtr = ctx.module.insertGetStructElementPointer(
-            of: resultDesc, typed: descType, index: 1, at: ip
+        let objectDesc = descriptors.buildObjectDescriptor(
+            ObjectClause(preposition: .from, noun: Self.plainNoun(sourceValue)),
+            prefix: prefix
         )
-        ctx.module.insertStore(ctx.ptrType.null, to: specsPtr, at: ip)
-
-        // Count = 0
-        let countPtr = ctx.module.insertGetStructElementPointer(
-            of: resultDesc, typed: descType, index: 2, at: ip
-        )
-        ctx.module.insertStore(ctx.i32Type.zero, to: countPtr, at: ip)
-
-        // Build object descriptor for the source
-        let objDescType = types.objectDescriptorType
-        let objectDesc = ctx.module.insertAlloca(objDescType, atEntryOf: ctx.currentFunction!)
-
-        let objBaseStr = ctx.stringConstant(sourceValue)
-        let objBasePtr = ctx.module.insertGetStructElementPointer(
-            of: objectDesc, typed: objDescType, index: 0, at: ip
-        )
-        ctx.module.insertStore(objBaseStr, to: objBasePtr, at: ip)
-
-        // Preposition = from (0)
-        let prepPtr = ctx.module.insertGetStructElementPointer(
-            of: objectDesc, typed: objDescType, index: 1, at: ip
-        )
-        ctx.module.insertStore(ctx.i32Type.zero, to: prepPtr, at: ip)
-
-        // Specifiers = null
-        let objSpecsPtr = ctx.module.insertGetStructElementPointer(
-            of: objectDesc, typed: objDescType, index: 2, at: ip
-        )
-        ctx.module.insertStore(ctx.ptrType.null, to: objSpecsPtr, at: ip)
-
-        // Count = 0
-        let objCountPtr = ctx.module.insertGetStructElementPointer(
-            of: objectDesc, typed: objDescType, index: 3, at: ip
-        )
-        ctx.module.insertStore(ctx.i32Type.zero, to: objCountPtr, at: ip)
 
         // Call require action (extract)
         if let extractFunc = externals.actionFunction(for: "extract") {
@@ -1559,7 +1533,7 @@ public final class LLVMCodeGenerator {
     /// phase is a private `emit*` helper below; the emission order here is the
     /// contract — the helpers only move cohesive blocks of IR emission out of
     /// this method, they must never reorder it.
-    private func generateMainFunction(program: AnalyzedProgram, openAPISpecJSON: String?, templatesJSON: String? = nil, embeddedPlugins: [(name: String, yaml: String, base64Library: String)]? = nil, staticPlugins: [StaticPluginIRInfo]? = nil, pythonPlugins: [EmbeddedPythonPluginIRInfo]? = nil, pythonBundle: PythonBundleIRInfo? = nil) {
+    private func generateMainFunction(program: AnalyzedProgram, openAPISpecJSON: String?, templatesJSON: String? = nil, embeddedPlugins: [(name: String, yaml: String, base64Library: String)]? = nil, staticPlugins: [StaticPluginIRInfo]? = nil, pythonPlugins: [EmbeddedPythonPluginIRInfo]? = nil, pythonBundle: PythonBundleIRInfo? = nil, linkMode: String? = nil) {
         let mainFunc = ctx.module.declareFunction("main", types.mainFunctionType)
 
         let entryBlock = ctx.module.appendBlock(named: "entry", to: mainFunc)
@@ -1572,7 +1546,26 @@ public final class LLVMCodeGenerator {
         // Store runtime in global
         ctx.module.insertStore(runtime, to: globalRuntime!, at: ip)
 
+        // Phase 0: record how this binary was linked (GitLab #618). It has to
+        // run before any plugin is registered or loaded, because that is what
+        // consults it — and it is a fact only the build knows. The interpreter
+        // never reaches this code and keeps its own default.
+        if let linkMode {
+            let modeStr = ctx.stringConstant(linkMode)
+            _ = ctx.module.insertCall(externals.setBuildLinkMode, on: [modeStr], at: ip)
+        }
+
         // Parse command-line arguments (ARO-0047)
+        //
+        // The entry point's `takes` clause goes first: the AST is gone by run
+        // time, so the positional names have to be baked in here (GitLab #857).
+        let positionals = program.featureSets
+            .first { $0.featureSet.name == "Application-Start" }?
+            .featureSet.positionalParameters ?? []
+        if !positionals.isEmpty {
+            let namesStr = ctx.stringConstant(positionals.joined(separator: ","))
+            _ = ctx.module.insertCall(externals.declarePositionalParameters, on: [namesStr], at: ip)
+        }
         let argc = mainFunc.parameters[0]
         let argv = mainFunc.parameters[1]
         _ = ctx.module.insertCall(externals.parseArguments, on: [argc, argv], at: ip)

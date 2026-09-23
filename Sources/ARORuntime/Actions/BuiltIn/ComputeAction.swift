@@ -156,6 +156,10 @@ public struct ComputeAction: SynchronousAction {
               summary: "Set difference", op: Self.opDifference),
         .init(name: "union", inputTypes: [.list, .object], acceptsParameters: true,
               summary: "Set union", op: Self.opUnion),
+        .init(name: "symmetric-difference", inputTypes: [.list, .string, .object],
+              acceptsParameters: true,
+              summary: "Elements in exactly one of the two (ARO-0042 §3.7)",
+              op: Self.opSymmetricDifference),
         .init(name: "markdown", inputTypes: [.string], acceptsParameters: false,
               summary: "Render markdown to HTML", op: Self.opMarkdown),
         // Encoding / escaping primitives (GitLab #482)
@@ -201,6 +205,15 @@ public struct ComputeAction: SynchronousAction {
               acceptsParameters: false,
               summary: "A random element, or a random Int below a bound",
               op: Self.opRandom),
+        // Regex capture groups (ARO-0037 §7, GitLab #858). The pattern
+        // comes from the `by /…/` clause Split already owns, so one
+        // regex spelling covers both actions.
+        .init(name: "captures", inputTypes: [.string], acceptsParameters: true,
+              summary: "First regex match as a record of its capture groups; "
+                     + "by /pattern/flags", op: Self.opCaptures),
+        .init(name: "all-captures", inputTypes: [.string], acceptsParameters: true,
+              summary: "Every regex match, as a list of capture records; "
+                     + "by /pattern/flags", op: Self.opAllCaptures),
         // Money (GitLab #517).
         .init(name: "fixed", inputTypes: [.int, .double, .string],
               acceptsParameters: true,
@@ -507,6 +520,96 @@ public struct ComputeAction: SynchronousAction {
         }
         let replacement = config["replace"] as? String ?? ""
         return text.replacingOccurrences(of: find, with: replacement)
+    }
+
+    // MARK: - Regex capture groups (ARO-0037 §7, GitLab #858)
+
+    /// The `by /pattern/flags` clause, as a compiled regex.
+    ///
+    /// Shared with `Split`, which binds the same two framework variables —
+    /// there is one regex spelling in the language and this is it.
+    private static func byClauseRegex(_ context: ExecutionContext,
+                                      qualifier: String) throws -> NSRegularExpression {
+        guard let pattern = context.resolveAny("_by_pattern_") as? String else {
+            throw ActionError.missingRequiredField(
+                "\(qualifier) requires a pattern: by /(?<name>…)/"
+            )
+        }
+        let flags = (context.resolveAny("_by_flags_") as? String) ?? ""
+        var options: NSRegularExpression.Options = []
+        if flags.contains("i") { options.insert(.caseInsensitive) }
+        if flags.contains("s") { options.insert(.dotMatchesLineSeparators) }
+        if flags.contains("m") { options.insert(.anchorsMatchLines) }
+        return try RegexCache.shared.regex(pattern, options: options)
+    }
+
+    /// One match as a record: the whole match under `match`, each named group
+    /// under its name, each numbered group under its number as a string.
+    ///
+    /// A group that took part in no match is absent rather than empty — the
+    /// difference between "matched nothing" and "did not participate" is the
+    /// one a caller needs, and an absent key is how ARO says the latter.
+    private static func captureRecord(_ match: NSTextCheckingResult,
+                                      in text: String,
+                                      names: [String]) -> [String: any Sendable] {
+        var record: [String: any Sendable] = [:]
+        if let whole = Range(match.range, in: text) {
+            record["match"] = String(text[whole])
+        }
+        for index in 1..<match.numberOfRanges {
+            guard let range = Range(match.range(at: index), in: text) else { continue }
+            record["\(index)"] = String(text[range])
+        }
+        for name in names {
+            guard let range = Range(match.range(withName: name), in: text) else { continue }
+            record[name] = String(text[range])
+        }
+        return record
+    }
+
+    /// Named groups in a pattern, in source order.
+    ///
+    /// `NSRegularExpression` will hand back a range for a name it knows, but
+    /// will not enumerate the names — so they are read off the pattern.
+    private static func groupNames(in pattern: String) -> [String] {
+        guard let finder = try? NSRegularExpression(pattern: "\\(\\?<([A-Za-z_][A-Za-z0-9_]*)>") else {
+            return []
+        }
+        let range = NSRange(pattern.startIndex..., in: pattern)
+        return finder.matches(in: pattern, range: range).compactMap { match in
+            guard let r = Range(match.range(at: 1), in: pattern) else { return nil }
+            return String(pattern[r])
+        }
+    }
+
+    /// `Compute the <parts: captures> from the <line> by /(?<k>\w+)=(?<v>.*)/.`
+    ///
+    /// Binds the first match's capture groups. **A non-match binds an empty
+    /// record**, it does not fail — the same call ARO-0006 makes for a
+    /// `Retrieve` that matches nothing (GitLab #835): finding nothing is an
+    /// answer, and the program guards on it.
+    private static func opCaptures(_ input: any Sendable,
+                                   _ context: ExecutionContext) throws -> any Sendable {
+        let text = asText(input)
+        let regex = try byClauseRegex(context, qualifier: "captures")
+        let range = NSRange(text.startIndex..., in: text)
+        guard let match = regex.firstMatch(in: text, range: range) else {
+            return [String: any Sendable]()
+        }
+        return captureRecord(match, in: text, names: groupNames(in: regex.pattern))
+    }
+
+    /// Every match, as a list of the records `captures` binds.
+    /// No match binds an empty list, for the same reason.
+    private static func opAllCaptures(_ input: any Sendable,
+                                      _ context: ExecutionContext) throws -> any Sendable {
+        let text = asText(input)
+        let regex = try byClauseRegex(context, qualifier: "all-captures")
+        let range = NSRange(text.startIndex..., in: text)
+        let names = groupNames(in: regex.pattern)
+        return regex.matches(in: text, range: range).map {
+            captureRecord($0, in: text, names: names) as any Sendable
+        }
     }
 
     // MARK: - Collection / text primitives (GitLab #486)
@@ -842,6 +945,28 @@ public struct ComputeAction: SynchronousAction {
             throw ActionError.missingRequiredField(field: "a 'with' clause", action: "Compute union")
         }
         return try ComputeAction().computeUnion(input, with: secondOperand)
+    }
+
+    /// Everything in exactly one of the two (ARO-0042 §3.7, GitLab #864).
+    ///
+    /// Written as two differences and a union until this existed — three
+    /// statements and two intermediate bindings for one question, which is
+    /// "what changed".
+    private static func opSymmetricDifference(_ input: any Sendable,
+                                              _ context: ExecutionContext) throws -> any Sendable {
+        guard let secondOperand = context.resolveAny("_with_") else {
+            throw ActionError.missingRequiredField(
+                field: "a 'with' clause", action: "Compute symmetric-difference")
+        }
+        let helper = ComputeAction()
+        // (A - B) ∪ (B - A), built from the operations ARO-0042 already
+        // defines, so it inherits their per-type behaviour exactly: multiset
+        // for lists, character-wise for strings, deep for objects. Defining it
+        // independently would be a second answer to "what does difference mean
+        // for an object", and one of the two would drift.
+        let onlyInA = try helper.computeDifference(input, minus: secondOperand)
+        let onlyInB = try helper.computeDifference(secondOperand, minus: input)
+        return try helper.computeUnion(onlyInA, with: onlyInB)
     }
 
     /// Built-in markdown → HTML so apps don't need a plugin for
@@ -1653,336 +1778,6 @@ public struct CreateAction: ActionImplementation {
     }
 }
 
-/// Updates an existing entity
-public struct UpdateAction: SynchronousAction {
-    public static let role: ActionRole = .own
-    public static let verbs: Set<String> = ["update", "modify", "change", "set", "configure"]
-    public static let validPrepositions: Set<Preposition> = [.with, .to, .for, .from, .into]
-
-    public init() {}
-
-    public func executeSynchronously(
-        result: ResultDescriptor,
-        object: ObjectDescriptor,
-        context: ExecutionContext
-    ) throws -> any Sendable {
-        try validatePreposition(object.preposition)
-
-        // `Update the <row> into the <x-repository> …` — repository update
-        // (GitLab #505). Storage is an actor, so the work happens on the
-        // async path.
-        if object.preposition == .into {
-            guard InMemoryRepositoryStorage.isRepositoryName(object.base) else {
-                // `into` only makes sense for a repository target; anything
-                // else keeps the pre-#505 refusal instead of silently taking
-                // the entity-update path.
-                throw ActionError.undefinedRepository(object.base)
-            }
-            throw NeedsAsyncExecution()
-        }
-
-        // Repository configuration path needs async — fall back to Task path
-        if InMemoryRepositoryStorage.isRepositoryName(result.base), result.specifiers.first != nil {
-            throw NeedsAsyncExecution()
-        }
-
-        // `Configure the <http-server: max-body> with "1MB".` (ARO-0035,
-        // GitLab #477). The default ceiling for routes whose contract declares
-        // no `x-aro-max-body`; a route's own declaration still wins, because a
-        // limit belongs with the route it protects.
-        if result.base == "http-server", let setting = result.specifiers.first {
-            let raw = context.resolveAny("_literal_")
-                ?? context.resolveAny(object.base)
-                ?? object.base
-            if let bytes = Self.bodyLimitBytes(from: raw) {
-                switch setting {
-                case "max-body", "max-request-body", "maxBody":
-                    RuntimeDefaults.maxMaterializedBody = bytes
-                    return ["max-body": bytes] as [String: any Sendable]
-                default:
-                    break
-                }
-            } else if setting.hasPrefix("max-body") || setting == "max-request-body" {
-                throw ActionError.invalidInput(
-                    "Configure the <http-server: \(setting)>: a size like \"1MB\", "
-                    + "\"512KB\", or a byte count",
-                    received: String(describing: raw))
-            }
-        }
-
-        // For "configure" verb, allow creating new configuration if it doesn't exist
-        // This enables: <Configure> the <validation: timeout> with <value>.
-        let entity: any Sendable
-        if let existingEntity = context.resolveAny(result.base) {
-            entity = existingEntity
-        } else {
-            // Create empty dictionary for new configuration
-            entity = [String: any Sendable]()
-        }
-
-        // Get update value - check _literal_ first (for "draft"), then resolve from object
-        let updateValue: any Sendable
-        if let literal = context.resolveAny("_literal_") {
-            updateValue = literal
-        } else if let resolved = context.resolveAny(object.base) {
-            // If object has specifiers, extract the nested property
-            if !object.specifiers.isEmpty {
-                if let dict = resolved as? [String: any Sendable] {
-                    // Extract nested property from the source object
-                    var current: any Sendable = dict
-                    for specifier in object.specifiers {
-                        if let currentDict = current as? [String: any Sendable],
-                           let nested = currentDict[specifier] {
-                            current = nested
-                        } else {
-                            throw ActionError.propertyNotFound(property: specifier, on: object.base)
-                        }
-                    }
-                    updateValue = current
-                } else {
-                    throw ActionError.propertyNotFound(property: object.specifiers.first ?? "", on: object.base)
-                }
-            } else {
-                updateValue = resolved
-            }
-        } else {
-            // Treat as literal value
-            updateValue = object.base
-        }
-
-        // Check if we're updating a specific field (e.g., <order: status>)
-        if let fieldName = result.specifiers.first {
-            // Update specific field in the entity
-            var updatedEntity: [String: any Sendable]
-
-            if let dict = entity as? [String: any Sendable] {
-                updatedEntity = dict
-            } else if let dict = entity as? [String: Any] {
-                // Convert to Sendable dictionary
-                updatedEntity = [:]
-                for (key, value) in dict {
-                    updatedEntity[key] = convertToSendable(value)
-                }
-            } else {
-                // Create dictionary from entity using reflection
-                updatedEntity = [:]
-                let mirror = Mirror(reflecting: entity)
-                for child in mirror.children {
-                    if let label = child.label {
-                        updatedEntity[label] = convertToSendable(child.value)
-                    }
-                }
-            }
-
-            // Update the field
-            updatedEntity[fieldName] = updateValue
-
-            // Bind the updated entity with allowRebind: true
-            // Update action is allowed to rebind for state transitions
-            context.bind(result.base, value: updatedEntity, allowRebind: true)
-            return updatedEntity
-        }
-
-        // No field specifier - merge updates into entity or replace
-        if let entityDict = entity as? [String: any Sendable],
-           let updateDict = updateValue as? [String: any Sendable] {
-            var merged = entityDict
-            for (key, value) in updateDict {
-                merged[key] = value
-            }
-            context.bind(result.base, value: merged, allowRebind: true)
-            return merged
-        }
-
-        // Fallback: return the update value
-        return updateValue
-    }
-
-    /// Override to handle the repository-configuration path that needs `await`.
-    public func execute(
-        result: ResultDescriptor,
-        object: ObjectDescriptor,
-        context: ExecutionContext
-    ) async throws -> any Sendable {
-        do {
-            return try executeSynchronously(result: result, object: object, context: context)
-        } catch is NeedsAsyncExecution {
-            // Fall through to an async repository path
-        }
-
-        // Repository update: Update the <row> into the <x-repository> [where …].
-        if object.preposition == .into, InMemoryRepositoryStorage.isRepositoryName(object.base) {
-            return try await updateIntoRepository(result: result, object: object, context: context)
-        }
-
-        // Repository configuration: Configure the <repo: ttl> with <value>.
-        try validatePreposition(object.preposition)
-        let entity: any Sendable = context.resolveAny(result.base) ?? [String: any Sendable]()
-
-        let updateValue: any Sendable
-        if let literal = context.resolveAny("_literal_") {
-            updateValue = literal
-        } else if let resolved = context.resolveAny(object.base) {
-            updateValue = resolved
-        } else {
-            updateValue = object.base
-        }
-
-        guard let fieldName = result.specifiers.first else { return entity }
-        let storage = context.service(RepositoryStorageService.self) ?? context.container.repositoryStorage
-
-        var currentTTL: TimeInterval? = nil
-        var currentMaxSize: Int? = nil
-        if let existing = context.resolveAny(result.base) as? [String: any Sendable] {
-            if let t = existing["ttl"] as? TimeInterval { currentTTL = t }
-            else if let t = existing["ttl"] as? Double { currentTTL = t }
-            else if let t = existing["ttl"] as? Int { currentTTL = TimeInterval(t) }
-            if let m = existing["maxSize"] as? Int { currentMaxSize = m }
-            else if let m = existing["maxSize"] as? Double { currentMaxSize = Int(m) }
-        }
-        switch fieldName {
-        case "ttl":
-            if let v = updateValue as? Double { currentTTL = v }
-            else if let v = updateValue as? Int { currentTTL = TimeInterval(v) }
-        case "maxSize":
-            if let v = updateValue as? Int { currentMaxSize = v }
-            else if let v = updateValue as? Double { currentMaxSize = Int(v) }
-        default: break
-        }
-        await storage.configure(repository: result.base, ttl: currentTTL, maxSize: currentMaxSize)
-        var configDict = context.resolveAny(result.base) as? [String: any Sendable] ?? [:]
-        configDict[fieldName] = updateValue
-        context.bind(result.base, value: configDict, allowRebind: true)
-        return configDict
-    }
-
-    /// `Update the <row> into the <x-repository> [where <field> is <value>].`
-    ///
-    /// Merges the row into the matching repository entries (GitLab #505).
-    /// Chapter 46's accumulator pattern is built on this shape. Storage is
-    /// resolved exactly like Store / Retrieve / Delete resolve it — the
-    /// registered `RepositoryStorageService` first, the container's storage
-    /// as fallback — so the statement behaves identically under `aro run`
-    /// and in interactive sessions.
-    ///
-    /// Matching: the `where` clause when one is written; the row's own
-    /// identity field (`id`, then `name`, then `key`) otherwise — the same
-    /// identity fields the storage upserts by. Update never inserts: no
-    /// matching entry is an error (Store is the insert).
-    private func updateIntoRepository(
-        result: ResultDescriptor,
-        object: ObjectDescriptor,
-        context: ExecutionContext
-    ) async throws -> any Sendable {
-        let repoName = object.base
-
-        // Same immutable pattern Store supports:
-        //   Update the <updated: row> into the <repo>.  → binds <updated>
-        //   Update the <row> into the <repo>.           → rebinds <row>
-        //     (update verbs bind with allowRebind by contract)
-        let dataVarName = result.specifiers.first ?? result.base
-
-        guard let data = context.resolveAny(dataVarName) else {
-            throw ActionError.undefinedVariable(dataVarName)
-        }
-        guard let updateDict = data as? [String: any Sendable] else {
-            throw ActionError.typeMismatch(
-                expected: "an object value to merge into the matching entry",
-                actual: String(describing: type(of: data)),
-                variable: dataVarName
-            )
-        }
-
-        let storage = context.service(RepositoryStorageService.self)
-            ?? context.container.repositoryStorage
-
-        // Which entries to update: the where clause (bound by
-        // FeatureSetExecutor) when given, the row's identity otherwise.
-        let whereField: String? = context.resolve("_where_field_")
-        let whereValue = context.resolveAny("_where_value_")
-
-        let field: String
-        let matchValue: any Sendable
-        if let whereField, let whereValue {
-            field = whereField
-            matchValue = whereValue
-        } else if let id = updateDict["id"] {
-            field = "id"
-            matchValue = id
-        } else if let name = updateDict["name"] {
-            field = "name"
-            matchValue = name
-        } else if let key = updateDict["key"] {
-            field = "key"
-            matchValue = key
-        } else {
-            throw ActionError.missingRequiredField(
-                field: "a 'where' clause or an id/name/key field on the value",
-                action: "Update into \(repoName)"
-            )
-        }
-
-        let existing = await storage.retrieve(
-            from: repoName,
-            businessActivity: context.businessActivity,
-            where: field,
-            equals: matchValue
-        )
-        let existingRows = existing.compactMap { $0 as? [String: any Sendable] }
-        guard !existingRows.isEmpty else {
-            throw ActionError.runtimeError(
-                "No entry in \(repoName) where \(field) = \(matchValue) — Store inserts, Update updates"
-            )
-        }
-
-        var updatedRows: [[String: any Sendable]] = []
-        for row in existingRows {
-            var merged = row
-            for (k, v) in updateDict {
-                merged[k] = v
-            }
-            // Rows in storage always carry an id, so this store replaces the
-            // matched row in place (upsert by id) instead of inserting.
-            let storeResult = await storage.storeWithChangeInfo(
-                value: merged,
-                in: repoName,
-                businessActivity: context.businessActivity
-            )
-            updatedRows.append(merged)
-
-            // Emit only for actual changes — an identical merge is a no-op
-            // (isUpdate with nil oldValue), mirroring Store's event policy.
-            if storeResult.isUpdate, let oldValue = storeResult.oldValue {
-                context.emit(RepositoryChangedEvent(
-                    repositoryName: repoName,
-                    changeType: .updated,
-                    entityId: storeResult.entityId,
-                    newValue: storeResult.storedValue,
-                    oldValue: oldValue
-                ))
-            }
-        }
-
-        let boundValue: any Sendable = updatedRows.count == 1
-            ? updatedRows[0]
-            : updatedRows
-        context.bind(result.base, value: boundValue, allowRebind: true)
-        return boundValue
-    }
-
-    private func convertToSendable(_ value: Any) -> any Sendable {
-        SendableConverter.fromJSON(value)
-    }
-
-    /// A body limit written as `"1MB"`, `"512KB"` or a plain byte count.
-    static func bodyLimitBytes(from value: any Sendable) -> Int? {
-        if let text = value as? String { return ByteSize.parse(text) }
-        if let number = value as? Int, number > 0 { return number }
-        if let number = value as? Double, number > 0 { return Int(number) }
-        return nil
-    }
-}
-
 // MARK: - Supporting Types
 
 /// Result of a validation operation
@@ -1998,40 +1793,12 @@ public struct ValidationResult: Sendable, Equatable {
     }
 }
 
-/// Result of a comparison operation
-public struct ComparisonResult: Sendable, Equatable {
-    public let matches: Bool
-    public let result: ComparisonOutcome
-
-    public init(matches: Bool, result: ComparisonOutcome) {
-        self.matches = matches
-        self.result = result
-    }
-}
-
 /// Outcome of a comparison
 public enum ComparisonOutcome: String, Sendable {
     case equal
     case notEqual
     case less
     case greater
-}
-
-/// Entity created by CreateAction
-public struct CreatedEntity: Sendable {
-    public let type: String
-    public let data: [String: any Sendable]
-
-    public init(type: String, data: [String: any Sendable]) {
-        self.type = type
-        self.data = data
-    }
-}
-
-extension CreatedEntity: Equatable {
-    public static func == (lhs: CreatedEntity, rhs: CreatedEntity) -> Bool {
-        lhs.type == rhs.type
-    }
 }
 
 // MARK: - Additional OWN Actions (ARO-0001)
@@ -2476,7 +2243,7 @@ public struct DeleteAction: ActionImplementation {
                 field: "a file or directory path",
                 action: "Delete"
             )
-            return try await deleteFile(at: path, context: context)
+            return try await deleteFile(at: path, resultName: result.base, context: context)
         }
 
         // Get the source containing the item to delete
@@ -2488,7 +2255,7 @@ public struct DeleteAction: ActionImplementation {
         // "./f.txt"` arrives here as an `_expression_` binding, and a string
         // variable behaves the same way Write's and Read's path objects do.
         if let path = source as? String {
-            return try await deleteFile(at: path, context: context)
+            return try await deleteFile(at: path, resultName: result.base, context: context)
         }
 
         // Key to delete from result specifiers
@@ -2523,12 +2290,15 @@ public struct DeleteAction: ActionImplementation {
     /// loudly instead of pretending the file was just removed (GitLab #493).
     /// Directories are removed recursively; the service publishes
     /// FileDeletedEvent on success.
-    private func deleteFile(at path: String, context: ExecutionContext) async throws -> any Sendable {
+    private func deleteFile(at path: String, resultName: String,
+                            context: ExecutionContext) async throws -> any Sendable {
         guard let fileService = context.service(FileSystemService.self) else {
             throw ActionError.missingService("FileSystemService")
         }
         try await fileService.delete(path: path)
-        return DeleteResult(target: path, success: true)
+        let outcome = DeleteResult(target: path, success: true, count: 1)
+        context.bind(resultName, value: outcome.asDictionary, allowRebind: true)
+        return outcome.asDictionary
     }
 
     private func deleteFromRepository(
@@ -2554,11 +2324,14 @@ public struct DeleteAction: ActionImplementation {
         // If no where clause, clear the entire repository
         // This supports: <Clear> the <all> from the <message-repository>.
         if whereField == nil || whereValue == nil {
-            if let storage = context.service(RepositoryStorageService.self) {
-                await storage.clear(repository: repositoryName, businessActivity: context.businessActivity)
-            } else {
-                await context.container.repositoryStorage.clear(repository: repositoryName, businessActivity: context.businessActivity)
-            }
+            let storage = context.service(RepositoryStorageService.self)
+                ?? context.container.repositoryStorage
+            // Counted before the clear, because afterwards there is nothing to
+            // count and "cleared 0" would be indistinguishable from "cleared
+            // everything" — which is the distinction GitLab #866 is about.
+            let cleared = await storage.retrieve(
+                from: repositoryName, businessActivity: context.businessActivity).count
+            await storage.clear(repository: repositoryName, businessActivity: context.businessActivity)
             // Emit repository cleared event
             context.emit(RepositoryChangedEvent(
                 repositoryName: repositoryName,
@@ -2567,7 +2340,9 @@ public struct DeleteAction: ActionImplementation {
                 newValue: nil,
                 oldValue: nil
             ))
-            return DeleteResult(target: result.base, success: true)
+            let outcome = DeleteResult(target: result.base, success: true, count: cleared)
+            context.bind(result.base, value: outcome.asDictionary, allowRebind: true)
+            return outcome.asDictionary
         }
 
         guard let field = whereField, let matchValue = whereValue else {
@@ -2614,21 +2389,66 @@ public struct DeleteAction: ActionImplementation {
         // Emit legacy delete event
         context.emit(DataDeletedEvent(target: result.base, source: repositoryName))
 
-        // Bind the deleted items to the result variable
-        if deleteResult.deletedItems.count == 1 {
-            context.bind(result.base, value: deleteResult.deletedItems[0])
-        } else {
-            context.bind(result.base, value: deleteResult.deletedItems)
-        }
+        // Bind the record the statement's result names. The rows used to be
+        // bound here and then overwritten by the returned struct, so `<gone>`
+        // held a `DeleteResult` with nothing an ARO program could read
+        // (GitLab #866). They are a field of the record now:
+        //
+        //   <gone: count>    how many rows went — 0 when nothing matched
+        //   <gone: deleted>  the rows themselves
+        //
+        // A `where` that matches exactly one row still puts that row in
+        // `deleted` as a one-element list, rather than as the row: a result
+        // whose shape depends on how many things it found is the trap
+        // ARO-0038's indexing rules already exist to avoid.
+        let outcome = DeleteResult(
+            target: result.base,
+            success: deleteResult.count > 0,
+            count: deleteResult.count,
+            deleted: deleteResult.deletedItems
+        )
+        context.bind(result.base, value: outcome.asDictionary, allowRebind: true)
 
-        return DeleteResult(target: result.base, success: deleteResult.count > 0)
+        return outcome.asDictionary
     }
 }
 
-/// Result of a delete operation
+/// Result of a delete operation.
+///
+/// `count` and `deleted` exist because the struct alone had nothing an ARO
+/// program could read (GitLab #866): `Delete the <gone> from the
+/// <orders-repository> where <id> is <id>.` bound `<gone>`, and a handler
+/// could not report "deleted 3" or tell a delete that matched nothing from one
+/// that matched.
 public struct DeleteResult: Sendable, Equatable {
     public let target: String
     public let success: Bool
+    /// How many entries were removed. `0` for a delete that matched nothing.
+    public let count: Int
+    /// The removed entries, where the operation had them to hand.
+    ///
+    /// A repository delete already holds the rows — storage returns them so
+    /// the change events can carry each one — so passing them on costs
+    /// nothing that was not already paid for. Clearing a whole repository
+    /// does not hold them, and says so by leaving this empty rather than by
+    /// reading the repository back first.
+    public let deleted: [any Sendable]
+
+    public init(target: String, success: Bool, count: Int = 0, deleted: [any Sendable] = []) {
+        self.target = target
+        self.success = success
+        self.count = count
+        self.deleted = deleted
+    }
+
+    public static func == (lhs: DeleteResult, rhs: DeleteResult) -> Bool {
+        lhs.target == rhs.target && lhs.success == rhs.success && lhs.count == rhs.count
+    }
+
+    /// What an ARO program reads off the statement's result.
+    public var asDictionary: [String: any Sendable] {
+        ["target": target, "success": success, "count": count, "deleted": deleted]
+    }
 }
 
 /// Event emitted when data is deleted

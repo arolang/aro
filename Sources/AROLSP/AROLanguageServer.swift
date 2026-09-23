@@ -581,7 +581,8 @@ public final class AROLanguageServer: Sendable {
               let state = documentManager.getSync(uri: uri) else { return nil }
 
         let lspPosition = Position(line: line, character: character)
-        let aroPosition = PositionConverter.fromLSP(lspPosition)
+        let lines = LineIndex(state.content)
+        let aroPosition = PositionConverter.fromLSP(lspPosition, using: lines)
 
         guard let result = state.compilationResult else { return nil }
 
@@ -609,7 +610,8 @@ public final class AROLanguageServer: Sendable {
             highlights.append(contentsOf: collectHighlightsInStatements(
                 analyzed.featureSet.statements,
                 name: symbolName,
-                isActionVerb: isActionVerb
+                isActionVerb: isActionVerb,
+                lines: lines
             ))
         }
 
@@ -624,14 +626,14 @@ public final class AROLanguageServer: Sendable {
     ) -> String? {
         for statement in statements {
             if let aro = statement as? AROStatement {
-                if isPositionInSpan(position, aro.action.span) {
+                if aro.action.span.contains(position) {
                     isActionVerb = true
                     return aro.action.verb
                 }
-                if isPositionInSpan(position, aro.result.span) {
+                if aro.result.span.contains(position) {
                     return aro.result.base
                 }
-                if isPositionInSpan(position, aro.object.noun.span) {
+                if aro.object.noun.span.contains(position) {
                     return aro.object.noun.base
                 }
             } else if let forEachLoop = statement as? ForEachLoop {
@@ -654,14 +656,14 @@ public final class AROLanguageServer: Sendable {
                 }
             } else if let pipeline = statement as? PipelineStatement {
                 for stage in pipeline.stages {
-                    if isPositionInSpan(position, stage.action.span) {
+                    if stage.action.span.contains(position) {
                         isActionVerb = true
                         return stage.action.verb
                     }
-                    if isPositionInSpan(position, stage.result.span) {
+                    if stage.result.span.contains(position) {
                         return stage.result.base
                     }
-                    if isPositionInSpan(position, stage.object.noun.span) {
+                    if stage.object.noun.span.contains(position) {
                         return stage.object.noun.base
                     }
                 }
@@ -674,7 +676,8 @@ public final class AROLanguageServer: Sendable {
     private func collectHighlightsInStatements(
         _ statements: [Statement],
         name: String,
-        isActionVerb: Bool
+        isActionVerb: Bool,
+        lines: LineIndex
     ) -> [[String: Any]] {
         var highlights: [[String: Any]] = []
 
@@ -682,38 +685,38 @@ public final class AROLanguageServer: Sendable {
             if let aro = statement as? AROStatement {
                 if isActionVerb {
                     if aro.action.verb.lowercased() == name.lowercased() {
-                        highlights.append(makeHighlight(span: aro.action.span, kind: 1))
+                        highlights.append(makeHighlight(lines: lines, span: aro.action.span, kind: 1))
                     }
                 } else {
                     if aro.result.base == name {
-                        highlights.append(makeHighlight(span: aro.result.span, kind: 2))  // Write
+                        highlights.append(makeHighlight(lines: lines, span: aro.result.span, kind: 2))  // Write
                     }
                     if aro.object.noun.base == name {
-                        highlights.append(makeHighlight(span: aro.object.noun.span, kind: 3))  // Read
+                        highlights.append(makeHighlight(lines: lines, span: aro.object.noun.span, kind: 3))  // Read
                     }
                 }
             } else if let forEachLoop = statement as? ForEachLoop {
-                highlights.append(contentsOf: collectHighlightsInStatements(forEachLoop.body, name: name, isActionVerb: isActionVerb))
+                highlights.append(contentsOf: collectHighlightsInStatements(forEachLoop.body, name: name, isActionVerb: isActionVerb, lines: lines))
             } else if let rangeLoop = statement as? RangeLoop {
-                highlights.append(contentsOf: collectHighlightsInStatements(rangeLoop.body, name: name, isActionVerb: isActionVerb))
+                highlights.append(contentsOf: collectHighlightsInStatements(rangeLoop.body, name: name, isActionVerb: isActionVerb, lines: lines))
             } else if let whileLoop = statement as? WhileLoop {
-                highlights.append(contentsOf: collectHighlightsInStatements(whileLoop.body, name: name, isActionVerb: isActionVerb))
+                highlights.append(contentsOf: collectHighlightsInStatements(whileLoop.body, name: name, isActionVerb: isActionVerb, lines: lines))
             } else if let matchStmt = statement as? MatchStatement {
                 for caseClause in matchStmt.cases {
-                    highlights.append(contentsOf: collectHighlightsInStatements(caseClause.body, name: name, isActionVerb: isActionVerb))
+                    highlights.append(contentsOf: collectHighlightsInStatements(caseClause.body, name: name, isActionVerb: isActionVerb, lines: lines))
                 }
             } else if let pipeline = statement as? PipelineStatement {
                 for stage in pipeline.stages {
                     if isActionVerb {
                         if stage.action.verb.lowercased() == name.lowercased() {
-                            highlights.append(makeHighlight(span: stage.action.span, kind: 1))
+                            highlights.append(makeHighlight(lines: lines, span: stage.action.span, kind: 1))
                         }
                     } else {
                         if stage.result.base == name {
-                            highlights.append(makeHighlight(span: stage.result.span, kind: 2))
+                            highlights.append(makeHighlight(lines: lines, span: stage.result.span, kind: 2))
                         }
                         if stage.object.noun.base == name {
-                            highlights.append(makeHighlight(span: stage.object.noun.span, kind: 3))
+                            highlights.append(makeHighlight(lines: lines, span: stage.object.noun.span, kind: 3))
                         }
                     }
                 }
@@ -723,8 +726,8 @@ public final class AROLanguageServer: Sendable {
         return highlights
     }
 
-    private func makeHighlight(span: SourceSpan, kind: Int) -> [String: Any] {
-        let lspRange = PositionConverter.toLSP(span)
+    private func makeHighlight(lines: LineIndex, span: SourceSpan, kind: Int) -> [String: Any] {
+        let lspRange = PositionConverter.toLSP(span, using: lines)
         return [
             "range": [
                 "start": ["line": lspRange.start.line, "character": lspRange.start.character],
@@ -732,19 +735,6 @@ public final class AROLanguageServer: Sendable {
             ],
             "kind": kind  // 1=Text, 2=Write, 3=Read
         ]
-    }
-
-    private func isPositionInSpan(_ position: SourceLocation, _ span: SourceSpan) -> Bool {
-        if position.line < span.start.line || position.line > span.end.line {
-            return false
-        }
-        if position.line == span.start.line && position.column < span.start.column {
-            return false
-        }
-        if position.line == span.end.line && position.column > span.end.column {
-            return false
-        }
-        return true
     }
 
     private func handleCompletionSync(params: Any?) -> [String: Any]? {
@@ -778,7 +768,7 @@ public final class AROLanguageServer: Sendable {
               let textDocument = dict["textDocument"] as? [String: Any],
               let uri = textDocument["uri"] as? String,
               let state = documentManager.getSync(uri: uri) else { return nil }
-        return documentSymbolHandler.handle(compilationResult: state.compilationResult)
+        return documentSymbolHandler.handle(content: state.content, compilationResult: state.compilationResult)
     }
 
     private func handleWorkspaceSymbolSync(params: Any?) -> [[String: Any]]? {
@@ -1271,7 +1261,7 @@ public final class AROLanguageServer: Sendable {
             return nil
         }
 
-        return documentSymbolHandler.handle(compilationResult: state.compilationResult)
+        return documentSymbolHandler.handle(content: state.content, compilationResult: state.compilationResult)
     }
 
     private func handleWorkspaceSymbol(params: Any?) async -> [[String: Any]]? {
@@ -1499,7 +1489,7 @@ public final class AROLanguageServer: Sendable {
             return
         }
 
-        let lspDiagnostics = diagnosticsHandler.convert(result.diagnostics)
+        let lspDiagnostics = diagnosticsHandler.convert(result.diagnostics, in: state.content)
         publishDiagnostics(for: uri, diagnostics: lspDiagnostics)
     }
 

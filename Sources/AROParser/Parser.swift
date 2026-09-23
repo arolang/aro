@@ -219,7 +219,32 @@ public final class Parser {
         // `parseIdentifierSequence` collapses the header to "Action takes<field>" or
         // "Action takes<field:Type>" — the angle-bracket suffix logic concatenates
         // tokens between `<` and `>` without spaces. Recover the structured form here.
-        let (activity, userActionTakesField, userActionTakesType) = Self.splitUserActionHeader(rawActivity)
+        var (activity, userActionTakesField, userActionTakesType) = Self.splitUserActionHeader(rawActivity)
+
+        // ARO-0047: `Application-Start` uses the same `takes` spelling to declare
+        // the positional command-line arguments it reads (GitLab #857). One
+        // header form, two meanings, because the declaration is the same thing
+        // in both: the inputs this unit is called with.
+        var positionalParameters: [String] = []
+        if name == "Application-Start" {
+            let (bare, positionals) = Self.splitTakesHeader(rawActivity)
+            positionalParameters = positionals.map(\.name)
+            // The clause is a declaration, not part of the activity's name.
+            if !positionals.isEmpty { activity = bare }
+        } else if activity != "Action" {
+            // A `takes` clause anywhere else is a header the runtime will not
+            // read. Saying so is better than binding nothing at run time.
+            let (_, stray) = Self.splitTakesHeader(rawActivity)
+            if !stray.isEmpty {
+                diagnostics.error(
+                    "`takes` is not read on '\(name): \(activity)'",
+                    at: startToken.span.start,
+                    hints: ["`takes` declares the inputs of an `Action` (ARO-0081) or the "
+                            + "positional command-line arguments of `Application-Start` "
+                            + "(ARO-0047); nothing else reads it"]
+                )
+            }
+        }
 
         try expect(.rightParen, message: "')'")
 
@@ -260,6 +285,7 @@ public final class Parser {
             whenCondition: whenCondition,
             userActionTakesField: userActionTakesField,
             userActionTakesType: userActionTakesType,
+            positionalParameters: positionalParameters,
             span: startToken.span.merged(with: endToken.span)
         )
     }
@@ -271,18 +297,47 @@ public final class Parser {
     /// form and rejects malformed `takes` clauses without affecting non-Action
     /// activities (which pass through unchanged).
     static func splitUserActionHeader(_ raw: String) -> (activity: String, takes: String?, type: String?) {
-        let prefix = "Action takes<"
-        if raw.hasPrefix(prefix), raw.hasSuffix(">") {
-            let inner = String(raw.dropFirst(prefix.count).dropLast())
-            if let colonIdx = inner.firstIndex(of: ":") {
-                let field = String(inner[..<colonIdx]).trimmingCharacters(in: .whitespaces)
-                let typeName = String(inner[inner.index(after: colonIdx)...]).trimmingCharacters(in: .whitespaces)
-                return ("Action", field.isEmpty ? nil : field, typeName.isEmpty ? nil : typeName)
-            }
-            let field = inner.trimmingCharacters(in: .whitespaces)
-            return ("Action", field.isEmpty ? nil : field, nil)
+        let (activity, fields) = splitTakesHeader(raw)
+        guard activity == "Action", let first = fields.first else {
+            return (raw, nil, nil)
         }
-        return (raw, nil, nil)
+        // ARO-0081 gives an Action exactly one positional; the multi-field
+        // spelling belongs to `Application-Start` (ARO-0047). Take the first
+        // and leave the rest to the header check in `parseFeatureSet`.
+        return ("Action", first.name, first.type)
+    }
+
+    /// A `takes` field: its name, and the optional `: Type` annotation.
+    struct TakesField: Equatable {
+        let name: String
+        let type: String?
+    }
+
+    /// Split a collapsed header into its activity and its `takes` fields.
+    ///
+    /// `parseIdentifierSequence` collapses `Crawler takes <url> <depth: Integer>`
+    /// to `"Crawler takes<url>,<depth:Integer>"` — angle groups lose their
+    /// spaces and are joined with commas. This restores the structured form.
+    /// A header with no `takes` clause passes through with an empty field list.
+    static func splitTakesHeader(_ raw: String) -> (activity: String, fields: [TakesField]) {
+        guard let range = raw.range(of: " takes<"), raw.hasSuffix(">") else {
+            return (raw, [])
+        }
+        let activity = String(raw[raw.startIndex..<range.lowerBound])
+        let inner = String(raw[range.upperBound...].dropLast())
+        let fields: [TakesField] = inner.components(separatedBy: ">,<").compactMap { part in
+            let trimmed = part.trimmingCharacters(in: .whitespaces)
+            guard !trimmed.isEmpty else { return nil }
+            guard let colonIdx = trimmed.firstIndex(of: ":") else {
+                return TakesField(name: trimmed, type: nil)
+            }
+            let field = String(trimmed[..<colonIdx]).trimmingCharacters(in: .whitespaces)
+            let typeName = String(trimmed[trimmed.index(after: colonIdx)...])
+                .trimmingCharacters(in: .whitespaces)
+            guard !field.isEmpty else { return nil }
+            return TakesField(name: field, type: typeName.isEmpty ? nil : typeName)
+        }
+        return (activity, fields)
     }
     
     // MARK: - Statement Parsing
@@ -816,7 +871,7 @@ public final class Parser {
             // §Ordering, GitLab #491). Only these two words are consumed;
             // anything else stays for the clauses that follow.
             if case .identifier(let word) = peek().kind,
-               word == "ascending" || word == "descending",
+               let order = SortOrder(rawValue: word),
                let clause = byClause {
                 advance()
                 byClause = ByClause(
@@ -825,7 +880,7 @@ public final class Parser {
                     span: clause.span.merged(with: previous().span),
                     isFieldName: clause.isFieldName,
                     variableName: clause.variableName,
-                    order: word
+                    order: order
                 )
             }
         }
@@ -1261,6 +1316,12 @@ public final class Parser {
         case .in:
             advance()
             op = .in
+        case .identifier(let word) where word.lowercased() == "starts"
+                                      || word.lowercased() == "ends":
+            let isStarts = word.lowercased() == "starts"
+            advance()
+            try expectPreposition(.with, message: "'with' after '\(word)'")
+            op = isStarts ? .startsWith : .endsWith
         case .not:
             advance()
             // Must be followed by 'in' for "not in"
@@ -1271,7 +1332,7 @@ public final class Parser {
                 throw ParserError.unexpectedToken(expected: "'in' after 'not' in where clause", got: peek())
             }
         default:
-            throw ParserError.unexpectedToken(expected: "comparison operator (is, =, <, >, <=, >=, !=, contains, matches, in, not in, between) after <\(field)> in where clause", got: peek())
+            throw ParserError.unexpectedToken(expected: "comparison operator (is, =, <, >, <=, >=, !=, contains, matches, starts with, ends with, in, not in, between) after <\(field)> in where clause", got: peek())
         }
 
         // Parse value expression — stops before and/or (see doc comment)
@@ -1343,7 +1404,7 @@ public final class Parser {
             advance()
             return .null
         case .leftBracket:
-            return try parseArrayLiteral()
+            return try parseArrayLiteralValue()
         case .leftBrace:
             return try parseObjectLiteral()
         default:
@@ -1351,8 +1412,8 @@ public final class Parser {
         }
     }
 
-    /// Parses: "[" [ literal { "," literal } ] "]"
-    private func parseArrayLiteral() throws -> LiteralValue {
+    /// Parses: "[" [ literal { "," literal } ] "]" — the literal form.
+    private func parseArrayLiteralValue() throws -> LiteralValue {
         try expect(.leftBracket, message: "'['")
         var elements: [LiteralValue] = []
 
@@ -1410,6 +1471,27 @@ public final class Parser {
         return .object(fields)
     }
 
+    /// Continues a key that began with `first`, absorbing `-word` runs.
+    ///
+    /// `{ created-at: … }` is one key, not a subtraction (GitLab #579, #583),
+    /// and any word-shaped token may follow the hyphen — keywords included,
+    /// since a field named `order` or `from` is perfectly ordinary JSON. Both
+    /// the literal form (`parseObjectField`) and the expression form
+    /// (`parseMapEntry`) carried their own copy of this loop.
+    private func parseHyphenatedKey(startingWith first: String) throws -> String {
+        var key = first
+        while check(.hyphen) {
+            advance() // consume hyphen
+            key += "-"
+            if peek().isWordShaped {
+                key += advance().lexeme
+            } else {
+                throw ParserError.unexpectedToken(expected: "identifier after hyphen", got: peek())
+            }
+        }
+        return key
+    }
+
     /// Parses: key ":" value
     /// Key can be: identifier, identifier-identifier-..., or string literal
     private func parseObjectField() throws -> (String, LiteralValue) {
@@ -1420,19 +1502,7 @@ public final class Parser {
             key = s
         } else if case .identifier(let name) = peek().kind {
             advance()
-            key = name
-            // Handle hyphenated keys: customer-name, order-id, etc.
-            while check(.hyphen) {
-                advance() // consume hyphen
-                key += "-"
-                // Any word after a hyphen: `{ created-at: … }` is one key
-                // (GitLab #579, #583).
-                if peek().isWordShaped {
-                    key += advance().lexeme
-                } else {
-                    throw ParserError.unexpectedToken(expected: "identifier after hyphen", got: peek())
-                }
-            }
+            key = try parseHyphenatedKey(startingWith: name)
         } else {
             throw ParserError.unexpectedToken(expected: "field name", got: peek())
         }
@@ -1455,12 +1525,21 @@ public final class Parser {
         try expect(.leftAngle, message: "'<'")
         let internalVariable = try parseCompoundIdentifier()
         try expect(.rightAngle, message: "'>'")
-        
+
+        // Trailing `when` guard, the same clause action statements take
+        // (GitLab #830 item 14).
+        var whenCondition: (any Expression)?
+        if check(.when) {
+            advance()
+            whenCondition = try parseExpression()
+        }
+
         let endToken = try expectStatementTerminator()
-        
+
         return PublishStatement(
             externalName: externalName,
             internalVariable: internalVariable,
+            statementGuard: StatementGuard(condition: whenCondition),
             span: startToken.span.merged(with: endToken.span)
         )
     }
@@ -2159,10 +2238,21 @@ public final class Parser {
                 }
             }
 
-            // Handle angle bracket filter suffix (e.g., StateObserver<draft_to_placed>)
-            if check(.leftAngle) || check(.lessThan) {
+            // Handle angle bracket filter suffix (e.g., StateObserver<draft_to_placed>).
+            //
+            // Repeats, so a header may carry several: `Application-Start`
+            // declares its positional command-line arguments as
+            // `takes <url> <depth>` (ARO-0047, GitLab #857). Groups may be
+            // juxtaposed or comma-separated; both collapse to the same
+            // comma-joined spelling, which `splitTakesHeader` reads back.
+            var sawGroup = false
+            while check(.leftAngle) || check(.lessThan)
+                    || (sawGroup && check(.comma)
+                        && (peekAt(1)?.kind == .leftAngle || peekAt(1)?.kind == .lessThan)) {
+                if check(.comma) { advance() }
                 advance() // consume <
-                compound += "<"
+                compound += sawGroup ? ",<" : "<"
+                sawGroup = true
                 // Collect everything until >
                 while !check(.rightAngle) && !check(.greaterThan) && !isAtEnd {
                     compound += advance().lexeme
@@ -2266,8 +2356,14 @@ public final class Parser {
         // GitLab #548: `empty` is only a keyword after `is` (`<list> is empty`,
         // handled before any type name is expected), so it stays a usable name:
         // `<empty>`, `{ empty: 0 }` and `<x: empty>` are ordinary identifiers.
+        // GitLab #862: `concurrency` is a keyword only in a loop's
+        // `with <concurrency: N>` clause, which `expect(.concurrency)` reads by
+        // token kind. Everywhere else it is an ordinary name, and it has to be
+        // — `Configure the <application: concurrency> with 8.` names the
+        // application-wide ceiling (ARO-0088 §10a), and the setting and the
+        // clause are deliberately the same word.
         switch token.kind {
-        case .when, .then, .exists, .empty:
+        case .when, .then, .exists, .empty, .concurrency:
             return advance()
         default:
             break
@@ -2442,7 +2538,7 @@ extension Parser {
 
         // Array literal: [...]
         case .leftBracket:
-            return try parseArrayLiteral()
+            return try parseArrayLiteralExpression()
 
         // Map literal: {...}
         case .leftBrace:
@@ -2526,6 +2622,13 @@ extension Parser {
         .is:           .equality,
         .isNot:        .equality,
         .contains:     .equality,
+        // Membership and affix tests read as comparisons (GitLab #830
+        // item 5, GitLab #864), so `when <p> starts with "/" and <m> is "GET"`
+        // groups the way it reads.
+        .subset:       .equality,
+        .notIn:        .equality,
+        .startsWith:   .equality,
+        .endsWith:     .equality,
         // Temporal comparison sits with the other comparisons, so
         // `when <a> before <b> and <c> after <d>` groups the way it
         // reads (GitLab #516).
@@ -2554,12 +2657,39 @@ extension Parser {
         case .identifier(let name) where name == "before" || name == "after":
             return .comparison
 
+        // `subset` is a set-containment predicate in operator position and an
+        // ordinary name everywhere else (GitLab #864) — the same
+        // context-sensitive treatment `before` and `after` get, and for the
+        // same reason: `<subset>` is a name people write.
+        case .identifier(let name) where name == "subset":
+            return .equality
+
         // `in` is a membership comparison in operator position. It is a
         // lexer keyword because `for each <x> in <xs>` needs it, but every
         // place that uses it as a delimiter consumes it with `expect(.in)`
         // before any expression parsing starts, so giving it a precedence
         // here cannot swallow one of those (GitLab #558).
         case .in:
+            return .comparison
+
+        // `starts with` / `ends with` — context-sensitive for the same
+        // reason `before`/`after` are: `<starts>` and `<ends>` are
+        // ordinary names, so neither word is a lexer keyword. Only a
+        // following `with` makes it an operator, which is the lookahead
+        // this case performs (GitLab #830 item 5).
+        case .identifier(let name) where name.lowercased() == "starts"
+                                      || name.lowercased() == "ends":
+            let nextIndex = current + 1
+            guard nextIndex < tokens.count,
+                  case .preposition(.with) = tokens[nextIndex].kind else { return nil }
+            return .comparison
+
+        // `not in`: `not` alone is the unary negation and must stay one,
+        // so only the pair is an infix operator.
+        case .not:
+            let nextIndex = current + 1
+            guard nextIndex < tokens.count,
+                  case .in = tokens[nextIndex].kind else { return nil }
             return .comparison
 
         // Context-sensitive: `<` / `>` are comparison operators here only when
@@ -2634,6 +2764,24 @@ extension Parser {
             if op == .is && check(.not) {
                 advance()
                 actualOp = .isNot
+            }
+
+            // `subset of <b>` — the `of` is part of the operator and reads
+            // like English (GitLab #864). It is optional so that `<a> subset
+            // <b>` is not a parse error for something whose meaning is plain;
+            // ARO-0042 writes the `of`.
+            if actualOp == .subset, case .identifier("of") = peek().kind {
+                advance()
+            }
+
+            // The other two-word operators (GitLab #830 item 5).
+            // `infixPrecedence` already refused to reach here unless the
+            // second word is present, so these consume it unconditionally.
+            if op == .startsWith || op == .endsWith {
+                try expectPreposition(.with, message: "'with' after '\(token.lexeme)'")
+            }
+            if op == .notIn {
+                try expect(.in, message: "'in' after 'not'")
             }
 
             // Handle "is true", "is false", "is nil/null" as equality comparisons
@@ -2745,7 +2893,11 @@ extension Parser {
         case .is: return .is
         case .identifier(let name) where name == "before": return .before
         case .identifier(let name) where name == "after": return .after
+        case .identifier(let name) where name == "subset": return .subset
+        case .identifier(let name) where name.lowercased() == "starts": return .startsWith
+        case .identifier(let name) where name.lowercased() == "ends": return .endsWith
         case .in: return .in
+        case .not: return .notIn
         case .and: return .and
         case .or: return .or
         case .identifier("default"): return .defaulting
@@ -2765,8 +2917,8 @@ extension Parser {
         return VariableRefExpression(noun: noun, span: startToken.span.merged(with: endToken.span))
     }
 
-    /// Parses an array literal: [elem1, elem2, ...]
-    private func parseArrayLiteral() throws -> ArrayLiteralExpression {
+    /// Parses an array literal of expressions: [elem1, elem2, ...]
+    private func parseArrayLiteralExpression() throws -> ArrayLiteralExpression {
         let startToken = try expect(.leftBracket, message: "'['")
         var elements: [any Expression] = []
 
@@ -2811,19 +2963,7 @@ extension Parser {
         switch keyToken.kind {
         case .identifier(let s):
             advance()
-            key = s
-            // Handle hyphenated keys: customer-name, order-id, etc.
-            while check(.hyphen) {
-                advance() // consume hyphen
-                key += "-"
-                // Any word after a hyphen: `{ created-at: … }` is one key
-                // (GitLab #579, #583).
-                if peek().isWordShaped {
-                    key += advance().lexeme
-                } else {
-                    throw ParserError.unexpectedToken(expected: "identifier after hyphen", got: peek())
-                }
-            }
+            key = try parseHyphenatedKey(startingWith: s)
         case .stringLiteral(let s):
             advance()
             key = s

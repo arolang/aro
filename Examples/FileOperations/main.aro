@@ -13,7 +13,7 @@
 
     (* 1. Create demo directory *)
     Log "1. Creating demo directory..." to the <console>.
-    CreateDirectory the <created-directory> to the <path: demo-dir>.
+    Make the <created-directory> to the <path: demo-dir>.
     Log "   Created ./demo-output" to the <console>.
 
     (* 2. Write a new file *)

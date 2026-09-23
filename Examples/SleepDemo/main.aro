@@ -1,4 +1,4 @@
-(* SleepDemo — ARO-0054: Sleep / Delay built-in action
+(* SleepDemo — Sleep / Delay built-in action (GitLab #54)
    Demonstrates non-blocking pause inside a feature set.
    Other concurrent tasks continue running while this feature set sleeps. *)
 

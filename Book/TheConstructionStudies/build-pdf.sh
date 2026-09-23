@@ -28,6 +28,17 @@ mkdir -p "$OUTPUT_DIR"
 echo "Extracting SVGs from markdown files..."
 python3 "$SCRIPT_DIR/extract-svgs.py"
 
+# Stamp the staged chapters: `@ARO_VERSION@` and `@ARO_DATE@` become the
+# release this build is for, and Book/Install.md is spliced in wherever a
+# chapter asks for it. extract-svgs.py has already copied the sources into
+# processed/, so the checked-in markdown keeps its placeholders.
+source "$BOOK_DIR/book-release.sh"
+cp "$METADATA_FILE" "$PROCESSED_DIR/metadata.yaml"
+[[ -f "$SCRIPT_DIR/header.tex" ]] && cp "$SCRIPT_DIR/header.tex" "$PROCESSED_DIR/"
+aro_book_stamp "$PROCESSED_DIR"
+METADATA_FILE="$PROCESSED_DIR/metadata.yaml"
+echo "Release: ARO $ARO_VERSION ($ARO_DATE)"
+
 # Copy images to processed directory for pandoc to find them
 mkdir -p "$PROCESSED_DIR/images"
 cp "$IMAGES_DIR"/*.svg "$PROCESSED_DIR/images/" 2>/dev/null || true

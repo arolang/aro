@@ -4,7 +4,7 @@ Create a single-file ARO application that demonstrates the `Listen` action for s
 
 In the `Application-Start` feature set, set up three listeners:
 
-1. **Port listener** -- Create a port number 8080 and use `Listen the <port-listener> for the <port: port-number>` to listen on that port.
+1. **Port listener** -- Create a port number 18787 and use `Listen the <port-listener> for the <port: port-number>` to declare a listener for it. `Listen` records the listener and emits an event; binding a socket is `Start the <socket-server>`. Use a demo port rather than 8080 so the example does not read as if it held a well-known one.
 
 2. **Event listener** -- Create an event name "user-created" and use `Listen the <event-listener> for the <events: eventname>` to listen for custom events.
 

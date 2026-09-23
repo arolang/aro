@@ -19,7 +19,35 @@ public struct FormattingOptions: Sendable {
     }
 }
 
-/// Handles textDocument/formatting requests
+/// Handles textDocument/formatting requests.
+///
+/// ## Why this is three lines of work and no rules (GitLab #677)
+///
+/// This handler used to carry its own formatter: a line-by-line state
+/// machine that decided indentation from keyword prefixes (`match`, `when`,
+/// `for each`, …) and normalised spacing in a `formatStatement` helper. The
+/// helper was reached only from
+///
+/// ```swift
+/// if inFeatureSet && trimmed.hasPrefix("<") { … }
+/// ```
+///
+/// and statements stopped beginning with `<` when bracketed verbs were
+/// removed (GitLab #514 / #574). So every statement fell through to "keep the
+/// text, change the indent" and `formatStatement` was dead code — the
+/// formatter never formatted a statement.
+///
+/// Reviving that branch would have left two formatters in the repo that
+/// disagree: SOLARO's `AROFormatter` indents from bracket depth, collapses
+/// blank runs, fixes trailing double dots and guarantees a final newline,
+/// none of which the LSP copy did. A file formatted in the editor and the
+/// same file formatted through an LSP client would have come out different,
+/// which is a worse bug than the dead branch.
+///
+/// So there is one formatter now. `AROFormatter` moved into AROParser — the
+/// lowest module both surfaces already depend on — gained the interior-space
+/// collapsing that `formatStatement` was meant to do, and this handler is
+/// reduced to translating LSP's options in and LSP's edit shape out.
 public struct FormattingHandler: Sendable {
 
     public init() {}
@@ -29,196 +57,29 @@ public struct FormattingHandler: Sendable {
         content: String,
         options: FormattingOptions
     ) -> [[String: Any]]? {
-        let lines = content.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
-        if lines.isEmpty || (lines.count == 1 && lines[0].isEmpty) {
-            return nil
-        }
+        guard !content.isEmpty else { return nil }
 
-        let indent = options.insertSpaces ? String(repeating: " ", count: options.tabSize) : "\t"
-        var formattedLines: [String] = []
-        var currentIndentLevel = 0
-        var inFeatureSet = false
+        let formatted = AROFormatter.format(
+            content,
+            indentWidth: options.tabSize,
+            useTabs: !options.insertSpaces
+        )
 
-        for line in lines {
-            let trimmed = line.trimmingCharacters(in: .whitespaces)
+        // Nothing to do — tell the client so rather than making it apply a
+        // no-op edit that would still dirty the buffer and move the cursor.
+        if formatted == content { return nil }
 
-            if trimmed.isEmpty {
-                formattedLines.append("")
-                continue
-            }
-
-            // Check for feature set start
-            if trimmed.hasPrefix("(") && trimmed.contains("{") {
-                formattedLines.append(formatFeatureSetHeader(trimmed))
-                currentIndentLevel = 1
-                inFeatureSet = true
-                continue
-            }
-
-            // Check for feature set end
-            if trimmed == "}" {
-                currentIndentLevel = 0
-                formattedLines.append("}")
-                inFeatureSet = false
-                continue
-            }
-
-            // Check for comment
-            if trimmed.hasPrefix("(*") {
-                formattedLines.append(String(repeating: indent, count: currentIndentLevel) + trimmed)
-                continue
-            }
-
-            // Format statement
-            if inFeatureSet && trimmed.hasPrefix("<") {
-                let formatted = formatStatement(trimmed)
-                formattedLines.append(String(repeating: indent, count: currentIndentLevel) + formatted)
-                continue
-            }
-
-            // Match statement
-            if trimmed.hasPrefix("match") {
-                formattedLines.append(String(repeating: indent, count: currentIndentLevel) + trimmed)
-                if trimmed.contains("{") && !trimmed.contains("}") {
-                    currentIndentLevel += 1
-                }
-                continue
-            }
-
-            // When clause
-            if trimmed.hasPrefix("when") {
-                formattedLines.append(String(repeating: indent, count: currentIndentLevel) + trimmed)
-                if trimmed.contains("{") && !trimmed.contains("}") {
-                    currentIndentLevel += 1
-                }
-                continue
-            }
-
-            // For each loop
-            if trimmed.hasPrefix("for each") {
-                formattedLines.append(String(repeating: indent, count: currentIndentLevel) + trimmed)
-                if trimmed.contains("{") && !trimmed.contains("}") {
-                    currentIndentLevel += 1
-                }
-                continue
-            }
-
-            // Range loop: for <var> from N to M { ... }
-            if trimmed.hasPrefix("for <") {
-                formattedLines.append(String(repeating: indent, count: currentIndentLevel) + trimmed)
-                if trimmed.contains("{") && !trimmed.contains("}") {
-                    currentIndentLevel += 1
-                }
-                continue
-            }
-
-            // While loop: while <condition> { ... }
-            if trimmed.hasPrefix("while") {
-                formattedLines.append(String(repeating: indent, count: currentIndentLevel) + trimmed)
-                if trimmed.contains("{") && !trimmed.contains("}") {
-                    currentIndentLevel += 1
-                }
-                continue
-            }
-
-            // Break statement
-            if trimmed == "break." || trimmed == "break" {
-                formattedLines.append(String(repeating: indent, count: currentIndentLevel) + "break.")
-                continue
-            }
-
-            // Closing brace for nested blocks
-            if trimmed.hasPrefix("}") && currentIndentLevel > 1 {
-                currentIndentLevel -= 1
-                formattedLines.append(String(repeating: indent, count: currentIndentLevel) + trimmed)
-                continue
-            }
-
-            // Default: preserve with current indentation
-            formattedLines.append(String(repeating: indent, count: currentIndentLevel) + trimmed)
-        }
-
-        let formattedContent = formattedLines.joined(separator: "\n")
-
-        // If nothing changed, return nil
-        if formattedContent == content {
-            return nil
-        }
-
-        // Return a single edit that replaces the entire document
+        // One edit replacing the whole document. The end position is one line
+        // past the last, character 0, which is how LSP spells "to the end"
+        // for a document whose final line may or may not carry a newline.
+        let lineCount = content.split(separator: "\n", omittingEmptySubsequences: false).count
         return [[
             "range": [
                 "start": ["line": 0, "character": 0],
-                "end": ["line": lines.count, "character": 0]
+                "end": ["line": lineCount, "character": 0]
             ],
-            "newText": formattedContent
+            "newText": formatted
         ]]
-    }
-
-    // MARK: - Formatting Helpers
-
-    private func formatFeatureSetHeader(_ header: String) -> String {
-        // Format: (Name: Activity) {
-        var result = header
-
-        // Ensure space after colon
-        if let colonRange = result.range(of: ":") {
-            let afterColon = result.index(after: colonRange.lowerBound)
-            if afterColon < result.endIndex && result[afterColon] != " " {
-                result.insert(" ", at: afterColon)
-            }
-        }
-
-        // Ensure space before {
-        if let braceRange = result.range(of: "{") {
-            let beforeBrace = result.index(before: braceRange.lowerBound)
-            if beforeBrace >= result.startIndex && result[beforeBrace] != " " {
-                result.insert(" ", at: braceRange.lowerBound)
-            }
-        }
-
-        return result
-    }
-
-    private func formatStatement(_ statement: String) -> String {
-        var result = statement
-
-        // Ensure space after > when followed by non-space (but not before .)
-        // Pattern: >X where X is not space, >, or .
-        result = result.replacingOccurrences(
-            of: ">([^\\s>.)])",
-            with: "> $1",
-            options: .regularExpression
-        )
-
-        // Ensure space before < when preceded by non-space
-        // Pattern: X< where X is not space or <
-        result = result.replacingOccurrences(
-            of: "([^\\s<])<",
-            with: "$1 <",
-            options: .regularExpression
-        )
-
-        // Ensure space after closing quote when followed by word character
-        // Pattern: letter"word -> letter" word (only for closing quotes)
-        result = result.replacingOccurrences(
-            of: "([a-zA-Z0-9])\"([a-zA-Z])",
-            with: "$1\" $2",
-            options: .regularExpression
-        )
-
-        // Fix double spaces
-        while result.contains("  ") {
-            result = result.replacingOccurrences(of: "  ", with: " ")
-        }
-
-        // Ensure period at end
-        let trimmed = result.trimmingCharacters(in: .whitespaces)
-        if !trimmed.hasSuffix(".") && trimmed.contains(">") {
-            result = trimmed + "."
-        }
-
-        return result
     }
 }
 

@@ -52,17 +52,21 @@ enum ServiceRegistrationClock {
 /// `createChild(...)` / `createTemplateContext()`, mutating only the child and
 /// reading the parent read-only.
 ///
-/// This contract is enforced in DEBUG builds by `ExclusivityChecker` (see the
-/// type at the bottom of this file and the `exclusivity` field): every mutating
-/// entry point runs inside `withExclusiveMutation { … }`, which traps if a
-/// second flow mutates the same instance concurrently. All the
-/// `nonisolated(unsafe)` fields below share this single mechanism.
+/// Mutation is serialised: every mutating entry point runs inside
+/// `withExclusiveMutation { … }`, which takes this instance's storage lock.
+/// All the `nonisolated(unsafe)` fields below share that one mechanism.
+///
+/// This used to be a DEBUG-only *detector* rather than a lock, resting on the
+/// invariant that exactly one flow drives a context at a time. ARO-0088 ended
+/// that invariant — deferred actions run concurrently and write their results
+/// through to the feature-set context they belong to — so the detector was
+/// replaced by the lock it could only have reported the absence of.
 public actor RuntimeContext: ExecutionContext {
     // MARK: - Properties
 
     // Sendable-safety for all `nonisolated(unsafe)` fields in this type: the
-    // single-driver-per-instance invariant documented on the type above, checked
-    // in DEBUG by `ExclusivityChecker`. Not individually locked by design.
+    // storage lock taken by `withExclusiveMutation`, documented on the type
+    // above. Not individually locked by design — one lock covers the set.
 
     /// Variable storage (now using TypedValue for type preservation)
     nonisolated(unsafe) private var variables: [String: TypedValue] = [:]
@@ -249,17 +253,6 @@ public actor RuntimeContext: ExecutionContext {
     /// Mutable scope depth for while loops (GitLab #131)
     /// When > 0, all bind calls automatically allow rebinding
     nonisolated(unsafe) private var mutableScopeDepth: Int = 0
-
-    #if DEBUG
-    /// DEBUG-only single-driver enforcement (issue #323). Every mutating
-    /// entry point wraps its body in `withExclusiveMutation { … }`, which
-    /// traps via `assertionFailure` if a second flow of control mutates
-    /// *this* instance while the first is still inside its critical section.
-    /// See the `ExclusivityChecker` definition at the bottom of this file
-    /// for the (deliberately narrow) guarantee it provides. Compiled out in
-    /// release builds — zero cost.
-    fileprivate nonisolated let exclusivity = ExclusivityChecker()
-    #endif
 
     // MARK: - Metadata
 
@@ -523,41 +516,71 @@ public actor RuntimeContext: ExecutionContext {
         resolveAnyWithoutDraining(name)
     }
 
-    nonisolated func resolveAnyWithoutDraining(_ name: String) -> (any Sendable)? {
-        // Magic variable: <now> returns current date/time
-        if name == "now" {
+    // MARK: - Magic Variables
+
+    /// What a framework-provided name resolves to, if it is one.
+    enum MagicResolution {
+        /// The name is the framework's to answer — with this value, which may
+        /// itself be nil (a `<contract>` read in an application with no
+        /// contract resolves to nothing rather than to a variable).
+        case resolved((any Sendable)?)
+        /// Not a framework name, or — for `<http-server>` with no contract
+        /// loaded — a framework name that defers to the variable store.
+        case notMagic
+    }
+
+    /// The names the framework answers itself.
+    ///
+    /// The list was written out three times, once per resolve entry point, so
+    /// adding a magic variable meant remembering all three; `resolveAnyRaw` and
+    /// `resolveAnyAsync` only need to know that a name *is* magic, because a
+    /// magic name never holds a future.
+    static let magicNames: Set<String> = [
+        "now", "contract", "Contract", "http-server", "httpServer",
+        "metrics", "application"
+    ]
+
+    /// Resolve a framework-provided name.
+    nonisolated func resolveMagic(_ name: String) -> MagicResolution {
+        switch name {
+        case "now":
             // Through `service(_:)`, not the local dictionary: services are
             // registered on the root context, and a statement scope has none of
             // its own (ARO-0088 §2).
             let dateService = service(DateService.self) ?? DefaultDateService()
-            return dateService.now(timezone: nil)
-        }
+            return .resolved(dateService.now(timezone: nil))
 
-        // Magic variable: <Contract> or <contract> returns OpenAPI contract metadata
-        if name == "contract" || name == "Contract" {
-            return buildContractObject()
-        }
+        case "contract", "Contract":
+            // <Contract> or <contract> returns OpenAPI contract metadata
+            return .resolved(buildContractObject())
 
-        // Magic variable: <http-server> returns Contract.http-server
-        // This allows both <Contract> and <http-server> to work
-        // Falls through to regular variable store if contract is not available
-        // (e.g. in binary mode after `Start the <http-server>` binds a ServerStartResult)
-        if name == "http-server" || name == "httpServer" {
+        case "http-server", "httpServer":
+            // <http-server> returns Contract.http-server, so both <Contract>
+            // and <http-server> work. Falls through to the regular variable
+            // store when no contract is available — e.g. in binary mode after
+            // `Start the <http-server>` binds a ServerStartResult.
             if let httpServer = buildContractObject()?.httpServer {
-                return httpServer
+                return .resolved(httpServer)
             }
-            // Fall through to regular variable lookup below
-        }
+            return .notMagic
 
-        // Magic variable: <metrics> returns current execution metrics
-        if name == "metrics" {
-            return container.metricsCollector.snapshot()
-        }
+        case "metrics":
+            // <metrics> returns current execution metrics
+            return .resolved(container.metricsCollector.snapshot())
 
-        // Magic variable: <application> provides application context (used in Stop/Close actions)
-        if name == "application" {
-            return ["type": "application"] as [String: any Sendable]
+        case "application":
+            // <application> provides application context (Stop/Close actions)
+            return .resolved(["type": "application"] as [String: any Sendable])
+
+        default:
+            return .notMagic
         }
+    }
+
+    nonisolated func resolveAnyWithoutDraining(_ name: String) -> (any Sendable)? {
+        // Names the framework answers itself, before any variable store is
+        // consulted (`<now>`, `<contract>`, `<metrics>`, …).
+        if case .resolved(let value) = resolveMagic(name) { return value }
 
         // Iterative walk without the drain fallback — see `resolveWithoutDraining`
         // for the drain reasoning and `ancestorHolding` for why it is a loop.
@@ -599,9 +622,7 @@ public actor RuntimeContext: ExecutionContext {
     /// Magic variables (e.g. `<now>`, `<contract>`) never produce futures and
     /// fall through to the regular resolveAny path.
     public nonisolated func resolveAnyRaw(_ name: String) -> (any Sendable)? {
-        if name == "now" || name == "contract" || name == "Contract"
-            || name == "http-server" || name == "httpServer"
-            || name == "metrics" || name == "application" {
+        if Self.magicNames.contains(name) {
             return resolveAny(name)
         }
         let (owner, foreignParent) = ancestorHolding(name)
@@ -618,9 +639,7 @@ public actor RuntimeContext: ExecutionContext {
     public nonisolated func resolveAnyAsync(_ name: String) async -> (any Sendable)? {
         // Magic variables short-circuit through the sync path — they don't
         // produce futures.
-        if name == "now" || name == "contract" || name == "Contract"
-            || name == "http-server" || name == "httpServer"
-            || name == "metrics" || name == "application" {
+        if Self.magicNames.contains(name) {
             return resolveAny(name)
         }
         let (owner, foreignParent) = ancestorHolding(name)
@@ -712,12 +731,33 @@ public actor RuntimeContext: ExecutionContext {
     /// Whether `category` was Configure-written in this context or any
     /// ancestor (children read configuration through the parent chain,
     /// like every other resolution).
+    ///
+    /// A loop, not a recursion: this sits on the miss path of `ExtractAction`,
+    /// so it is reached inside recursive user actions — exactly the depth that
+    /// `ancestorHolding` documents as fatal for a per-level stack frame.
     public nonisolated func isConfigured(_ category: String) -> Bool {
-        storageLock.lock()
-        let local = configuredCategories.contains(category)
-        storageLock.unlock()
-        if local { return true }
-        return (parent as? RuntimeContext)?.isConfigured(category) ?? false
+        firstInChain { context in
+            context.storageLock.lock()
+            let local = context.configuredCategories.contains(category)
+            context.storageLock.unlock()
+            return local ? true : nil
+        } ?? false
+    }
+
+    /// The first non-nil answer from this context or a `RuntimeContext`
+    /// ancestor, nearest first.
+    ///
+    /// Iterative for the reason spelled out on `ancestorHolding`: a chain is as
+    /// deep as the program's recursion, and one native frame per level killed a
+    /// recursive program with SIGBUS at ~1300 frames (GitLab #473). Anything
+    /// that reads through the parent chain is written this way.
+    private nonisolated func firstInChain<T>(_ read: (RuntimeContext) -> T?) -> T? {
+        var current: RuntimeContext = self
+        while true {
+            if let found = read(current) { return found }
+            guard let runtimeParent = current.parent as? RuntimeContext else { return nil }
+            current = runtimeParent
+        }
     }
 
     public nonisolated func bind(_ name: String, value: any Sendable, allowRebind: Bool) {
@@ -1503,8 +1543,7 @@ public actor RuntimeContext: ExecutionContext {
     /// Inherited from the parent so a template that `Include`s another keeps the
     /// outer template's escaping unless the inner one sets its own.
     public nonisolated var templateEscaping: TemplateEscaping {
-        if _templateEscaping != .none { return _templateEscaping }
-        return (parent as? RuntimeContext)?.templateEscaping ?? .none
+        firstInChain { $0._templateEscaping != .none ? $0._templateEscaping : nil } ?? .none
     }
 
     /// Sets the escaping mode for this render. Called by the template engine.
@@ -1518,12 +1557,17 @@ public actor RuntimeContext: ExecutionContext {
 
     /// Get the schema registry for typed event extraction
     /// Falls back to parent context if not set locally
+    ///
+    /// Iterative for the reason given on `firstInChain`; a parent that is not a
+    /// `RuntimeContext` answers for itself, as it did when this recursed.
     public nonisolated var schemaRegistry: SchemaRegistry? {
-        if let registry = _schemaRegistry {
-            return registry
+        var current: RuntimeContext = self
+        while true {
+            if let registry = current._schemaRegistry { return registry }
+            guard let parent = current.parent else { return nil }
+            guard let runtimeParent = parent as? RuntimeContext else { return parent.schemaRegistry }
+            current = runtimeParent
         }
-        // Try parent context
-        return parent?.schemaRegistry
     }
 
     /// Set the schema registry (called during application startup)
@@ -1635,28 +1679,6 @@ public actor RuntimeContext: ExecutionContext {
             bind(name, value: array, allowRebind: true)
         }
     }
-
-    /// Check if a variable needs to be teed for multiple consumers
-    ///
-    /// Called by the executor when it detects multiple uses of the same variable.
-    /// Returns a teed version of the stream if needed.
-    ///
-    /// - Parameter name: Variable name
-    /// - Parameter consumers: Number of consumers
-    public nonisolated func teeIfNeeded(_ name: String, consumers: Int) async {
-        guard consumers > 1 else { return }
-
-        guard let value = resolveAny(name) else {
-            return
-        }
-
-        // Only tee lazy streams
-        if let anyStreaming = value as? AnyStreamingValue, !anyStreaming.isMaterialized {
-            // The value is already bound - for multi-consumer scenarios,
-            // the StreamTee will be created on-demand when consumers are created
-            // This is handled by the AROValue.teed() wrapper
-        }
-    }
 }
 
 // MARK: - Convenience Extensions
@@ -1707,19 +1729,6 @@ extension RuntimeContext {
 // MARK: - Single-Driver Exclusivity Enforcement (issue #323)
 
 extension RuntimeContext {
-    /// Run a mutating critical section under the single-driver check.
-    ///
-    /// In `#if DEBUG` this arms `ExclusivityChecker` for the duration of
-    /// `body`, trapping if a *different* flow of control is already mutating
-    /// this same instance. In release it inlines straight through to `body`
-    /// with zero overhead — no lock, no branch beyond the call itself.
-    ///
-    /// Same-thread reentrancy is allowed on purpose: `bind` → `bindTyped`,
-    /// and any other nested mutation on one synchronous call chain, run on a
-    /// single OS thread with no `await` between them, so the checker treats
-    /// re-entry from the owning thread as legitimate. Only a *concurrent*
-    /// entry from another thread — the actual data race the contract forbids
-    /// — trips the assertion.
     @inline(__always)
     /// Serialize access to this context's mutable storage.
     ///
@@ -1747,97 +1756,3 @@ extension RuntimeContext {
     }
 }
 
-#if DEBUG
-/// DEBUG-only detector for concurrent mutation of a single `RuntimeContext`
-/// (issue #323). Not a lock: it does not serialize anything and it does not
-/// make unsafe code safe. It exists purely to convert a violation of the
-/// single-driver invariant — two flows of control mutating the *same*
-/// instance at overlapping times — from silent undefined behavior into an
-/// immediate, loud `assertionFailure` during test runs.
-///
-/// ## Design: concurrency detection, not identity pinning
-///
-/// The obvious implementation ("record the driving thread on first mutation,
-/// trap on any other thread") is *wrong* for this runtime and would fire
-/// constantly. A single feature set's execution legitimately hops OS threads:
-/// action work runs on `ActionTaskExecutor` (GCD pool) and every `await`
-/// resumes on an arbitrary cooperative-pool thread, so serial mutations of
-/// one context routinely happen on different threads over time. Pinning to
-/// one thread identity would misread those legitimate hops as violations.
-///
-/// Instead the checker detects *temporal overlap*. Under a small lock it
-/// records whether a mutation section is currently open and which OS thread
-/// opened it. `enter()`:
-///   - If no section is open: record this thread as owner, open the section.
-///   - If a section is open and owned by *this* thread: it's reentrancy
-///     (e.g. `bind` → `bindTyped`) — bump a depth counter, allow it.
-///   - If a section is open owned by a *different* thread: two flows are
-///     mutating concurrently — `assertionFailure`.
-///
-/// Because `withExclusiveMutation`'s critical section is fully synchronous
-/// (no `await` inside it), the owning thread is stable for the whole
-/// section, so cross-thread overlap can only mean a genuine concurrent
-/// driver — never a legitimate cooperative-pool thread hop.
-///
-/// Sendable-safety: all mutable state (`owner`, `depth`) is read and written
-/// only under `lock` (an `NSLock`) in `enter()` / `leave()`; nothing else
-/// touches it. The class is `@unchecked Sendable` purely because `pthread_t` is
-/// not itself Sendable.
-final class ExclusivityChecker: @unchecked Sendable {
-    private let lock = NSLock()
-    private var owner: pthread_t?
-    private var depth: Int = 0
-
-    init() {}
-
-    func enter(featureSetName: String, executionId: String) {
-        let me = pthread_self()
-        lock.lock()
-        defer { lock.unlock() }
-        if depth == 0 {
-            owner = me
-            depth = 1
-            return
-        }
-        // A section is already open on this instance.
-        if let current = owner, pthread_equal(current, me) != 0 {
-            // Same-thread reentrancy (bind -> bindTyped, nested mutators).
-            depth += 1
-            return
-        }
-        // A different thread is mid-mutation on this same instance: the
-        // single-driver invariant (see RuntimeContext type doc) is broken.
-        assertionFailure("""
-            RuntimeContext single-driver invariant violated (issue #323).
-            Two flows of control are mutating the SAME RuntimeContext \
-            instance concurrently.
-            Feature set: \(featureSetName)
-            Execution id: \(executionId)
-
-            A RuntimeContext instance must be mutated by exactly one flow of \
-            control at a time. Concurrent regions (parallel for-each, \
-            template rendering) must operate on their OWN child context via \
-            createChild(...) / createTemplateContext(), mutating only that \
-            child and reading the parent read-only. Mutating a shared \
-            instance from two tasks is undefined behavior on the underlying \
-            Swift Dictionary / Set / String storage.
-            """)
-    }
-
-    func leave() {
-        let me = pthread_self()
-        lock.lock()
-        defer { lock.unlock() }
-        // Only the owning thread's nesting decrements the depth; a
-        // foreign leave (following a mis-asserted foreign enter) is ignored
-        // so the owner's bookkeeping stays intact.
-        if let current = owner, pthread_equal(current, me) != 0 {
-            depth -= 1
-            if depth <= 0 {
-                depth = 0
-                owner = nil
-            }
-        }
-    }
-}
-#endif

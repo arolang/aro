@@ -23,10 +23,10 @@ Conversations with ARO
 <a href="https://social.uitsmijter.io/@aro" style="color: #888; text-decoration: none;">@aro@social.uitsmijter.io</a>
 </div>
 <div style="font-size: 12pt; color: #888;">
-February 2026
+@ARO_DATE@
 </div>
 <div style="font-size: 11pt; color: #aaa; margin-top: 1em;">
-Version 1.0
+ARO @ARO_VERSION@
 </div>
 </div>
 

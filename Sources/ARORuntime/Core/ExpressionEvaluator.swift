@@ -396,8 +396,24 @@ public struct ExpressionEvaluator: Sendable {
         // (GitLab #558).
         case .in:
             return containsValue(right, left)
+        case .notIn:
+            return !containsValue(right, left)
         case .matches:
             return matchesPattern(left, right)
+
+        // Set containment (ARO-0042 §3.6, GitLab #864).
+        case .subset:
+            return isSubset(left, of: right)
+
+        // Affix tests (GitLab #830 item 5). `where` has dispatched
+        // `starts-with` / `ends-with` since ARO-0018; the guard grammar
+        // could not say them, so a prefix test in a `when` was written as
+        // a `matches "^…"` regex — which escapes wrong the moment the
+        // prefix contains a `.` or a `?`.
+        case .startsWith:
+            return affixText(left).hasPrefix(affixText(right))
+        case .endsWith:
+            return affixText(left).hasSuffix(affixText(right))
 
         // Type operators (handled in type check expression)
         case .is, .isNot:
@@ -750,6 +766,56 @@ public struct ExpressionEvaluator: Sendable {
             return dict[key] != nil
         }
         return false
+    }
+
+    /// `<a> subset of <b>` — is every element of `a` present in `b`?
+    /// (ARO-0042 §3.6, GitLab #864.)
+    ///
+    /// Set semantics, not multiset: `[1, 1]` is a subset of `[1]`, because the
+    /// question is about membership and a duplicate does not make a new
+    /// member. The collection-producing operations of ARO-0042 are multiset,
+    /// and this deliberately is not — "does this list contain everything that
+    /// one does" is the question people ask, and counting duplicates answers a
+    /// different one.
+    ///
+    /// The empty set is a subset of everything, including itself. That is the
+    /// mathematical convention and also the useful one: "the roles this route
+    /// requires" being empty means every caller is allowed.
+    private func isSubset(_ subset: any Sendable, of superset: any Sendable) -> Bool {
+        // Objects: every key of A present in B with an equal value.
+        if let a = subset as? [String: any Sendable] {
+            guard let b = superset as? [String: any Sendable] else { return false }
+            return a.allSatisfy { key, value in
+                guard let other = b[key] else { return false }
+                return areEqual(value, other)
+            }
+        }
+
+        // Strings: every character of A appears somewhere in B.
+        if let a = subset as? String, let b = superset as? String {
+            let characters = Set(b)
+            return a.allSatisfy { characters.contains($0) }
+        }
+
+        // Lists — and a bare scalar as a one-element list, so
+        // `when "admin" subset of <roles>` reads the way it looks.
+        let elements: [any Sendable] = (subset as? [any Sendable]) ?? [subset]
+        guard superset is [any Sendable] || superset is String
+                || superset is [String: any Sendable] else { return false }
+        return elements.allSatisfy { containsValue(superset, $0) }
+    }
+
+    /// Text for an affix test. A `starts with` on a number is a
+    /// reasonable thing to write (`when <code> starts with "4"`), so the
+    /// operand is rendered rather than required to already be a String.
+    private func affixText(_ value: any Sendable) -> String {
+        if let s = value as? String { return s }
+        if let i = value as? Int { return String(i) }
+        if let d = value as? Double {
+            return d == d.rounded() && abs(d) < 1e15 ? String(Int(d)) : String(d)
+        }
+        if let b = value as? Bool { return b ? "true" : "false" }
+        return String(describing: value)
     }
 
     private func matchesPattern(_ value: any Sendable, _ pattern: any Sendable) -> Bool {

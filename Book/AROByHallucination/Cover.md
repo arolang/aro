@@ -10,4 +10,4 @@ The cover word — *hallucination* — is what critics call it when an LLM makes
 
 If you picked this up looking for the definitive list of actions or the specification of the type system, put it back down and pick up the Language Guide. If you picked it up because you want to understand *how* ARO was built, or because you want to build on it the same way — yes, sitting at a laptop, talking to a local model — keep reading.
 
-— The ARO team, April 2026
+— The ARO team, @ARO_DATE@

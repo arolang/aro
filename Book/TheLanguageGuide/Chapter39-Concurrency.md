@@ -425,26 +425,28 @@ Output (example):
 }
 ```
 
-## CrawlPage Event Deduplication
+## Handling an Event Once
 
-When building web crawlers or recursive-fetch workflows with `CrawlPage` events, the runtime automatically deduplicates events by URL. If a URL is emitted more than once (because multiple pages link to the same target), only the first emission triggers the handler — subsequent ones are silently dropped.
+A handler that may be told the same thing twice says so, by naming the payload field that identifies an event: `Handler<dedupe:url>`. The first event carrying a given value runs the handler; later events carrying the same value are skipped.
 
 ```aro
-(Crawl Page: Web Crawler) {
+(Crawl Page: CrawlPage Handler<dedupe:url>) {
     Extract the <url> from the <event: url>.
     Fetch the <page> from <url>.
     Extract the <links> from the <page: links>.
 
-    (* The runtime deduplicates: already-visited URLs are skipped *)
+    (* Already-visited URLs are skipped — the handler declared <dedupe:url> *)
     for each <link> in <links> {
-        Emit a <CrawlPage: event> with <link>.
+        Emit a <CrawlPage: event> with { url: <link>, base: <base> }.
     }
 
     Return an <OK: status> for the <crawl>.
 }
 ```
 
-The deduplication store is bounded to **100 000 URLs** (FIFO eviction) so that very large crawls cannot exhaust memory. If your crawl needs to revisit URLs or requires a larger cap, track visited state explicitly in a repository.
+It combines with state guards — `Handler<status:new;dedupe:url>` — and applies to any event, not just crawls: a webhook that retries, a queue that redelivers, a file watcher that reports the same path twice.
+
+Each handler keeps its own store, bounded to **100 000 identities** (oldest evicted first) so that an endless stream cannot exhaust memory. If your crawl needs to revisit URLs or remember more than that, track visited state explicitly in a repository.
 
 ---
 
@@ -459,7 +461,7 @@ The deduplication store is bounded to **100 000 URLs** (FIFO eviction) so that v
 | Events | `Emit` does not block; handlers run on their own |
 | Shared state | Repositories and published symbols, each operation atomic |
 | Concurrency primitives | None in the language; the runtime has them all |
-| CrawlPage dedup | Automatic, bounded to 100K URLs |
+| `Handler<dedupe:field>` | Opt-in per handler, bounded to 100K identities |
 
 Write your feature sets in the order the story reads. The runtime overlaps what is independent, keeps effects where you put them, and gives you `parallel for each` for the fan-out you want on purpose. `ARO_NO_DEFER=1` turns the overlap off if you need to know whether a bug is order-related. The full specification is ARO-0088.
 

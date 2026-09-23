@@ -21,10 +21,9 @@ You've just spoken your first ARO statement. Let's break it down:
 
 The `=> OK` confirms: the statement executed. The variable `greeting` now exists.
 
-The verb is written bare. You may see `<Set>` with angle brackets in older
-material — including, for now, the REPL's own `:help` — but that spelling was
-removed from the language and fails to parse. Angle brackets are for the
-*result* and the *object*, never the action.
+The verb is written bare. You may still see `<Set>` with angle brackets in old
+material found on the web; that spelling was removed from the language and fails
+to parse. Angle brackets are for the *result* and the *object*, never the action.
 
 ## Seeing the Result
 

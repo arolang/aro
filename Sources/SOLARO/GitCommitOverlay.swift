@@ -616,6 +616,9 @@ struct GitCommitSheet: View {
     }
 
     private func commit() {
+        // Commit what the user sees, not what the debounce has not written
+        // yet (#748).
+        EditorWriteQueue.flushNow()
         let trimmed = model.message
             .trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }

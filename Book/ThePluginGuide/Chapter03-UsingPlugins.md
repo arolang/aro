@@ -105,6 +105,35 @@ Plugin actions, qualifiers, and their metadata are exposed to tooling automatica
 
 `aro build` discovers every plugin under `Plugins/` (and the legacy `plugins/`), compiles each one, and statically links the result into the application binary — including Rust plugins, which are linked through `.a` archives extracted with `llvm-ar` and renamed with `llvm-objcopy` to avoid symbol collisions. The compiled binary is self-contained: there is no next-to-binary `Plugins/` to ship.
 
+That last sentence is true of Swift, C, C++ and Rust plugins, and it is the reason those four are the ones that bake in. A **Python** plugin is different, because a compiled extension is not what ships — a Python plugin needs an interpreter, and an interpreter is not something a linker can fold into your executable the way it folds in an object file.
+
+So by default `aro build` declines, and tells you what the binary would otherwise have depended on:
+
+```
+Error: Python plugin(s) 'markdown' cannot be embedded in a standalone binary.
+  It needs a CPython interpreter and its standard library, which this build
+  resolves from the machine it runs on:
+    interpreter: /usr/bin/python3
+    library:     /usr/lib/libpython3.12.dylib
+    stdlib:      /usr/lib/python3.12
+```
+
+Refusing is the kindest thing it can do. The alternative is a binary that looks standalone, copies cleanly, and dies at startup on a machine whose Python sits somewhere else — a failure that surfaces in front of whoever you gave it to rather than in front of you.
+
+You can build it properly by giving the build a CPython it is able to carry:
+
+```bash
+ARO_STATIC_PYTHON=/opt/cpython-static aro build ./MyApp
+```
+
+The interpreter and the standard library then travel inside the binary, and `--static` means what it always meant.
+
+What counts as a distribution it can carry is narrower than you might expect: it needs a genuine static `libpython<version>.a`, which neither a python.org install nor Homebrew provides. python.org ships a file *called* `libpython3.12.a` that is a symlink to the dynamic library — so it is named like the thing you need and is the thing you are trying to avoid. Use a [python-build-standalone](https://github.com/astral-sh/python-build-standalone) download or CPython configured `--disable-shared`, and the build will tell you if what you pointed it at will not do.
+
+Carrying Python costs about 35 MB, measured against CPython 3.12: 615 files of standard library, with CPython's own test suite, `idlelib`, `tkinter` and `__pycache__` left behind. `site-packages` is left behind too, deliberately — copying whatever happens to be installed on your build machine is how a binary quietly acquires dependencies nobody declared. Your plugin's own `requirements.txt` is honoured explicitly instead.
+
+One case remains genuinely impossible: a plugin that needs a **native wheel**, such as numpy. Those are compiled extensions built for one interpreter, and no static linking folds them in. For those your options are `aro build --dynamic`, `aro run`, or porting the plugin to one of the four languages that do bake in.
+
 ## 3.3 Using Plugin Actions
 
 Plugins provide **custom actions** that work like built-in ARO verbs. Once installed, you use them with natural ARO syntax:

@@ -269,7 +269,7 @@
                 and IntelliJ talk to. A problem the inspector shows is a problem your teammate's editor shows.
             </p>
             <img src="img/solaro/03-inspector.jpg" class="solaro-shot" loading="lazy"
-                 alt="The Solaro inspector pane showing the file header card with parse and LSP status, a selected statement card, watches, and the feature sets list">
+                 alt="The Solaro inspector pane showing the file header card with parse and LSP status, an empty watches card, and the feature sets list for the open file">
             <p class="solaro-caption">The inspector is a stack of cards that follows your selection.</p>
         </section>
 
@@ -289,7 +289,7 @@
                 filter, an event handler and its emitter.
             </p>
             <img src="img/solaro/06-actions-panel.jpg" class="solaro-shot" loading="lazy"
-                 alt="The Actions panel in Solaro's right rail, listing available actions grouped by semantic role with a count of built-in and plugin-provided actions in the header">
+                 alt="The Actions panel in Solaro's right rail, listing actions under the REQUEST role — Clone, Exists, Extract, List, Prompt, Pull, Read, Receive, Request, Retrieve, Select — each with the prepositions it accepts">
             <p class="solaro-caption">Built-ins and plugin actions, grouped by role, draggable onto the canvas.</p>
         </section>
 
@@ -303,9 +303,6 @@
                 how many times it was entered this session, and the mean wall-clock time spent inside it,
                 awaited futures included.
             </p>
-            <img src="img/solaro/07-metrics-panel.jpg" class="solaro-shot" loading="lazy"
-                 alt="The Metrics panel showing a table of feature sets with call counts and average millisecond timings for the current session">
-            <p class="solaro-caption">Call counts and average duration, per feature set, as it runs.</p>
         </section>
 
         <section class="solaro-section">
@@ -323,8 +320,8 @@
                 cloud upload of your source.
             </p>
             <img src="img/solaro/08-ask-panel.jpg" class="solaro-shot" loading="lazy"
-                 alt="The Ask panel in Solaro's right rail showing a chat conversation with the local assistant about the open ARO project">
-            <p class="solaro-caption">Ask, backed by a model running locally unless you point it somewhere else.</p>
+                 alt="The Ask panel in Solaro's right rail showing its first-run setup card, which lists the backends aro ask will try in order before any prompt is sent">
+            <p class="solaro-caption">The first-run card names the backends it will try, in order, before anything is sent.</p>
         </section>
 
         <!-- Tests -->
@@ -339,8 +336,8 @@
                 statement, so the click from red to cause is a single one.
             </p>
             <img src="img/solaro/09-test-results.jpg" class="solaro-shot" loading="lazy"
-                 alt="Solaro showing test results: pass and fail pills on feature set headers in the canvas and the Tests tab listing each test outcome">
-            <p class="solaro-caption">Green T, red T, or a pulsing one while the runtime is inside it.</p>
+                 alt="Solaro after a test run: the console lists five passing tests with their timings and a total, beside the canvas for the Calculator project">
+            <p class="solaro-caption">Five tests, five passes, with the canvas still showing the statements that ran.</p>
         </section>
 
         <!-- Notebooks -->

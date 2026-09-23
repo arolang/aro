@@ -2,8 +2,24 @@
 
 * Proposal: ARO-0016
 * Author: ARO Language Team
-* Status: **Implemented**
+* Status: **Superseded in part** — the `Call` action and the service model still
+  stand; the plugin mechanics below do not. See ARO-0045 and ARO-0087.
 * Requires: ARO-0001, ARO-0006
+
+> **What this document says about plugins never shipped** (GitLab #833). It was
+> marked Implemented while describing the pre-plugin design:
+>
+> | This document | What ships |
+> |---|---|
+> | a lowercase `./plugins/` directory | `Plugins/` |
+> | `aro.yaml` | `plugin.yaml` per plugin |
+> | `aro_plugin_init` returning a service list | `aro_plugin_info` returning metadata JSON |
+> | a three-argument symbol signature | `aro_plugin_execute(action, input)` / `aro_plugin_qualifier(name, input)` / `aro_plugin_free(ptr)` |
+>
+> The package manager and manifest are ARO-0045; the SDKs and the C ABI are
+> ARO-0087. The parts of this proposal that are still current are the `Call`
+> action, the external-service model, and the reasoning about why ARO does not
+> have an FFI of its own.
 
 ## Abstract
 

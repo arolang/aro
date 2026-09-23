@@ -5,6 +5,8 @@
    - intersect: elements in both collections
    - difference: elements in A but not B
    - union: all unique elements from both
+   - symmetric-difference: elements in exactly one of the two
+   - subset of: a predicate — is every element of A in B?
 
    These operations work on Lists, Strings, and Objects.
    ============================================================ *)
@@ -150,6 +152,37 @@
     Filter the <excluded> from <items> where <value> not in <exclude-list>.
     Log "Items where value NOT IN exclude-list:" to the <console>.
     Log <excluded> to the <console>.  (* Output: [{id:1,v:2}, {id:4,v:7}] *)
+
+    Log "" to the <console>.
+
+    (* === SYMMETRIC DIFFERENCE === *)
+    Log "--- Symmetric Difference (what changed) ---" to the <console>.
+
+    Create the <before-roles> with ["read", "write", "admin"].
+    Create the <after-roles> with ["read", "write", "billing"].
+
+    Compute the <changed: symmetric-difference> from <before-roles> with <after-roles>.
+    Log "Changed (in exactly one):" to the <console>.
+    Log <changed> to the <console>.  (* Output: [admin, billing] *)
+
+    Compute the <unchanged: symmetric-difference> from <before-roles> with <before-roles>.
+    Compute the <change-count: length> from <unchanged>.
+    Log "Changes against itself:" to the <console>.
+    Log <change-count> to the <console>.  (* Output: 0 *)
+
+    Log "" to the <console>.
+
+    (* === SUBSET: A PREDICATE, NOT AN OPERATION === *)
+    Log "--- Subset (a predicate) ---" to the <console>.
+
+    Create the <required-roles> with ["read", "write"].
+
+    (* Set semantics: a duplicate on the left does not make a new member,
+       and the empty set is a subset of everything. *)
+    Log "required subset of granted: yes" to the <console>
+        when <required-roles> subset of <after-roles>.
+    Log "granted subset of required: no" to the <console>
+        when not <after-roles> subset of <required-roles>.
 
     Log "" to the <console>.
     Log "=== Demo Complete ===" to the <console>.

@@ -290,7 +290,7 @@ public final class AROFileSystemService: FileSystemService, FileMonitorService, 
     // MARK: - FileSystemService
 
     public func read(path: String) async throws -> String {
-        let url = URL(fileURLWithPath: path)
+        let url = AROWorkingDirectory.url(path)
 
         guard fileManager.fileExists(atPath: path) else {
             throw FileSystemError.fileNotFound(path)
@@ -310,7 +310,7 @@ public final class AROFileSystemService: FileSystemService, FileMonitorService, 
     }
 
     public func write(path: String, content: String) async throws {
-        let url = URL(fileURLWithPath: path)
+        let url = AROWorkingDirectory.url(path)
 
         // Create directory if needed
         let directory = url.deletingLastPathComponent()
@@ -334,7 +334,7 @@ public final class AROFileSystemService: FileSystemService, FileMonitorService, 
 
     /// Read file as Data
     public func readData(path: String) async throws -> Data {
-        let url = URL(fileURLWithPath: path)
+        let url = AROWorkingDirectory.url(path)
 
         guard fileManager.fileExists(atPath: path) else {
             throw FileSystemError.fileNotFound(path)
@@ -361,7 +361,7 @@ public final class AROFileSystemService: FileSystemService, FileMonitorService, 
             AsyncThrowingStream { continuation in
                 Task {
                     do {
-                        let url = URL(fileURLWithPath: path)
+                        let url = AROWorkingDirectory.url(path)
                         let handle = try FileHandle(forReadingFrom: url)
                         defer { try? handle.close() }
 
@@ -387,7 +387,7 @@ public final class AROFileSystemService: FileSystemService, FileMonitorService, 
             AsyncThrowingStream { continuation in
                 Task {
                     do {
-                        let url = URL(fileURLWithPath: path)
+                        let url = AROWorkingDirectory.url(path)
                         let handle = try FileHandle(forReadingFrom: url)
                         defer { try? handle.close() }
 
@@ -479,7 +479,7 @@ public final class AROFileSystemService: FileSystemService, FileMonitorService, 
 
     /// Write Data to file
     public func writeData(path: String, data: Data) async throws {
-        let url = URL(fileURLWithPath: path)
+        let url = AROWorkingDirectory.url(path)
 
         // Create directory if needed
         let directory = url.deletingLastPathComponent()
@@ -497,7 +497,7 @@ public final class AROFileSystemService: FileSystemService, FileMonitorService, 
 
     /// Append to file
     public func append(path: String, content: String) async throws {
-        let url = URL(fileURLWithPath: path)
+        let url = AROWorkingDirectory.url(path)
 
         if fileManager.fileExists(atPath: path) {
             let handle = try FileHandle(forWritingTo: url)
@@ -550,7 +550,7 @@ public final class AROFileSystemService: FileSystemService, FileMonitorService, 
 
     /// Touch a file (create or update modification time)
     public func touch(path: String) async throws {
-        let url = URL(fileURLWithPath: path)
+        let url = AROWorkingDirectory.url(path)
 
         // Create parent directory if needed
         let parentDir = url.deletingLastPathComponent().path
@@ -575,7 +575,7 @@ public final class AROFileSystemService: FileSystemService, FileMonitorService, 
             throw FileSystemError.fileNotFound(path)
         }
 
-        let url = URL(fileURLWithPath: path)
+        let url = AROWorkingDirectory.url(path)
         let attributes = try fileManager.attributesOfItem(atPath: path)
 
         let fileType = attributes[.type] as? FileAttributeType
@@ -623,7 +623,7 @@ public final class AROFileSystemService: FileSystemService, FileMonitorService, 
         }
 
         var results: [FileInfo] = []
-        let directoryURL = URL(fileURLWithPath: directory)
+        let directoryURL = AROWorkingDirectory.url(directory)
 
         if recursive {
             let enumerator = fileManager.enumerator(
@@ -663,7 +663,7 @@ public final class AROFileSystemService: FileSystemService, FileMonitorService, 
         guard fileManager.fileExists(atPath: directory) else {
             throw FileSystemError.directoryNotFound(directory)
         }
-        let directoryURL = URL(fileURLWithPath: directory)
+        let directoryURL = AROWorkingDirectory.url(directory)
 
         if recursive {
             // Recursive streaming: reuse LazyDirectoryList (same iterator used by
@@ -757,7 +757,7 @@ public final class AROFileSystemService: FileSystemService, FileMonitorService, 
         }
 
         // Create destination parent directory if needed
-        let destURL = URL(fileURLWithPath: destination)
+        let destURL = AROWorkingDirectory.url(destination)
         let destDir = destURL.deletingLastPathComponent()
         if !fileManager.fileExists(atPath: destDir.path) {
             try fileManager.createDirectory(at: destDir, withIntermediateDirectories: true)
@@ -782,7 +782,7 @@ public final class AROFileSystemService: FileSystemService, FileMonitorService, 
         }
 
         // Create destination parent directory if needed
-        let destURL = URL(fileURLWithPath: destination)
+        let destURL = AROWorkingDirectory.url(destination)
         let destDir = destURL.deletingLastPathComponent()
         if !fileManager.fileExists(atPath: destDir.path) {
             try fileManager.createDirectory(at: destDir, withIntermediateDirectories: true)
@@ -832,7 +832,7 @@ public final class AROFileSystemService: FileSystemService, FileMonitorService, 
     }
 
     public func watch(path: String) async throws {
-        let url = URL(fileURLWithPath: path)
+        let url = AROWorkingDirectory.url(path)
 
         guard fileManager.fileExists(atPath: path) else {
             throw FileSystemError.pathNotFound(path)
@@ -922,7 +922,7 @@ public final class AROFileSystemService: FileSystemService, @unchecked Sendable 
     // MARK: - FileSystemService
 
     public func read(path: String) async throws -> String {
-        let url = URL(fileURLWithPath: path)
+        let url = AROWorkingDirectory.url(path)
 
         guard fileManager.fileExists(atPath: path) else {
             throw FileSystemError.fileNotFound(path)
@@ -942,7 +942,7 @@ public final class AROFileSystemService: FileSystemService, @unchecked Sendable 
     }
 
     public func write(path: String, content: String) async throws {
-        let url = URL(fileURLWithPath: path)
+        let url = AROWorkingDirectory.url(path)
 
         // Create directory if needed
         let directory = url.deletingLastPathComponent()
@@ -966,7 +966,7 @@ public final class AROFileSystemService: FileSystemService, @unchecked Sendable 
 
     /// Read file as Data
     public func readData(path: String) async throws -> Data {
-        let url = URL(fileURLWithPath: path)
+        let url = AROWorkingDirectory.url(path)
 
         guard fileManager.fileExists(atPath: path) else {
             throw FileSystemError.fileNotFound(path)
@@ -993,7 +993,7 @@ public final class AROFileSystemService: FileSystemService, @unchecked Sendable 
             AsyncThrowingStream { continuation in
                 Task {
                     do {
-                        let url = URL(fileURLWithPath: path)
+                        let url = AROWorkingDirectory.url(path)
                         let handle = try FileHandle(forReadingFrom: url)
                         defer { try? handle.close() }
 
@@ -1019,7 +1019,7 @@ public final class AROFileSystemService: FileSystemService, @unchecked Sendable 
             AsyncThrowingStream { continuation in
                 Task {
                     do {
-                        let url = URL(fileURLWithPath: path)
+                        let url = AROWorkingDirectory.url(path)
                         let handle = try FileHandle(forReadingFrom: url)
                         defer { try? handle.close() }
 
@@ -1111,7 +1111,7 @@ public final class AROFileSystemService: FileSystemService, @unchecked Sendable 
 
     /// Write Data to file
     public func writeData(path: String, data: Data) async throws {
-        let url = URL(fileURLWithPath: path)
+        let url = AROWorkingDirectory.url(path)
 
         // Create directory if needed
         let directory = url.deletingLastPathComponent()
@@ -1129,7 +1129,7 @@ public final class AROFileSystemService: FileSystemService, @unchecked Sendable 
 
     /// Append to file
     public func append(path: String, content: String) async throws {
-        let url = URL(fileURLWithPath: path)
+        let url = AROWorkingDirectory.url(path)
 
         if fileManager.fileExists(atPath: path) {
             let handle = try FileHandle(forWritingTo: url)
@@ -1182,7 +1182,7 @@ public final class AROFileSystemService: FileSystemService, @unchecked Sendable 
 
     /// Touch a file (create or update modification time)
     public func touch(path: String) async throws {
-        let url = URL(fileURLWithPath: path)
+        let url = AROWorkingDirectory.url(path)
 
         // Create parent directory if needed
         let parentDir = url.deletingLastPathComponent().path
@@ -1207,7 +1207,7 @@ public final class AROFileSystemService: FileSystemService, @unchecked Sendable 
             throw FileSystemError.fileNotFound(path)
         }
 
-        let url = URL(fileURLWithPath: path)
+        let url = AROWorkingDirectory.url(path)
         let attributes = try fileManager.attributesOfItem(atPath: path)
 
         let fileType = attributes[.type] as? FileAttributeType
@@ -1243,7 +1243,7 @@ public final class AROFileSystemService: FileSystemService, @unchecked Sendable 
         }
 
         var results: [FileInfo] = []
-        let directoryURL = URL(fileURLWithPath: directory)
+        let directoryURL = AROWorkingDirectory.url(directory)
 
         if recursive {
             let enumerator = fileManager.enumerator(
@@ -1283,7 +1283,7 @@ public final class AROFileSystemService: FileSystemService, @unchecked Sendable 
         guard fileManager.fileExists(atPath: directory) else {
             throw FileSystemError.directoryNotFound(directory)
         }
-        let directoryURL = URL(fileURLWithPath: directory)
+        let directoryURL = AROWorkingDirectory.url(directory)
 
         if recursive {
             // Recursive streaming: reuse LazyDirectoryList (same iterator used by
@@ -1377,7 +1377,7 @@ public final class AROFileSystemService: FileSystemService, @unchecked Sendable 
         }
 
         // Create destination parent directory if needed
-        let destURL = URL(fileURLWithPath: destination)
+        let destURL = AROWorkingDirectory.url(destination)
         let destDir = destURL.deletingLastPathComponent()
         if !fileManager.fileExists(atPath: destDir.path) {
             try fileManager.createDirectory(at: destDir, withIntermediateDirectories: true)
@@ -1402,7 +1402,7 @@ public final class AROFileSystemService: FileSystemService, @unchecked Sendable 
         }
 
         // Create destination parent directory if needed
-        let destURL = URL(fileURLWithPath: destination)
+        let destURL = AROWorkingDirectory.url(destination)
         let destDir = destURL.deletingLastPathComponent()
         if !fileManager.fileExists(atPath: destDir.path) {
             try fileManager.createDirectory(at: destDir, withIntermediateDirectories: true)

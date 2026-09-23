@@ -82,6 +82,16 @@ public struct FeatureSet: ASTNode {
     public let userActionTakesField: String?
     /// Optional type annotation for the `takes` field (e.g. "Integer").
     public let userActionTakesType: String?
+    /// Positional command-line arguments declared by an `Application-Start`
+    /// header (ARO-0047 §Positional Arguments, GitLab #857):
+    ///
+    /// ```aro
+    /// (Application-Start: Crawler takes <url> <depth>) { … }
+    /// ```
+    ///
+    /// Each name binds the positional at the same index, readable as
+    /// `<parameter: url>`. Empty for every other feature set.
+    public let positionalParameters: [String]
     public let span: SourceSpan
 
     public init(
@@ -91,6 +101,7 @@ public struct FeatureSet: ASTNode {
         whenCondition: (any Expression)? = nil,
         userActionTakesField: String? = nil,
         userActionTakesType: String? = nil,
+        positionalParameters: [String] = [],
         span: SourceSpan
     ) {
         self.name = name
@@ -99,6 +110,7 @@ public struct FeatureSet: ASTNode {
         self.whenCondition = whenCondition
         self.userActionTakesField = userActionTakesField
         self.userActionTakesType = userActionTakesType
+        self.positionalParameters = positionalParameters
         self.span = span
     }
 
@@ -129,10 +141,21 @@ public protocol Statement: ASTNode {
     /// concrete node's implementation is dynamically dispatched even when
     /// the value is typed as `Statement`.
     func accept<V: StatementVisitor>(_ visitor: V) -> V.Result
+
+    /// The word this statement is called by in user-visible output — the
+    /// node cards and pairing keys of `aro diff --graph`, for instance.
+    ///
+    /// A requirement rather than something derived from the Swift type name:
+    /// the graph diff used to spell it `String(describing: type(of:))` minus
+    /// the word "Statement", which made a rename of an AST type a silent
+    /// change to what the tool prints.
+    var displayVerb: String { get }
 }
 
 /// A pipeline statement chains actions with |> operator (ARO-0067)
 public struct PipelineStatement: Statement {
+    public var displayVerb: String { "Pipeline" }
+
     public let stages: [AROStatement]
     public let span: SourceSpan
 
@@ -158,6 +181,9 @@ public struct PipelineStatement: Statement {
 /// - `rangeModifiers`: Range/set operation clauses (to, with)
 /// - `statementGuard`: Optional condition for guarded execution
 public struct AROStatement: Statement {
+    /// The verb the author wrote.
+    public var displayVerb: String { action.verb }
+
     // MARK: - Required Fields
     public let action: Action
     public let result: QualifiedNoun
@@ -340,18 +366,37 @@ public struct AROStatement: Statement {
 
 /// A publish statement for exporting variables
 public struct PublishStatement: Statement {
+    public var displayVerb: String { "Publish" }
+
     public let externalName: String
     public let internalVariable: String
+    /// Optional `when` guard, the same one every action statement carries
+    /// (GitLab #830 item 14).
+    ///
+    /// Publishing is an effect like any other, and it is the one effect
+    /// that had no way to say "only if". The workaround the books taught
+    /// was to publish unconditionally and have every reader guard, which
+    /// puts the condition in the wrong place and repeats it once per
+    /// reader.
+    public let statementGuard: StatementGuard
     public let span: SourceSpan
-    
-    public init(externalName: String, internalVariable: String, span: SourceSpan) {
+
+    public init(externalName: String, internalVariable: String,
+                statementGuard: StatementGuard = .none, span: SourceSpan) {
         self.externalName = externalName
         self.internalVariable = internalVariable
+        self.statementGuard = statementGuard
         self.span = span
     }
-    
+
+    /// The guard condition, for callers that only want the expression.
+    public var whenCondition: (any Expression)? { statementGuard.condition }
+
     public var description: String {
-        "Publish as <\(externalName)> <\(internalVariable)>."
+        if let when = statementGuard.condition {
+            return "Publish as <\(externalName)> <\(internalVariable)> when \(when)."
+        }
+        return "Publish as <\(externalName)> <\(internalVariable)>."
     }
     
     public func accept<V: ASTVisitor>(_ visitor: V) throws -> V.Result {
@@ -407,6 +452,15 @@ public enum WhereOperator: String, Sendable, Equatable, CustomStringConvertible 
     case greaterEqual = ">="
     case contains = "contains"
     case matches = "matches"
+    /// `where <name> starts with "ARO-"`.
+    ///
+    /// The runtime has evaluated `starts-with` / `ends-with` since
+    /// ARO-0018 shipped; only the grammar to write them was missing, so
+    /// the books taught a `matches "^ARO-"` regex for a prefix test
+    /// (GitLab #830 item 5). The raw values are the strings
+    /// `WhereConditionEvaluator` already dispatches on.
+    case startsWith = "starts-with"
+    case endsWith = "ends-with"
     case `in` = "in"          // ARO-0042: membership test
     case notIn = "not in"     // ARO-0042: negative membership test
     // Temporal comparison (Book ch. 42 §42.8, GitLab #516) — the
@@ -504,6 +558,18 @@ public indirect enum WhereCondition: Sendable, CustomStringConvertible {
 
 // MARK: - By Clause (ARO-0037)
 
+/// The direction of a trailing `ascending` / `descending` on a `by` clause.
+///
+/// The raw values are the words the author writes and the words the runtime
+/// binds into `_by_order_`, so the enum is a name for the two strings that
+/// were already the only legal ones — not a new encoding.
+public enum SortOrder: String, Sendable, CaseIterable, CustomStringConvertible {
+    case ascending
+    case descending
+
+    public var description: String { rawValue }
+}
+
 /// A by clause for regex-based splitting or field-based grouping
 ///
 /// Supports two forms:
@@ -520,8 +586,8 @@ public struct ByClause: Sendable, CustomStringConvertible {
     /// just a fallback / display value.
     public let variableName: String?
     /// Trailing sort order after the by target — `by <score> descending`
-    /// (ARO-0002 §Ordering, GitLab #491). "ascending" or "descending".
-    public let order: String?
+    /// (ARO-0002 §Ordering, GitLab #491).
+    public let order: SortOrder?
     public let span: SourceSpan
 
     public init(pattern: String,
@@ -529,7 +595,7 @@ public struct ByClause: Sendable, CustomStringConvertible {
                 span: SourceSpan,
                 isFieldName: Bool = false,
                 variableName: String? = nil,
-                order: String? = nil) {
+                order: SortOrder? = nil) {
         self.pattern = pattern
         self.flags = flags
         self.isFieldName = isFieldName
@@ -768,6 +834,8 @@ public enum RequireSource: Sendable, Equatable, CustomStringConvertible {
 
 /// Statement for declaring external dependencies: <Require> the <variable> from the <source>.
 public struct RequireStatement: Statement {
+    public var displayVerb: String { "Require" }
+
     public let variableName: String
     public let source: RequireSource
     public let span: SourceSpan
@@ -838,6 +906,8 @@ public struct CaseClause: Sendable, CustomStringConvertible {
 /// shares one condition (Book ch. 42 §42.8, GitLab #516) — the same
 /// meaning, spelled once instead of once per line.
 public struct WhenStatement: Statement {
+    public var displayVerb: String { "When" }
+
     public let condition: any Expression
     public let body: [Statement]
     public let span: SourceSpan
@@ -858,6 +928,8 @@ public struct WhenStatement: Statement {
 }
 
 public struct MatchStatement: Statement {
+    public var displayVerb: String { "Match" }
+
     public let subject: QualifiedNoun
     public let cases: [CaseClause]
     public let otherwise: [Statement]?
@@ -893,6 +965,8 @@ public struct MatchStatement: Statement {
 /// a general expression (`[1, 2, 3]`, `(<a> + <b>)`, `<order>.lines`) — GitLab #519.
 /// Exactly one of `collection` / `collectionExpression` is non-nil.
 public struct ForEachLoop: Statement {
+    public var displayVerb: String { "ForEachLoop" }
+
     public let itemVariable: String
     public let indexVariable: String?
 
@@ -989,7 +1063,15 @@ public struct ForEachLoop: Statement {
 // MARK: - Error Statement
 
 /// Range-based for loop: for <var> from <low> to <high> { ... }
-public final class RangeLoop: Statement, @unchecked Sendable {
+///
+/// A struct, like every other statement. It was a `final class` marked
+/// `@unchecked Sendable`, which promised the compiler something it could
+/// have checked itself: every stored property is a `let` holding `Sendable`
+/// values, so neither the reference type nor the escape hatch bought
+/// anything.
+public struct RangeLoop: Statement {
+    public var displayVerb: String { "RangeLoop" }
+
     public let variable: String
     public let from: any Expression
     public let to: any Expression
@@ -1018,6 +1100,8 @@ public final class RangeLoop: Statement, @unchecked Sendable {
 /// allowing downstream consumers to see where errors occurred without discarding
 /// the surrounding valid AST nodes.
 public struct ErrorStatement: Statement {
+    public var displayVerb: String { "Error" }
+
     /// The error message that caused this node to be created
     public let message: String
     /// The tokens that were skipped during synchronization
@@ -1055,6 +1139,8 @@ public struct ErrorStatement: Statement {
 /// }
 /// ```
 public struct WhileLoop: Statement {
+    public var displayVerb: String { "WhileLoop" }
+
     public let condition: any Expression
     public let body: [Statement]
     public let span: SourceSpan
@@ -1076,6 +1162,8 @@ public struct WhileLoop: Statement {
 
 /// A `break` statement that exits the innermost while loop.
 public struct BreakStatement: Statement {
+    public var displayVerb: String { "Break" }
+
     public let span: SourceSpan
 
     public init(span: SourceSpan) {
@@ -1135,6 +1223,58 @@ public enum ActionSemanticRole: String, Sendable, CaseIterable {
 
 // MARK: - Qualified Noun
 
+/// What the text after the colon in `<noun: …>` turned out to be.
+///
+/// The four cases are the four the parser has always distinguished; they
+/// were just re-derived by scanning the raw string for `|` and `<` on every
+/// read of `specifiers`. Classifying once, at construction, puts the decision
+/// in one place and makes it something a reader can see in the type.
+public enum Qualifier: Sendable, Equatable {
+    /// No qualifier was written.
+    case absent
+    /// A quoted string literal, e.g. `<file: "data.json">`. Opaque: never a
+    /// property path, so the `.json` is not a field access.
+    case literal(String)
+    /// A chain, e.g. `stats.sort|list.take`. Kept whole so the runtime can
+    /// hand it to `resolveChain`.
+    case chain(String)
+    /// A generic type, e.g. `List<User>`. Kept whole for the same reason a
+    /// chain is: the dots inside it are not path separators.
+    case generic(String)
+    /// A dot-separated property path, e.g. `customer.address.city`.
+    case path([String])
+
+    /// Classifies the raw annotation exactly as `specifiers` used to, in the
+    /// same order: a quoted literal first, then a chain, then a generic, then
+    /// a property path.
+    public init(annotation: String?, isLiteral: Bool) {
+        guard let annotation else {
+            self = .absent
+            return
+        }
+        if isLiteral {
+            self = .literal(annotation)
+        } else if annotation.contains("|") {
+            self = .chain(annotation)
+        } else if annotation.contains("<") {
+            self = .generic(annotation)
+        } else {
+            self = .path(annotation.split(separator: ".").map(String.init))
+        }
+    }
+
+    /// The qualifier as the flat array the rest of the tree consumes: empty
+    /// when absent, a single opaque element for a literal, chain or generic,
+    /// and the split components for a property path.
+    public var specifiers: [String] {
+        switch self {
+        case .absent: return []
+        case .literal(let text), .chain(let text), .generic(let text): return [text]
+        case .path(let components): return components
+        }
+    }
+}
+
 /// A noun with optional type annotation (ARO-0006)
 ///
 /// Examples:
@@ -1165,27 +1305,20 @@ public struct QualifiedNoun: Sendable, Equatable, CustomStringConvertible {
     /// `<file: "data.json">` resolves to the path `data`.
     public let isLiteralQualifier: Bool
 
-    // Specifiers are parsed from typeAnnotation as dot-separated property path
+    /// What the qualifier is, decided once when the noun is built.
+    public let qualifier: Qualifier
+
+    /// The qualifier as a flat array — a property path split on dots, a
+    /// literal, chain or generic kept whole, nothing at all when absent.
     public var specifiers: [String] {
-        guard let type = typeAnnotation else { return [] }
-        // A quoted string literal is an opaque value — never a property path.
-        if isLiteralQualifier {
-            return [type]
-        }
-        // Qualifier chains (e.g., "stats.sort|list.take") are returned as a single element
-        // so that the runtime can detect and handle them via resolveChain.
-        if type.contains("|") {
-            return [type]
-        }
-        // If it contains < it's a generic type like List<User>, return as single element
-        if type.contains("<") {
-            return [type]
-        }
-        // Split by dots for property path syntax (e.g., "customer.address.city")
-        return type.split(separator: ".").map(String.init)
+        qualifier.specifiers
     }
 
     /// Whether this noun has a chained qualifier annotation (contains |)
+    ///
+    /// Reads the raw annotation rather than `qualifier`, because a quoted
+    /// literal that happens to contain `|` answers `true` here and is still
+    /// opaque to `specifiers`. Folding the two would change that.
     public var isQualifierChain: Bool {
         typeAnnotation?.contains("|") == true
     }
@@ -1209,15 +1342,18 @@ public struct QualifiedNoun: Sendable, Equatable, CustomStringConvertible {
         self.span = span
         self.asType = asType
         self.isLiteralQualifier = isLiteralQualifier
+        self.qualifier = Qualifier(annotation: typeAnnotation, isLiteral: isLiteralQualifier)
     }
 
     /// Initializer for when you have a specifiers array (joins with dots)
     public init(base: String, specifiers: [String], span: SourceSpan) {
+        let annotation = specifiers.isEmpty ? nil : specifiers.joined(separator: ".")
         self.base = base
-        self.typeAnnotation = specifiers.isEmpty ? nil : specifiers.joined(separator: ".")
+        self.typeAnnotation = annotation
         self.span = span
         self.asType = nil
         self.isLiteralQualifier = false
+        self.qualifier = Qualifier(annotation: annotation, isLiteral: false)
     }
 
     /// The full qualified name
@@ -1459,6 +1595,22 @@ public enum BinaryOperator: String, Sendable, CaseIterable {
     /// the same code.
     case `in` = "in"
 
+    /// `when <tag> not in <banned>` — the negation of `in`.
+    ///
+    /// `where` has had it since ARO-0042; the guard grammar had not, so a
+    /// negative membership test in a `when` had to be written as a
+    /// separate `Validate` statement (GitLab #830 item 5).
+    case notIn = "not in"
+
+    /// `when <path> starts with "/api"` / `when <name> ends with ".aro"`.
+    ///
+    /// Two words, neither of them a lexer keyword — `<starts>` and
+    /// `<ends>` are names people write, and reserving them would break
+    /// those the way GitLab #497 describes. Position disambiguates: after
+    /// a complete expression, `starts`/`ends` can only be an operator.
+    case startsWith = "starts with"
+    case endsWith = "ends with"
+
     // Logical
     case and = "and"
     case or = "or"
@@ -1474,13 +1626,22 @@ public enum BinaryOperator: String, Sendable, CaseIterable {
     // Collection
     case contains = "contains"
     case matches = "matches"
+    /// Set containment: `when <required-roles> subset of <user-roles>`.
+    ///
+    /// A *predicate*, so it belongs here with the condition operators rather
+    /// than in ARO-0042's qualifier table, which holds the operations that
+    /// produce a collection (GitLab #864). Written as an intersect plus a
+    /// length comparison until this existed, which is two statements and a
+    /// subtle one — `length(intersect) == length(required)` is only the same
+    /// question when the required side has no duplicates.
+    case subset = "subset of"
 
     /// True for comparison/equality operators (==, !=, <, >, <=, >=, is, is not, contains, matches)
     public var isComparison: Bool {
         switch self {
         case .equal, .notEqual, .lessThan, .greaterThan,
              .lessEqual, .greaterEqual, .is, .isNot,
-             .contains, .matches:
+             .contains, .matches, .subset:
             return true
         default:
             return false
@@ -2019,299 +2180,5 @@ public extension ASTVisitor where Result == Void {
                 try expr.accept(self)
             }
         }
-    }
-}
-
-// MARK: - AST Pretty Printer
-
-/// Prints the AST in a readable format
-public struct ASTPrinter: ASTVisitor {
-    public typealias Result = String
-    
-    private var indent: Int = 0
-    
-    public init() {}
-    
-    private func indentation() -> String {
-        String(repeating: "  ", count: indent)
-    }
-    
-    public func visit(_ node: Program) -> String {
-        var result = "Program\n"
-        var printer = self
-        printer.indent += 1
-        for importDecl in node.imports {
-            result += (try? importDecl.accept(printer)) ?? ""
-        }
-        for featureSet in node.featureSets {
-            result += (try? featureSet.accept(printer)) ?? ""
-        }
-        return result
-    }
-
-    public func visit(_ node: ImportDeclaration) -> String {
-        "\(indentation())Import: \(node.path)\n"
-    }
-
-    public func visit(_ node: FeatureSet) -> String {
-        var result = "\(indentation())FeatureSet: \(node.name)\n"
-        result += "\(indentation())  BusinessActivity: \(node.businessActivity)\n"
-        
-        var printer = self
-        printer.indent += 1
-        for statement in node.statements {
-            result += (try? statement.accept(printer)) ?? ""
-        }
-        return result
-    }
-    
-    public func visit(_ node: AROStatement) -> String {
-        var result = "\(indentation())AROStatement\n"
-        result += "\(indentation())  Action: \(node.action.verb) [\(node.action.semanticRole)]\n"
-        result += "\(indentation())  Result: \(node.result.fullName)\n"
-        result += "\(indentation())  Object: \(node.object.preposition.rawValue) \(node.object.noun.fullName)\n"
-        return result
-    }
-    
-    public func visit(_ node: PublishStatement) -> String {
-        var result = "\(indentation())PublishStatement\n"
-        result += "\(indentation())  External: \(node.externalName)\n"
-        result += "\(indentation())  Internal: \(node.internalVariable)\n"
-        return result
-    }
-
-    public func visit(_ node: RequireStatement) -> String {
-        var result = "\(indentation())RequireStatement\n"
-        result += "\(indentation())  Variable: \(node.variableName)\n"
-        result += "\(indentation())  Source: \(node.source)\n"
-        return result
-    }
-
-    public func visit(_ node: WhenStatement) -> String {
-        var result = "\(indentation())WhenStatement\n"
-        result += "\(indentation())  Condition: \(node.condition)\n"
-        result += "\(indentation())  Body: \(node.body.count) statements\n"
-        return result
-    }
-
-    public func visit(_ node: MatchStatement) -> String {
-        var result = "\(indentation())MatchStatement\n"
-        result += "\(indentation())  Subject: <\(node.subject.fullName)>\n"
-        var printer = self
-        printer.indent += 1
-        for caseClause in node.cases {
-            result += "\(printer.indentation())Case: \(caseClause.pattern)\n"
-            if let guard_ = caseClause.guardCondition {
-                result += "\(printer.indentation())  Guard: \(guard_)\n"
-            }
-            var bodyPrinter = printer
-            bodyPrinter.indent += 1
-            for statement in caseClause.body {
-                result += (try? statement.accept(bodyPrinter)) ?? ""
-            }
-        }
-        if let otherwise = node.otherwise {
-            result += "\(printer.indentation())Otherwise:\n"
-            var otherwisePrinter = printer
-            otherwisePrinter.indent += 1
-            for statement in otherwise {
-                result += (try? statement.accept(otherwisePrinter)) ?? ""
-            }
-        }
-        return result
-    }
-
-    public func visit(_ node: ForEachLoop) -> String {
-        var result = "\(indentation())ForEachLoop\n"
-        result += "\(indentation())  Item: <\(node.itemVariable)>\n"
-        if let index = node.indexVariable {
-            result += "\(indentation())  Index: <\(index)>\n"
-        }
-        result += "\(indentation())  Collection: \(node.collectionLabel)\n"
-        result += "\(indentation())  Parallel: \(node.isParallel)\n"
-        if let concurrency = node.concurrency {
-            result += "\(indentation())  Concurrency: \(concurrency)\n"
-        }
-        if let filter = node.filter {
-            result += "\(indentation())  Filter: \(filter)\n"
-        }
-        var printer = self
-        printer.indent += 1
-        result += "\(indentation())  Body:\n"
-        for statement in node.body {
-            result += (try? statement.accept(printer)) ?? ""
-        }
-        return result
-    }
-
-    public func visit(_ node: WhileLoop) -> String {
-        var result = "\(indentation())WhileLoop\n"
-        result += "\(indentation())  Condition: \(node.condition)\n"
-        var printer = self
-        printer.indent += 1
-        result += "\(indentation())  Body:\n"
-        for statement in node.body {
-            result += (try? statement.accept(printer)) ?? ""
-        }
-        return result
-    }
-
-    public func visit(_ node: BreakStatement) -> String {
-        return "\(indentation())BreakStatement\n"
-    }
-
-    public func visit(_ node: RangeLoop) -> String {
-        var result = "\(indentation())RangeLoop\n"
-        result += "\(indentation())  Variable: <\(node.variable)>\n"
-        result += "\(indentation())  From: \(node.from.description)\n"
-        result += "\(indentation())  To: \(node.to.description)\n"
-        var printer = self
-        printer.indent += 1
-        result += "\(indentation())  Body:\n"
-        for statement in node.body {
-            result += (try? statement.accept(printer)) ?? ""
-        }
-        return result
-    }
-
-    public func visit(_ node: PipelineStatement) -> String {
-        var result = "\(indentation())PipelineStatement\n"
-        result += "\(indentation())  Stages: \(node.stages.count)\n"
-
-        var printer = self
-        printer.indent += 1
-        for (index, stage) in node.stages.enumerated() {
-            result += "\(printer.indentation())Stage \(index + 1):\n"
-            var stagePrinter = printer
-            stagePrinter.indent += 1
-            result += (try? stage.accept(stagePrinter)) ?? ""
-        }
-
-        return result
-    }
-
-    public func visit(_ node: ErrorStatement) -> String {
-        "\(indentation())ErrorStatement: \(node.message)\n"
-    }
-
-    // Expression visitors
-    public func visit(_ node: LiteralExpression) -> String {
-        "\(indentation())Literal: \(node.value)\n"
-    }
-
-    public func visit(_ node: ArrayLiteralExpression) -> String {
-        var result = "\(indentation())Array[\(node.elements.count)]\n"
-        var printer = self
-        printer.indent += 1
-        for element in node.elements {
-            result += (try? element.accept(printer)) ?? ""
-        }
-        return result
-    }
-
-    public func visit(_ node: MapLiteralExpression) -> String {
-        var result = "\(indentation())Map{\(node.entries.count)}\n"
-        var printer = self
-        printer.indent += 1
-        for entry in node.entries {
-            result += "\(printer.indentation())\(entry.key):\n"
-            printer.indent += 1
-            result += (try? entry.value.accept(printer)) ?? ""
-            printer.indent -= 1
-        }
-        return result
-    }
-
-    public func visit(_ node: VariableRefExpression) -> String {
-        "\(indentation())VarRef: <\(node.noun.fullName)>\n"
-    }
-
-    public func visit(_ node: BinaryExpression) -> String {
-        var result = "\(indentation())Binary: \(node.op.rawValue)\n"
-        var printer = self
-        printer.indent += 1
-        result += (try? node.left.accept(printer)) ?? ""
-        result += (try? node.right.accept(printer)) ?? ""
-        return result
-    }
-
-    public func visit(_ node: UnaryExpression) -> String {
-        var result = "\(indentation())Unary: \(node.op.rawValue)\n"
-        var printer = self
-        printer.indent += 1
-        result += (try? node.operand.accept(printer)) ?? ""
-        return result
-    }
-
-    public func visit(_ node: MemberAccessExpression) -> String {
-        var result = "\(indentation())MemberAccess: .\(node.member)\n"
-        var printer = self
-        printer.indent += 1
-        result += (try? node.base.accept(printer)) ?? ""
-        return result
-    }
-
-    public func visit(_ node: SubscriptExpression) -> String {
-        var result = "\(indentation())Subscript\n"
-        var printer = self
-        printer.indent += 1
-        result += "\(printer.indentation())base:\n"
-        printer.indent += 1
-        result += (try? node.base.accept(printer)) ?? ""
-        printer.indent -= 1
-        result += "\(printer.indentation())index:\n"
-        printer.indent += 1
-        result += (try? node.index.accept(printer)) ?? ""
-        return result
-    }
-
-    public func visit(_ node: GroupedExpression) -> String {
-        var result = "\(indentation())Grouped\n"
-        var printer = self
-        printer.indent += 1
-        result += (try? node.expression.accept(printer)) ?? ""
-        return result
-    }
-
-    public func visit(_ node: ExistenceExpression) -> String {
-        var result = "\(indentation())Exists\n"
-        var printer = self
-        printer.indent += 1
-        result += (try? node.expression.accept(printer)) ?? ""
-        return result
-    }
-
-    public func visit(_ node: TypeCheckExpression) -> String {
-        var result = "\(indentation())TypeCheck: \(node.typeName)\n"
-        var printer = self
-        printer.indent += 1
-        result += (try? node.expression.accept(printer)) ?? ""
-        return result
-    }
-
-    public func visit(_ node: EmptinessCheckExpression) -> String {
-        var result = "\(indentation())EmptinessCheck\(node.negated ? " (not)" : "")\n"
-        var printer = self
-        printer.indent += 1
-        result += (try? node.expression.accept(printer)) ?? ""
-        return result
-    }
-
-    public func visit(_ node: InterpolatedStringExpression) -> String {
-        var result = "\(indentation())InterpolatedString[\(node.parts.count) parts]\n"
-        var printer = self
-        printer.indent += 1
-        for part in node.parts {
-            switch part {
-            case .literal(let s):
-                result += "\(printer.indentation())literal: \"\(s)\"\n"
-            case .interpolation(let expr):
-                result += "\(printer.indentation())interpolation:\n"
-                printer.indent += 1
-                result += (try? expr.accept(printer)) ?? ""
-                printer.indent -= 1
-            }
-        }
-        return result
     }
 }

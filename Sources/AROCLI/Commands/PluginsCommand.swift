@@ -403,9 +403,10 @@ struct CheckPlugins: ParsableCommand {
             if !plugins.isEmpty {
                 print("")
                 print("Plugin details:")
+                let lockedPlugins = try pm.lockFile.load()
                 for plugin in plugins {
                     let constraint = plugin.manifest.aroVersion ?? "(any)"
-                    let lock = pm.lockFile.load().entry(for: plugin.manifest.name)
+                    let lock = lockedPlugins.entry(for: plugin.manifest.name)
                     let commit = lock?.commit.map { String($0.prefix(7)) } ?? "not locked"
                     print("   \(plugin.manifest.name) v\(plugin.manifest.version)")
                     print("     aro-version: \(constraint)")
@@ -823,7 +824,7 @@ struct DocsPlugins: ParsableCommand {
 
         // Generate documentation
         let doc = html
-            ? generateHTML(metadata: metadata, info: pluginInfo)
+            ? Self.generateHTML(metadata: metadata, info: pluginInfo)
             : generateMarkdown(metadata: metadata, info: pluginInfo)
 
         if let outputPath = output {
@@ -837,7 +838,7 @@ struct DocsPlugins: ParsableCommand {
 
     // MARK: - Manifest Parsing (lightweight, no Yams dependency in CLI layer)
 
-    private struct BasicManifest {
+    struct BasicManifest {
         var name: String
         var version: String
         var description: String?
@@ -847,13 +848,13 @@ struct DocsPlugins: ParsableCommand {
         var provides: [BasicProvide] = []
     }
 
-    private struct BasicProvide {
+    struct BasicProvide {
         var type: String
         var path: String
         var handler: String?
     }
 
-    private struct PluginDocInfo {
+    struct PluginDocInfo {
         var actions: [ActionDoc] = []
         var qualifiers: [QualifierDoc] = []
         var services: [ServiceDoc] = []
@@ -861,7 +862,7 @@ struct DocsPlugins: ParsableCommand {
         var events: [String] = []
     }
 
-    private struct ActionDoc {
+    struct ActionDoc {
         var name: String
         var verbs: [String]
         var role: String?
@@ -870,19 +871,19 @@ struct DocsPlugins: ParsableCommand {
         var since: String?
     }
 
-    private struct QualifierDoc {
+    struct QualifierDoc {
         var name: String
         var inputTypes: [String]
         var description: String?
         var acceptsParameters: Bool
     }
 
-    private struct ServiceDoc {
+    struct ServiceDoc {
         var name: String
         var methods: [String]
     }
 
-    private struct SystemObjectDoc {
+    struct SystemObjectDoc {
         var identifier: String
         var capabilities: [String]
         var description: String?
@@ -1112,14 +1113,24 @@ struct DocsPlugins: ParsableCommand {
 
     // MARK: - HTML Generation
 
-    private func generateHTML(metadata: BasicManifest, info: PluginDocInfo) -> String {
-        let handle = metadata.handle.map { " (<code>\($0)</code>)" } ?? ""
+    /// Render the plugin's metadata as a standalone HTML page.
+    ///
+    /// Every value that comes from the plugin is escaped on the way in. A
+    /// plugin's metadata is whatever a third party put in its `plugin.yaml` and
+    /// returned from its `aro_plugin_info()`; only the `description` fields used
+    /// to be escaped, so an action named `<script>…` or a verb carrying a quote
+    /// was injected verbatim into the page the user then opened in a browser
+    /// (GitLab #741). `escaped` is short precisely so that escaping is the
+    /// path of least resistance at every interpolation below.
+    static func generateHTML(metadata: BasicManifest, info: PluginDocInfo) -> String {
+        let escaped = htmlEscape
+        let handle = metadata.handle.map { " (<code>\(escaped($0))</code>)" } ?? ""
         var html = """
             <!DOCTYPE html>
             <html lang="en">
             <head>
               <meta charset="UTF-8">
-              <title>\(metadata.name) — ARO Plugin Documentation</title>
+              <title>\(escaped(metadata.name)) — ARO Plugin Documentation</title>
               <style>
                 body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
                        max-width: 900px; margin: 2rem auto; padding: 0 1.5rem; line-height: 1.6; }
@@ -1137,49 +1148,50 @@ struct DocsPlugins: ParsableCommand {
               </style>
             </head>
             <body>
-            <h1>\(metadata.name)\(handle)</h1>
+            <h1>\(escaped(metadata.name))\(handle)</h1>
             <p class="meta">
-              <strong>Version:</strong> \(metadata.version)
+              <strong>Version:</strong> \(escaped(metadata.version))
             """
-        if let author = metadata.author { html += "  &nbsp;·&nbsp; <strong>Author:</strong> \(author)\n" }
-        if let license = metadata.license { html += "  &nbsp;·&nbsp; <strong>License:</strong> \(license)\n" }
+        if let author = metadata.author { html += "  &nbsp;·&nbsp; <strong>Author:</strong> \(escaped(author))\n" }
+        if let license = metadata.license { html += "  &nbsp;·&nbsp; <strong>License:</strong> \(escaped(license))\n" }
         html += "</p>\n"
 
         if let desc = metadata.description {
-            html += "<p>\(htmlEscape(desc))</p>\n"
+            html += "<p>\(escaped(desc))</p>\n"
         }
 
         // Actions
         if !info.actions.isEmpty {
             html += "<h2>Actions</h2>\n"
             for action in info.actions {
-                html += "<h3>\(action.name)</h3>\n"
-                if let desc = action.description { html += "<p>\(htmlEscape(desc))</p>\n" }
+                html += "<h3>\(escaped(action.name))</h3>\n"
+                if let desc = action.description { html += "<p>\(escaped(desc))</p>\n" }
                 html += "<ul>\n"
-                if let role = action.role { html += "  <li><strong>Role:</strong> \(role)</li>\n" }
+                if let role = action.role { html += "  <li><strong>Role:</strong> \(escaped(role))</li>\n" }
                 if !action.verbs.isEmpty {
-                    let verbStr = action.verbs.map { "<code>\($0)</code>" }.joined(separator: ", ")
+                    let verbStr = action.verbs.map { "<code>\(escaped($0))</code>" }.joined(separator: ", ")
                     html += "  <li><strong>Verbs:</strong> \(verbStr)</li>\n"
                 }
                 if !action.prepositions.isEmpty {
-                    html += "  <li><strong>Prepositions:</strong> \(action.prepositions.joined(separator: ", "))</li>\n"
+                    let prepStr = action.prepositions.map(escaped).joined(separator: ", ")
+                    html += "  <li><strong>Prepositions:</strong> \(prepStr)</li>\n"
                 }
-                if let since = action.since { html += "  <li><strong>Since:</strong> \(since)</li>\n" }
+                if let since = action.since { html += "  <li><strong>Since:</strong> \(escaped(since))</li>\n" }
                 html += "</ul>\n"
             }
         }
 
         // Qualifiers
         if !info.qualifiers.isEmpty {
-            let ns = (metadata.handle ?? metadata.name).lowercased()
+            let ns = escaped((metadata.handle ?? metadata.name).lowercased())
             html += "<h2>Qualifiers</h2>\n"
             html += "<p>Access as <code>&lt;value: \(ns).qualifier-name&gt;</code>.</p>\n"
             html += "<table><thead><tr><th>Qualifier</th><th>Input Types</th><th>Description</th></tr></thead><tbody>\n"
             for q in info.qualifiers {
-                let types = q.inputTypes.isEmpty ? "Any" : q.inputTypes.joined(separator: ", ")
-                let desc = q.description.map { htmlEscape($0) } ?? ""
+                let types = q.inputTypes.isEmpty ? "Any" : q.inputTypes.map(escaped).joined(separator: ", ")
+                let desc = q.description.map(escaped) ?? ""
                 let params = q.acceptsParameters ? " <span class='badge'>params</span>" : ""
-                html += "  <tr><td><code>\(ns).\(q.name)</code></td><td>\(types)</td><td>\(desc)\(params)</td></tr>\n"
+                html += "  <tr><td><code>\(ns).\(escaped(q.name))</code></td><td>\(types)</td><td>\(desc)\(params)</td></tr>\n"
             }
             html += "</tbody></table>\n"
         }
@@ -1188,9 +1200,9 @@ struct DocsPlugins: ParsableCommand {
         if !info.services.isEmpty {
             html += "<h2>Services</h2>\n"
             for service in info.services {
-                html += "<h3>\(service.name)</h3>\n"
+                html += "<h3>\(escaped(service.name))</h3>\n"
                 if !service.methods.isEmpty {
-                    let methodStr = service.methods.map { "<code>\($0)</code>" }.joined(separator: ", ")
+                    let methodStr = service.methods.map { "<code>\(escaped($0))</code>" }.joined(separator: ", ")
                     html += "<p><strong>Methods:</strong> \(methodStr)</p>\n"
                 }
             }
@@ -1200,10 +1212,10 @@ struct DocsPlugins: ParsableCommand {
         if !info.systemObjects.isEmpty {
             html += "<h2>System Objects</h2>\n"
             for obj in info.systemObjects {
-                html += "<h3><code>\(obj.identifier)</code></h3>\n"
-                if let desc = obj.description { html += "<p>\(htmlEscape(desc))</p>\n" }
+                html += "<h3><code>\(escaped(obj.identifier))</code></h3>\n"
+                if let desc = obj.description { html += "<p>\(escaped(desc))</p>\n" }
                 if !obj.capabilities.isEmpty {
-                    let capStr = obj.capabilities.map { "<code>\($0)</code>" }.joined(separator: ", ")
+                    let capStr = obj.capabilities.map { "<code>\(escaped($0))</code>" }.joined(separator: ", ")
                     html += "<p><strong>Capabilities:</strong> \(capStr)</p>\n"
                 }
             }
@@ -1212,7 +1224,7 @@ struct DocsPlugins: ParsableCommand {
         // Events
         if !info.events.isEmpty {
             html += "<h2>Event Subscriptions</h2>\n<ul>\n"
-            for event in info.events { html += "  <li><code>\(htmlEscape(event))</code></li>\n" }
+            for event in info.events { html += "  <li><code>\(escaped(event))</code></li>\n" }
             html += "</ul>\n"
         }
 
@@ -1223,12 +1235,30 @@ struct DocsPlugins: ParsableCommand {
         return html
     }
 
-    private func htmlEscape(_ string: String) -> String {
-        string
-            .replacingOccurrences(of: "&", with: "&amp;")
-            .replacingOccurrences(of: "<", with: "&lt;")
-            .replacingOccurrences(of: ">", with: "&gt;")
-            .replacingOccurrences(of: "\"", with: "&quot;")
+    /// Escape text for embedding in HTML element content or a quoted attribute.
+    ///
+    /// The canonical implementation is `StringEncoding.htmlEscape` in
+    /// `ARORuntime/Actions/BuiltIn/ComputeAction+Encoding.swift`, which backs the
+    /// `html-escape` Compute qualifier. It is `internal` to ARORuntime, and
+    /// widening a runtime API so one CLI subcommand can call it buys nothing;
+    /// this is the same five substitutions, kept character-for-character in step
+    /// with it. `'` used to be missing here even though the generated page uses
+    /// single-quoted attributes (GitLab #741). `&` goes first, or the ampersands
+    /// the later substitutions introduce get escaped again.
+    static func htmlEscape(_ string: String) -> String {
+        var out = ""
+        out.reserveCapacity(string.count)
+        for character in string {
+            switch character {
+            case "&": out += "&amp;"
+            case "<": out += "&lt;"
+            case ">": out += "&gt;"
+            case "\"": out += "&quot;"
+            case "'": out += "&#39;"
+            default: out.append(character)
+            }
+        }
+        return out
     }
 }
 

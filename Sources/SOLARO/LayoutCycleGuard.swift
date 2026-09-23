@@ -15,6 +15,32 @@
 // coupling is visible in one place.
 //
 // -----------------------------------------------------------------
+// Retirement criteria: the metrics panel (#774)
+// -----------------------------------------------------------------
+// SOLARO carried two renderings of the metrics table for a while: a
+// SwiftUI `MetricsPanel` and an AppKit `MetricsAppKitPanel`. The
+// AppKit one exists because the SwiftUI one aborted the process under
+// the constraint-cycle assert — a table whose every row re-laid out on
+// each snapshot, inside a split-view column, which is trigger (1)
+// below in its purest form.
+//
+// Only the AppKit panel was ever mounted. The SwiftUI file still
+// compiled and still held the full layout, so 1200 lines described one
+// table and whoever added the missing p95 column would have done it
+// twice or discovered the dead half. It has been deleted; git
+// remembers it at the commit that closed #774.
+//
+// Whether SwiftUI could take the panel back is a real question, and
+// the answer is not yet. The wrappers here fix the *feedback* trigger:
+// they stop an ideal size propagating into the hosting view. The
+// metrics table's problem was the second trigger — an unbounded number
+// of constraint updates from a view that changes shape several times a
+// second while a program runs — and nothing here bounds that. It would
+// take a fixed-height table with a virtualised body, at which point the
+// AppKit panel is already that. Revisit if the table stops being live,
+// or if a macOS release lifts the assert.
+//
+// -----------------------------------------------------------------
 // 1. SwiftUI ideal-size feedback → `layoutCycleGuard()`
 // -----------------------------------------------------------------
 // An @Observable-driven SwiftUI subtree that declares an explicit

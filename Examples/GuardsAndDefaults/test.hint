@@ -1,0 +1,4 @@
+# Test hints for GuardsAndDefaults
+mode: both
+# Allow extra time for the linker on slow CI runners
+timeout: 60

@@ -182,7 +182,10 @@ public final class ActionRunner: @unchecked Sendable {
         "modify": "update",
         "change": "update",
         "set": "update",
-        "configure": "update",
+        // `configure` is NOT mapped here: it is its own action
+        // (ConfigureAction), and the compiled runtime's synchronous table is
+        // keyed by canonical verb — mapping it to `update` would send a
+        // Configure statement to UpdateAction in compiled binaries only.
 
         // return synonyms
         "respond": "return",

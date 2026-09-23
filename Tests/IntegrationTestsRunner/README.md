@@ -40,6 +40,7 @@ from `openapi.yaml` plus an `.aro` source grep. Pattern placeholders in
 ```
 Tests/IntegrationTestsRunner/
 ├── run-tests.pl                          # ~100-line entry: CLI parse, dispatch
+├── t/                                    # unit tests for the harness itself
 └── lib/AROTest/
     ├── Utils.pm                          # platform flags, color, exe helpers
     ├── Config.pm                         # shared state, signal cleanup
@@ -74,3 +75,14 @@ Tests/IntegrationTestsRunner/
 | Term::ANSIColor    | Coloured output                  | optional  |
 
 Install missing modules with `cpan -i IPC::Run YAML::XS HTTP::Tiny Net::EmptyPort Term::ANSIColor`.
+
+## Unit tests for the harness
+
+The harness has logic of its own — type detection, normalisation, matching —
+and `t/` covers it with core Perl only (no toolchain, no examples, no build):
+
+```bash
+prove -I Tests/IntegrationTestsRunner/lib -r Tests/IntegrationTestsRunner/t
+```
+
+CI runs the same command in the `harness:unit` job.

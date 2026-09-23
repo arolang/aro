@@ -264,6 +264,16 @@ struct BuildCommand: AsyncParsableCommand {
         await FileOps.createDirectoryIfNeeded(at: buildDir)
         await FileOps.createDirectoryIfNeeded(at: binaryPath.deletingLastPathComponent())
 
+        // Resolve --static / --dynamic once, here, before anything acts on it.
+        // Plugin pre-compilation is the first thing that needs to know (a
+        // `--dynamic` build must not bake plugins as static archives), and it
+        // runs before CompilationStrategy — which is where the flags used to be
+        // read, hence the static-link error a `--dynamic` build could report
+        // (GitLab #815).
+        let effectiveLinkMode = try CompilationStrategy.resolveLinkMode(
+            staticLink: staticLink, dynamicLink: dynamicLink
+        )
+
         // Pre-compile managed plugins for inclusion in the binary.
         // Native plugins (C/Rust/Swift) are statically linked via symbol renaming.
         // Python plugins fall back to base64 embedding (they run via subprocess).
@@ -272,6 +282,7 @@ struct BuildCommand: AsyncParsableCommand {
             sourcePluginsDir: sourceManagedPluginsDirEarly,
             outputPluginsDir: outputManagedPluginsDirEarly,
             staticBuildDir: layout.staticPluginsDir,
+            linkMode: effectiveLinkMode,
             verbose: verbose
         )
         let compiledPlugins = try await pluginCompiler.compile(buildDir: buildDir)
@@ -325,8 +336,7 @@ struct BuildCommand: AsyncParsableCommand {
             size: size,
             strip: strip,
             release: release,
-            staticLink: staticLink,
-            dynamicLink: dynamicLink,
+            linkMode: effectiveLinkMode,
             verbose: verbose,
             keepIntermediate: keepIntermediate,
             emitLLVM: emitLLVM
@@ -384,6 +394,27 @@ struct BuildCommand: AsyncParsableCommand {
             } catch {
                 print("Warning: Plugin compilation failed: \(error)")
                 // Continue - plugins are optional
+            }
+        }
+
+        // An embeddable CPython was found, so the standard library travels
+        // with the binary: copy the parts a plugin can actually use into
+        // `aro-python<version>/` beside the executable, which is where the
+        // embedded interpreter sets PYTHONHOME (#856).
+        if let staging = compiledPlugins.pythonStdlibToStage {
+            do {
+                let destination = PythonStdlibBundle.pythonHome(
+                    besideExecutable: binaryPath.path, version: staging.version)
+                let report = try PythonStdlibBundle.stage(
+                    stdlibPath: staging.stdlibPath, into: destination)
+                let megabytes = Double(report.byteCount) / 1_048_576.0
+                print("  Python \(staging.version) standard library: \(report.fileCount) files, "
+                      + String(format: "%.1f MB", megabytes))
+                if verbose { print("    → \(report.destination)") }
+            } catch {
+                print("Error: failed to stage the Python standard library: \(error)")
+                print("  The binary would start without one; refusing to call it standalone.")
+                throw ExitCode.failure
             }
         }
 

@@ -101,7 +101,7 @@ Work begins at the statement; only the *wait* moves. The alternative — startin
 Deferral is an allowlist of verbs that either compute a value or read one, never both-and-something-else:
 
 - **Reads** — `Retrieve`, `Fetch`, `Read`, `Request`, `Load`, `Find`, `Probe`, `Receive`, `Extract`, `Parse`, `Get`
-- **Pure transformations** — `Compute`, `Calculate`, `Derive`, `Transform`, `Create`, `Build`, `Construct`, `Filter`, `Map`, `Reduce`, `Aggregate`, `Split`, `Group`, `Sort`, `Merge`, `Combine`, `Join`, `Concat`, `Render`, `Format`
+- **Pure transformations** — `Compute`, `Calculate`, `Derive`, `Transform`, `Create`, `Build`, `Construct`, `Filter`, `Map`, `Reduce`, `Aggregate`, `Split`, `Group`, `Sort`, `Merge`, `Combine`, `Join`, `Concat`, `Format`
 
 An allowlist, not "everything that is not an effect", because semantic role is too coarse to decide this: `ActionSemanticRole.classify` files `Update` and `Delete` under `.own` next to `Compute`, and deferring a repository delete would move a world-changing effect to wherever someone happened to read its result.
 
@@ -115,7 +115,7 @@ Deliberately excluded, with reasons:
 | `Compare`, `Validate`, `Accept` | Feed branches; a guard that has not decided yet is not a guard. |
 | `Start`, `Stop`, `Connect`, `Close`, `Keepalive` | Service lifecycle, ordered against everything by definition. |
 | `Assert`, `Then` | A test that runs only if someone reads it is not a test. |
-| `Render`, `Repaint` | They paint a terminal. `ActionSemanticRole.classify` files both under `.response`; deferring `Render` floated a menu banner above the log lines that precede it in source. |
+| `Render`, `Repaint` | They paint a terminal. `ActionSemanticRole.classify` files both under `.response`; deferring `Render` floated a menu banner above the log lines that precede it in source. (`Render` was listed as deferrable *and* excluded here until GitLab #831. `LazyActionPolicy.deferrableVerbs` excludes it, and the exclusion is the one that was meant.) |
 
 ### Statement scope
 
@@ -260,15 +260,104 @@ Compiled binaries reach the same model through the C ABI: a deferred action retu
 
 | Variable | Default | Effect |
 |---|---|---|
-| `ARO_ASYNC_OBSERVERS` | off | Route repository observers through the bounded pool. **Changes ordering** — see §6. |
+| `ARO_ASYNC_OBSERVERS` | off | Route repository observers through the bounded pool. **Changes ordering** — see §7. |
 | `ARO_OBSERVER_WORKERS` | `max(4, cores × 2)` | Worker count for the pooled path. |
 | `ARO_OBSERVER_QUEUE_CAPACITY` | 4096 | Queued work ceiling; producers suspend when full. |
 | `ARO_FORCE_WARN_SECONDS` | 5 | Warn when a read blocks this long on a pending value. `0` disables. |
+| `ARO_CONCURRENCY` | 0 (none) | Application-wide concurrency ceiling (§10a). |
 | `ARO_HTTP_CONCURRENCY` | 8 | Concurrent outbound HTTP requests. |
+| `ARO_HTTP_RATE` | none | Outbound HTTP rate, e.g. `10/s` (§10a). |
 | `ARO_STREAM_PREFETCH` | 2 | How far a stream's producer may run ahead of its consumer (§12). |
 | `ARO_NO_DEFER` | off | Run every action at its statement, as the runtime did before this proposal. An escape hatch for diagnosis: if a program's behaviour changes with it set, overlap is involved. |
 
 Slow-force warnings name the binding and its source location, which is usually enough to identify the statement responsible for a stall.
+
+## 10a. Application-Wide Limits
+
+`with <concurrency: N>` bounds **one loop**. It does not bound the application:
+a handler woken by an `Emit` inside that loop runs on its own, outside the
+loop's count, so the real concurrency of a program had no ceiling at all
+(GitLab #862). The idiom the books taught for this was `Sleep`, which is a
+delay rather than a limit and is wrong in both directions — too slow when the
+service is idle, and still too fast when it is not.
+
+Two different limits exist, and both can be set, because neither expresses the
+other. One request at a time still exceeds a per-minute quota if each takes
+50ms; and "eight at once" says nothing about the total per hour.
+
+```aro
+(Application-Start: Crawler) {
+    Configure the <application: concurrency> with 8.      (* a ceiling *)
+
+    (* Several settings for one category go in ONE object. Two statements
+       naming <http-client> would rebind an immutable binding — the parser
+       says so, and points here. *)
+    Configure the <http-client> with { concurrency: 4, rate: "10/s" }.
+
+    Return an <OK: status> for the <startup>.
+}
+```
+
+| Setting | Meaning | Default |
+|---|---|---|
+| `<application: concurrency>` | Units of work in flight across the whole application | `0` — no ceiling |
+| `<http-client: concurrency>` | Outbound HTTP fetches in flight | 8 |
+| `<http-client: rate>` | Outbound HTTP requests started per interval | none |
+
+A rate is written the way a service documents its quota: `"10/s"`,
+`"100/minute"`, `"5/2s"`. The multiplier form is not decoration — five per two
+seconds is a different shape from 150 per minute even where the long-run
+average agrees.
+
+### At the ceiling: queue, never fail
+
+Work waits for a slot; it is not rejected. A limit exists so that work is
+*paced*, and a program that wanted the request to fail would have said so —
+there is no ARO spelling that means "fail when busy", and inventing one here
+would answer a question nobody asked. The gate hands slots to waiters in
+arrival order, so a saturated application does not starve its oldest work.
+
+The rate limiter is a token bucket with continuous refill rather than a fixed
+window, because a window lets twice the quota through across its boundary: ten
+requests at 0:59 and ten more at 1:01 is twenty in two seconds against a "ten
+per minute" limit. A program that has been idle may burst up to one interval's
+worth and is then paced.
+
+### What the ceiling counts
+
+**Units of work that are not already running inside one.** Every triggered
+feature set passes the gate — an HTTP request, a domain event handler, a file
+change, a repository observer — and so does each iteration of a `parallel for
+each`. Work started *beneath* something that already holds a slot runs under
+that slot and is bounded by its own loop's `with <concurrency: N>`.
+
+That nesting rule is what makes the ceiling deadlock-free, and it is not a
+detail to gloss: without it, a handler holding a slot and awaiting its own
+`parallel for each` would be waiting for a slot that it is itself holding. The
+rule generalises to "a unit can never wait for a slot held by something waiting
+for it."
+
+The one deliberate exception is the fire-and-forget event path (`publish()`,
+§7). Nobody awaits those handlers, so they take a slot of their own rather than
+inheriting the emitter's — which is the entire point of the feature, since a
+handler woken by an `Emit` inside a bounded loop is exactly the work that used
+to escape every bound. The awaited path (`publishAndTrack`, repository
+observers) keeps the inherited slot, because there a caller *is* waiting.
+
+### What it does not count
+
+Individual statements. Gating every action would mean an action could wait for
+a slot held by the action it is waiting for — the deadlock above, at a
+granularity where the nesting rule cannot help, since ARO statements overlap
+by design (§2). The ceiling is over units of work, which is the granularity at
+which "how much is this program doing at once" is a question with an answer.
+
+### Interpreter and compiled binaries
+
+Both. The ceiling is enforced in `FeatureSetExecutor`, which the compiled
+runtime calls through the same C ABI (§9). The compiled mode's own global
+execution gate of `4 × CPU count` still applies underneath; an application
+ceiling below that is the binding constraint, above it is not.
 
 ## 11. What ARO Does Not Expose
 
@@ -307,6 +396,8 @@ A body binding is not a deferred future. It is a value that happens not to have 
 | Do statements overlap? | Yes, where independent — a statement starts at its line and is awaited at the first read of its result. |
 | Do feature sets overlap? | Yes. Every trigger is an independent execution. |
 | How do I ask for parallelism? | `parallel for each`, optionally `with <concurrency: N>`. |
+| How do I limit it? | `Configure the <application: concurrency> with N.` for a ceiling, `Configure the <http-client: rate> with "10/s".` for a rate (§10a). |
+| What happens at the ceiling? | Work queues, in arrival order. Nothing fails. |
 | What is shared? | Repositories and published symbols, both actor-isolated. |
 | What is atomic? | A single repository operation. Nothing larger. |
 | Does `Emit` block? | No. Handlers run independently; shutdown drains them. |

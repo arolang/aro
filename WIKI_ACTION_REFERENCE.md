@@ -1,18 +1,26 @@
 # Action Reference
 
-ARO provides **60 built-in actions** organized by semantic role — the direction data flows through the statement.
+ARO provides **71 built-in actions** organized by semantic role — the direction
+data flows through the statement.
 
-| Role | Direction | Count |
-|------|-----------|-------|
-| **REQUEST** | External → Feature set | 11 |
-| **OWN** | Inside the feature set | 19 |
-| **RESPONSE** | Feature set → Caller | 2 |
-| **EXPORT** | Feature set → Persistent / Event bus | 9 |
-| **FILE** | File system | 3 |
-| **TERMINAL** | Interactive terminal UI | 4 |
-| **SERVICE** | Infrastructure lifecycle | 7 |
-| **TEST** | BDD testing framework | 4 |
-| **SCHEDULE** | Timed events | 1 |
+There are **five** roles, not nine. `ActionRole` declares `request`, `own`,
+`response`, `export` and `server`
+(`Sources/ARORuntime/Actions/ActionProtocol.swift:12`); FILE, TERMINAL,
+SERVICE, TEST and SCHEDULE are groupings this page invented, and file, terminal
+and test actions each carry one of the five real roles. Run `aro actions` for
+the live table, or read ARO-0004 §11, which is generated from the runtime.
+
+| Role | Direction |
+|------|-----------|
+| **REQUEST** | External → feature set |
+| **OWN** | Inside the feature set |
+| **RESPONSE** | Feature set → caller, file, log or repository |
+| **EXPORT** | Feature set → published symbol, event bus or version control |
+| **SERVER** | Service and application lifecycle |
+
+`Store`, `Log`, `Send` and `Write` read as exports and declare RESPONSE. That
+is a known unresolved question (ARO-0004 §2.4, GitLab #480), not an error on
+this page.
 
 ---
 

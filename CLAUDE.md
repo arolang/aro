@@ -32,12 +32,17 @@ aro run ./Examples/UserService      # Run multi-file application
 aro run ./Examples/HTTPServer       # Run server (uses Keepalive action)
 aro compile ./MyApp   # Compile all .aro files in directory
 aro check ./MyApp     # Syntax check all .aro files
+aro check -r ./Apps   # Check every application under a directory separately;
+                      # without -r a directory of applications is an error (#824)
 aro diff --graph main..my-branch          # Feature-graph diff: nodes, statements, wires
 aro diff --graph main..my-branch --html report.html   # Same comparison, two graphs side by side
 aro build ./MyApp     # Compile to native binary (LLVM IR + object file)
 aro build ./MyApp --verbose --optimize  # Verbose build with optimizations
 aro build ./MyApp --static   # Default. Static Swift runtime; single file. (Linux: Foundation still dynamic.)
 aro build ./MyApp --dynamic  # Bundle libswift*.so / libFoundation*.so next to the binary; rpath=$ORIGIN.
+ARO_STATIC_PYTHON=/path/to/dist aro build ./MyApp   # Carry CPython, so a Python plugin
+                      # can go in a standalone binary (GitLab #856). Needs a real static
+                      # libpython<ver>.a; a stock python.org install ships a symlink to the dylib.
 echo 'Log "Hi" to the <console>.' | aro   # Evaluate piped source on stdin
 
 # Testing `aro build` against local runtime changes: build the runtime
@@ -109,6 +114,39 @@ MyApp/
 - At most ONE `Application-End: Success` and ONE `Application-End: Error` (both optional)
 - Feature sets are triggered by **events**, not direct calls
 - **Contract-First HTTP**: `openapi.yaml` is required for HTTP server (no contract = no server)
+
+**A directory of applications is not an application.** `aro run`, `aro build` and
+`aro check` all refuse a path holding several `Application-Start` feature sets in
+different subdirectories, and name one to point at instead. `aro check --recursive`
+checks each of them separately — without it, every `.aro` file under the path is
+pooled into one pseudo-application, so sibling applications appear to share feature
+sets and entry points (GitLab #824).
+
+### Importing another application (ARO-0005 §3)
+
+No imports are needed *within* an application. `import` is for pulling in a
+**separate** application's feature sets, and it is the one place a path appears in
+ARO source:
+
+```aro
+import ../ModuleA
+import ../ModuleB
+
+(Application-Start: Combined) {
+    Start the <http-server> with <contract>.
+    Keepalive the <application> for the <events>.
+    Return an <OK: status> for the <startup>.
+}
+```
+
+The path is relative to the importing file's directory, and every feature set,
+type and published variable of the imported application becomes visible — so
+`Examples/ModulesExample/Combined` serves the routes whose handlers live in
+`ModuleA` and `ModuleB`. Remove the two lines and startup fails with "Missing
+ARO feature set handlers".
+
+It is resolved by `Application.resolveImports`; there are no visibility modifiers
+and no partial imports.
 
 ### Compilation Pipeline
 
@@ -206,7 +244,15 @@ paths:
 - `Extract the <data> from the <request: body>.`
 
 ### Happy Case
-Code contains only the happy case. Errors are handled by the runtime. For example when a user cannot be retrieved from the repository, the server just returns: `Can not retrieve the user from the user-repository where id = 530`.
+Code contains only the happy case. Errors are handled by the runtime, which
+reconstructs the failed statement with its values:
+`Cannot retrieve the user from the user-repository where id = 530`.
+
+**A `Retrieve` that matches nothing is not one of those errors.** It binds an
+empty list (`ExtractAction.swift:860`); with a `where` clause matching exactly
+one row it binds that record rather than a one-element list. The only throw on
+that path is a repository that does not exist. Guard on the result — the
+statement does not fail for you (GitLab #835).
 
 Do not use it for production code, it is terribly insecure.
 
@@ -231,11 +277,18 @@ Do not use it for production code, it is terribly insecure.
 
 ### Action Semantic Roles
 
-Actions are classified by data flow direction:
+Five roles, classified by data flow direction. `aro actions` prints the live
+table and ARO-0004 §11 is generated from it — prefer either over this summary:
+
 - **REQUEST** (Extract, Parse, Retrieve, Fetch, Probe, Pull, Clone): External → Internal
 - **OWN** (Compute, Validate, Compare, Create, Transform, Stage, Checkout): Internal → Internal
-- **RESPONSE** (Return, Throw): Internal → External
-- **EXPORT** (Publish, Store, Log, Send, Emit, Commit, Push, Tag): Makes symbols globally accessible or exports data
+- **RESPONSE** (Return, Throw, **Store, Log, Send, Write**, Render): Internal → External
+- **EXPORT** (Publish, Emit, Commit, Push, Tag, Schedule): Makes symbols globally accessible or exports data
+- **SERVER** (Start, Stop, Listen, Connect, Close, WaitForEvents): Service lifecycle
+
+`Store`, `Log`, `Send` and `Write` read as exports and declare `.response`. That
+is a known, deliberate inconsistency (GitLab #480, ARO-0004 §2.4), not a typo to
+fix here — roles drive data-flow analysis, so changing one changes behaviour.
 
 ### Statement Execution (ARO-0088)
 
@@ -330,8 +383,13 @@ logic.
     Return an <OK: status> with <result>.
 }
 
-(* Call site uses the same shape as plugin actions: *)
-Application.SumAndDouble the <res> from { a: 3, b: 4 }.
+(* Call site uses the same shape as plugin actions. `SumAndDouble` declares
+   no `takes`, so the argument object goes through `with`, not `from`. *)
+(Application-Start: Demo) {
+    Application.SumAndDouble the <res> with { a: 3, b: 4 }.
+    Log <res> to the <console>.
+    Return an <OK: status> for the <startup>.
+}
 ```
 
 `takes <name>` is sugar for a single positional argument extracted as
@@ -382,6 +440,22 @@ MyApp/
         ├── plugin.yaml      # Plugin manifest (required)
         └── src/             # Source files
 ```
+
+**`Plugins/` is the only plugin directory** (GitLab #848). A lowercase
+`plugins/` is still read, with a deprecation warning, and will stop being read.
+
+The two were never interchangeable, which is why this is worth a paragraph.
+They used to be handled by two different loaders: `loadManagedPlugins` read
+`Plugins/` and required one subdirectory per plugin with a `plugin.yaml` — the
+layout `aro add` installs and `aro new plugin` scaffolds — while `loadPlugins`
+read lowercase `plugins/` and took loose `.swift` files, prebuilt libraries and
+bare Swift packages with no manifest. On macOS and Windows those are the same
+directory, so both loaders walked it and one of them succeeded; on Linux they
+are two, and only the matching one ran. A project therefore loaded a different
+set of plugins depending on the developer's filesystem.
+
+One directory is resolved now, and every layout above is loaded from it. Use
+`Plugins/` with a manifest for anything new.
 
 ### Key Files
 
@@ -438,7 +512,14 @@ provides:
 The root-level `handle:` field (PascalCase) is the canonical way to declare the namespace.
 - Qualifiers are accessed as `handle.qualifier` (e.g., `Collections.pick-random`)
 - Actions are invoked as `Handle.Verb` (e.g., `Markdown.ToHTML`)
-- The legacy `handler:` inside `provides:` still works but emits a deprecation warning
+- The legacy `handler:` inside `provides:` still works but emits a deprecation
+  warning — including when a root-level `handle:` is also present, which it did
+  not before (GitLab #825). If the two name different namespaces, the root-level
+  one wins and the warning says so.
+- A plugin whose **code** declares a handle that disagrees with its manifest
+  warns too. The manifest wins, because it is what the loader reads and what
+  `aro add` writes; it used to win silently, so a plugin could ship every
+  qualifier under a namespace its own source never mentioned.
 
 Qualifiers are declared in `aro_plugin_info()` JSON with plain names (no namespace prefix).
 The runtime automatically registers them as `handle.qualifier` in `QualifierRegistry`.
@@ -447,26 +528,115 @@ The runtime automatically registers them as `handle.qualifier` in `QualifierRegi
 - **QualifierRegistry** (`Qualifiers/QualifierRegistry.swift`): Central registry for plugin qualifiers
 - **PluginQualifierHost** (`Plugins/PluginQualifierHost.swift`): Protocol for executing qualifiers
 
+### Python plugins in a standalone binary (GitLab #856)
+
+`aro build --static` promises one file you can copy, and a Python plugin
+ordinarily breaks that: the binary needs an interpreter, a `libpython`, and the
+standard library, all resolved from the machine that built it. So the build
+declines rather than producing something that looks standalone and dies on the
+target machine.
+
+Point `ARO_STATIC_PYTHON` at a CPython distribution that can be embedded and it
+builds instead, carrying the interpreter and the parts of the standard library a
+program actually needs:
+
+```bash
+ARO_STATIC_PYTHON=/opt/cpython-static aro build ./MyApp
+```
+
+The distribution needs a **real** static `libpython<version>.a` and its stdlib —
+a python-build-standalone download, or CPython configured `--disable-shared`. A
+stock python.org or Homebrew install will not do, and the reason is worth
+knowing: they ship a file *named* `libpython3.x.a` that is a symlink to the
+dynamic library, so a naive check finds a static archive that is not one. The
+build reads the file's magic (`!<arch>`) rather than trusting its name.
+
+What travels: 615 files and about 35 MB, measured against CPython 3.12. What
+does not: CPython's own test suite, `idlelib` and `tkinter`, `__pycache__`, and
+`site-packages` — the last deliberately, since copying whatever is installed on
+the build machine is how a binary acquires dependencies nobody declared. A
+plugin's own requirements are added explicitly instead.
+
+The stdlib lands beside the executable as `aro-python<version>/`, not in a temp
+directory: `/tmp` is frequently mounted `noexec`, which the stdlib's C
+extensions cannot survive.
+
+A plugin needing a **native** wheel still cannot be embedded — those are
+compiled extensions that no amount of static linking folds in — so the refusal
+path remains for them.
+
 ### Binary Mode Support
 
-Plugins work in both interpreter (`aro run`) and compiled binary (`aro build`) modes:
-- During `aro build`, plugins in `Plugins/` are compiled and bundled
-- Swift/C plugins are compiled to dynamic libraries
-- Python plugins are copied with their source files
-- Native plugins are linked INTO the binary, their symbols renamed
-  `aro_static_<plugin>__<symbol>` so several can coexist (Linker.swift);
-  Python plugins ship as source beside it
+Plugins work in both interpreter (`aro run`) and compiled binary (`aro build`) modes,
+but the two link modes bundle them differently — and the choice is resolved once, in
+`BuildCommand`, before plugins are compiled, so the plugin stage knows which build it
+is in (GitLab #815).
+
+**`--static` (the default) bakes native plugins in.** A Swift package plugin is built
+with `swift build -c release` if nothing built it already, C sources are compiled, and
+a Rust crate gets a `staticlib`; the resulting `.o` files are linked INTO the binary
+with their symbols renamed `aro_static_<plugin>__<symbol>` so several can coexist
+(`Linker.swift`). No `dlopen` at run time.
+
+**`--dynamic` ships the plugin's shared library beside the binary** and loads it at
+startup the way the interpreter does. Nothing is baked in, and no object files are
+needed.
+
+**Python plugins cannot be made standalone** (GitLab #608). They need a CPython
+interpreter and its standard library at run time, and the build resolves both from the
+*build* machine — an absolute path to a framework or `libpython`, plus that machine's
+`sys.prefix`. So `aro build --static` refuses one, naming the plugin and the exact
+Python installation it would have depended on; `--dynamic` builds it with a warning
+saying the same, because that mode never promised a single file.
+`ARO_ALLOW_EMBEDDED_PYTHON=1` builds anyway, for people who build on the machine that
+will run it.
+
+Whether a compiled binary may `dlopen` a plugin at all is recorded at link time —
+the generated `main` calls `aro_set_build_link_mode`, and `DynamicLoading` answers
+from that rather than probing the loader, which answers a different question
+(GitLab #618).
 
 ## ARO Syntax
 
+<!-- aro-check: skip — the shape of a feature set, with placeholder names -->
 ```aro
 (Feature Name: Business Activity) {
+    Require the <token> from the <environment>.
     Extract the <result: qualifier> from the <source: qualifier>.
     Compute the <output> for the <input>.
     Return an <OK: status> for a <valid: result>.
-    Publish as <alias> <variable>.
+    Publish as <alias> <output>.
 }
 ```
+
+### Statements that are not actions
+
+Four forms are part of the grammar rather than the action registry, so they have
+no role, no prepositions, and no entry in `aro actions` — which explains them
+instead of reporting "no action named" (GitLab #828):
+
+| Form | Meaning |
+|------|---------|
+| `Publish as <alias> <variable> [when <cond>].` | Makes a variable visible to other feature sets in the same business activity; a false guard leaves the name unpublished (GitLab #830) |
+| `Require the <name> from the <source>.` | Declares an external dependency (below) |
+| `match <noun> { case <pattern> { … } otherwise { … } }` | Branches on a value; the first matching case wins |
+| `Break.` | Leaves the innermost loop |
+
+**`Require`** names something the feature set expects to be there, and the source
+decides who provides it:
+
+```aro
+Require the <console> from the <framework>.      (* provided by the runtime *)
+Require the <API_TOKEN> from the <environment>.  (* binds that environment variable *)
+Require the <settings> from the <ConfigLoader>.  (* expects that feature set to Publish it *)
+```
+
+`framework` is a no-op that documents the dependency. `environment` binds the
+variable of that name, and reading it when the variable is unset fails the
+statement in the usual way. Any other source names a feature set, and `aro check`
+warns when nothing publishes that symbol — the one case where the warning is the
+point. The source name is a single identifier, so a multi-word feature set cannot
+be named here.
 
 Application lifecycle handlers:
 ```aro
@@ -516,6 +686,9 @@ The Compute action transforms data using built-in operations:
 | `unique` | Remove duplicates, first wins | `Compute the <tags: unique> from <all>.` |
 | `random` | Random element, or Int below a bound | `Compute the <pick: random> from <options>.` |
 | `sha256` | SHA-256 hex digest (alias of `hash`) | `Compute the <d: sha256> from <payload>.` |
+| `captures` | First regex match, as a record of its groups | `Compute the <p: captures> from <line> by /(?<k>\w+)=(?<v>.*)/.` |
+| `all-captures` | Every match, as a list of those records | `Compute the <ps: all-captures> from <line> by /…/.` |
+| `symmetric-difference` | Elements in exactly one of the two | `Compute the <changed: symmetric-difference> from <before> with <after>.` |
 | `fixed` | Round to N decimal places (2 by default) — money | `Compute the <total: fixed> from <raw>.` |
 | Arithmetic | +, -, *, /, % | `Compute the <total> from <price> * <qty>.` |
 
@@ -556,6 +729,63 @@ per-element binding, so `with <item> * 0.9` has nothing to range over — it use
 to parse and die on `Undefined variable: item`, and `with 3` was discarded
 silently; both are check-time errors now. Use `for each` to compute per element.
 
+**Regex capture groups** (ARO-0037 §7): the pattern comes from the same
+`by /pattern/flags` clause `Split` uses. `captures` binds the first match's
+groups — named ones under their names, numbered ones under `"1"`, `"2"`, …, and
+the whole match under `match`; `all-captures` binds a list of those records. **A
+non-match binds an empty record (or empty list), it does not fail** — the same
+call ARO makes for a `Retrieve` that matches nothing. A group that took part in
+no match is absent rather than empty.
+
+**`subset of` is an operator, not a qualifier** (ARO-0042 §3.6, GitLab #864).
+It answers a question rather than producing a collection, so it sits with `in`,
+`contains` and `matches`: `Return an <OK: status> for the <request> when
+<required-roles> subset of <user-roles>.` Set semantics — a duplicate on the
+left does not make a new member — and the empty set is a subset of everything.
+
+### Condition operators
+
+`when` and `where` take the same operator set (ARO-0001, ARO-0018 §2.1) — they
+had diverged, so a predicate that could filter a collection could not guard a
+statement (GitLab #830):
+
+| Operator | Example |
+|----------|---------|
+| `in` / `not in` | `when <tag> not in <banned>` |
+| `starts with` / `ends with` | `when <path> starts with "/api"` |
+| `contains` | `when <name> contains "test"` |
+| `matches` | `when <name> matches "^a.c"` |
+| `before` / `after` | `when <deadline> before <now>` |
+
+The affix operators are **literal** — that is the point of having them, since
+`matches "^a.c"` also accepts `axc`. `starts` and `ends` are not reserved: only
+a following `with`, in operator position, makes them operators, so `<starts>`
+and `<end-date>` stay usable as names. `not` alone is still the unary negation.
+
+### Absent values
+
+`Extract … default <value>` supplies a value when the source is not there:
+
+```aro
+Extract the <port> from the <env: PORT> default "8080".
+Extract the <mode> from the <parameter: mode> default "fast".
+```
+
+Only an **unset** variable takes the default. `PORT=` is a value somebody wrote
+and wins — the same rule the `default` operator follows for `false`, `0` and
+`""` (GitLab #547). Without the clause an unset variable still binds `""`.
+
+### HTTP status names
+
+`HTTPStatusCatalog` (AROParser) is the single source for
+`Return a <Name: status>` — read by the interpreter, the compiled binary and
+`aro check`. It used to be two hard-coded switches that disagreed (twelve names
+vs five) and **both fell through to 200**, so `<TooManyRequests: status>` was a
+200 with a rate-limit body (GitLab #830). Case and separators do not
+distinguish names. A misspelling within a typo's distance of a real name is a
+check warning; a genuine domain status (`<PendingVerification: status>`,
+ARO-0002 §7) is a deliberate 200 and stays silent.
+
 **Qualifier-as-Name Syntax**: When you need multiple results of the same operation, use the qualifier to specify the operation while the base becomes the variable name:
 
 ```aro
@@ -578,6 +808,47 @@ is `equal` / `less` / `greater`. The older two-operand spelling
 operand and could never run under immutability.
 
 See `Proposals/ARO-0001-language-fundamentals.md` for the full specification.
+
+### Positional Command-Line Arguments (ARO-0047)
+
+`Application-Start` declares the positionals it reads with the `takes` clause
+ARO-0081 already uses for user-defined actions, so `./crawler https://example.com 3`
+works rather than only `./crawler --url … --depth …` (GitLab #857):
+
+```aro
+(Application-Start: Crawler takes <url> <depth>) {
+    Extract the <site> from the <parameter: url>.
+    Extract the <args> from the <parameter: arguments>.   (* the whole list *)
+    Return an <OK: status> for the <startup>.
+}
+```
+
+A declared name is read exactly like a flag, and a flag of the same name wins.
+`--` ends flag parsing. The one trap predates positionals: `--key value`
+consumes the token after it, so `--verbose https://x` binds `verbose` to the
+URL — write `--verbose=true`, or `--`, to mean two things.
+
+### Application-Wide Limits (ARO-0088 §10a)
+
+`with <concurrency: N>` bounds one loop; these bound the application (GitLab
+#862). Work **queues** at a ceiling, it never fails.
+
+```aro
+Configure the <application: concurrency> with 8.
+Configure the <http-client> with { concurrency: 4, rate: "10/s" }.
+```
+
+Several settings for one category go in **one object** — two statements naming
+the same category rebind an immutable binding. A ceiling and a rate are
+different limits and both apply: one request at a time still exceeds a
+per-minute quota.
+
+The ceiling counts units of work that are not already running inside one — every
+triggered feature set and every `parallel for each` iteration. Work started
+beneath a slot-holder runs under that slot, which is what makes the ceiling
+deadlock-free; the exception is the fire-and-forget event path, where nobody
+awaits the handler, so it takes a slot of its own. `ARO_CONCURRENCY`,
+`ARO_HTTP_CONCURRENCY` and `ARO_HTTP_RATE` set the same three.
 
 ### Long-Running Applications
 
@@ -618,13 +889,13 @@ Commit the <result> to the <git> with "feat: add feature".
 Pull the <updates> from the <git>.
 Push the <result> to the <git>.
 
-(* Branching and tagging *)
-Checkout the <branch> from the <git> with "feature/new".
+(* Branching and tagging — a new name, because <branch> is already bound *)
+Checkout the <switched> from the <git> with "feature/new".
 Tag the <release> for the <git> with "v1.0.0".
 
 (* Clone — optional `branch:` checks out that ref at clone time *)
 Clone the <repo> from the <git> with { url: "https://github.com/user/repo.git", path: "./cloned" }.
-Clone the <repo> from the <git> with { url: "...", path: "./cloned", branch: "develop" }.
+Clone the <repo-on-develop> from the <git> with { url: "...", path: "./other", branch: "develop" }.
 ```
 
 | Action | Verb | Role | Prepositions |
@@ -701,7 +972,16 @@ Sources/
 │       └── RuntimeExecutionBridge.swift # Expression evaluation for built code
 └── AROCLI/             # CLI (run, compile, check, build commands)
 
-Examples/               # 110 examples organized by category (run `ls Examples/` for full list)
+Examples/               # 115 examples organized by category (run `ls Examples/` for full list)
+│                       #
+│                       # plan.md is the canonical description of an example:
+│                       # 106 of the 115 have one, and it is the prompt the
+│                       # example was written from. expected.txt is its
+│                       # executable contract, and test.hint tells the
+│                       # integration harness how (or whether) to run it.
+│                       # README.md is optional narrative — 41 have one — and
+│                       # is the layer that goes stale, so when they disagree,
+│                       # plan.md and expected.txt win (GitLab #818).
 │
 │   # Getting Started
 ├── HelloWorld/         # Minimal single-file example
@@ -745,14 +1025,17 @@ Examples/               # 110 examples organized by category (run `ls Examples/`
 │   # Data Processing
 ├── DataPipeline/       # Filter, transform, aggregate
 ├── GroupDemo/          # Group action: partition collections by field
-├── SetOperations/      # Union, intersect, difference
+├── CaptureGroups/      # Regex capture groups: captures / all-captures (ARO-0037 §7)
+├── SetOperations/      # Union, intersect, difference, symmetric-difference, subset of
 ├── CollectionMerge/    # Merging collections and objects
+├── DeleteResult/       # What a Delete statement's result holds (ARO-0007 §6.4)
 ├── RepositoryObserver/ # Repository change observers
 ├── SQLiteExample/      # Database plugin usage
 │
 │   # Dates & Time
 ├── DateTimeDemo/       # Date/time operations
 ├── DateRangeDemo/      # Date ranges and recurrence
+├── TimezoneDemo/       # Timezone conversion, DST, instants vs. rendering (ARO-0041 §7)
 │
 │   # Git
 ├── GitDemo/            # Native Git operations (status, log, stage, commit)
@@ -763,6 +1046,7 @@ Examples/               # 110 examples organized by category (run `ls Examples/`
 │   # Sockets & Services
 ├── EchoSocket/         # TCP socket server
 ├── SocketClient/       # TCP client connections
+├── ApplicationLimits/  # Application concurrency ceiling and outbound rate (ARO-0088 §10a)
 ├── MultiService/       # Multiple services in one app
 ├── ExternalService/    # External service integration
 │
@@ -772,7 +1056,8 @@ Examples/               # 110 examples organized by category (run `ls Examples/`
 ├── MetricsDemo/        # Prometheus metrics export
 │
 │   # CLI & Parameters
-├── Parameters/         # Command-line argument parsing
+├── Parameters/         # Command-line argument parsing (flags)
+├── PositionalArguments/ # `takes <url> <depth>` on Application-Start (ARO-0047)
 ├── ConfigurableTimeout/ # Runtime configuration
 │
 │   # Plugins (multi-language)
@@ -857,7 +1142,7 @@ The `Proposals/` directory contains language specifications:
 | **0008 I/O Services** | HTTP, files, sockets, system objects |
 | **0009 Native Compilation** | LLVM, aro build, plugins in binaries |
 | **0010 Advanced Features** | Regex, dates, exec |
-| **0011 HTML/XML Parsing** | Parse action for HTML/XML documents |
+| **0011 HTML Parsing** | Parse action for HTML documents (XML is a sketch) |
 | **0014 Domain Modeling** | DDD patterns, entities, aggregates |
 | **0015 Testing Framework** | Colocated tests, Given/When/Then |
 | **0016 Interoperability** | External services, Call action, plugins |
@@ -869,32 +1154,33 @@ The `Proposals/` directory contains language specifications:
 | **0034 Language Server Protocol** | LSP server, diagnostics, navigation |
 | **0035 Configurable Runtime** | Configure action for timeouts and settings |
 | **0036 Extended File Operations** | Exists, Stat, Make, Copy, Move actions |
-| **0037 Regex Split** | Split action with regex delimiters |
+| **0037 Regex Split** | Split action with regex delimiters, `captures` groups |
 | **0038 List Element Access** | first, last, index, range specifiers |
 | **0040 Format-Aware I/O** | Auto format detection for JSON, YAML, CSV |
 | **0041 Date/Time Ranges** | Date arithmetic, ranges, recurrence patterns |
-| **0042 Set Operations** | intersect, difference, union on collections |
+| **0042 Set Operations** | intersect, difference, union, symmetric-difference, `subset of` |
 | **0043 Sink Syntax** | Expressions in result position |
 | **0044 Runtime Metrics** | Execution counts, timing, Prometheus format |
 | **0045 Package Manager** | Plugin installation, aro add/remove, plugin.yaml |
 | **0046 Typed Event Extraction** | Schema-validated event data extraction |
-| **0047 Command-Line Parameters** | CLI argument parsing, Parameters action |
+| **0047 Command-Line Parameters** | CLI argument parsing, flags and positionals |
 | **0048 WebSocket** | WebSocket server support, real-time messaging |
 | **0050 Template Engine** | Mustache-style templates, Render action |
 | **0051 Streaming Execution** | Lazy evaluation, Stream Tee, Aggregation Fusion |
-| **0073 Store Files** | File-backed repositories, YAML seed data, permission-based writability |
+| **0073 Store Files** | File-backed repositories, YAML seed data, permission-based writability, `Commit` checkpoints |
 | **0080 Git Actions** | Native Git via libgit2: status, stage, commit, push, pull, clone, checkout, tag |
 | **0081 User-Defined Actions** | Feature sets callable as `Application.<Name>` from any other feature set |
 | **0082 Numeric Separators** | Underscores in decimal literals (supersedes 0056) |
 | **0083 Terminal UI** | Terminal UI system |
-| **0084 Local LLM** | `aro lm` (superseded by `aro ask`) |
+| **0084 Local LLM** | `aro lm` (superseded by `aro ask`, ARO-0092) |
 | **0085 Terminal Shadow Buffer** | Terminal shadow-buffer optimization (draft) |
 | **0086 Automatic Pipeline Detection** | Implicit pipeline detection |
 | **0087 Plugin SDK** | Plugin SDK & developer experience |
-| **0088 Concurrency Model** | What runs concurrently, ordering guarantees, `parallel for each`, event dispatch |
+| **0088 Concurrency Model** | What runs concurrently, ordering guarantees, `parallel for each`, event dispatch, application limits |
 | **0089 Ranges** | `1..10` / `1..<10` as lazy values, lexing rules, why `[1..10]` stays an error (draft) |
 | **0090 Streaming I/O** | Request bodies that stream vs. bodies that become values, `x-aro-max-body`, anchoring |
 | **0091 Jupyter Kernel** | `aro repl --json` protocol, notebook cell semantics, output capture |
+| **0092 `aro ask` Assistant** | Local model, tool registry, approval model, `.context` |
 
 Proposal identifiers are unique and every `ARO-NNNN` reference must resolve —
 enforced by `Scripts/check-proposals.py`, which runs in CI. When citing a GitLab

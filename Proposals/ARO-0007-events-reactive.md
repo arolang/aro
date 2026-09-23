@@ -128,7 +128,8 @@ Multiple handlers can subscribe to the same event type:
     Extract the <order> from the <event: order>.
     Extract the <items> from the <order: items>.
     for each <item> in <items> {
-        <Decrement> the <stock> for the <item: productId> with <item: quantity>.
+        Compute the <remaining> from <item: stock> - <item: quantity>.
+        Update the <item> with { stock: <remaining> }.
     }
     Return an <OK: status> for the <inventory>.
 }
@@ -136,7 +137,9 @@ Multiple handlers can subscribe to the same event type:
 (Track Revenue: OrderCreated Handler) {
     Extract the <order> from the <event: order>.
     Extract the <amount> from the <order: total>.
-    Increment the <daily-revenue> by <amount>.
+    Retrieve the <revenue-so-far> from the <revenue-repository: last>.
+    Compute the <daily-revenue> from <revenue-so-far> + <amount>.
+    Store the <daily-revenue> into the <revenue-repository>.
     Return an <OK: status> for the <analytics>.
 }
 ```
@@ -189,7 +192,7 @@ Event handlers can filter events based on payload field values. Guards are speci
 (* Only handle OrderUpdated when status is "paid" *)
 (Process Payment: OrderUpdated Handler<status:paid>) {
     Extract the <order> from the <event: order>.
-    Process the <payment> for the <order>.
+    Send the <payment-request> to the <payment-gateway> with <order>.
     Return an <OK: status> for the <processing>.
 }
 ```
@@ -238,6 +241,44 @@ Use dot notation for nested fields:
 - All guards must match for the handler to execute (AND logic across guards)
 - Field values are compared case-insensitively
 - Non-matching events are silently skipped
+
+### 3.6 Deduplication with `dedupe`
+
+A handler that may be told the same thing twice declares the payload field that
+identifies an event. The first event carrying a given value runs the handler;
+later events carrying the same value are skipped.
+
+```aro
+(* Each URL is crawled once, however many pages link to it *)
+(Crawl Page: CrawlPage Handler<dedupe:url>) {
+    Extract the <url> from the <event: url>.
+    Fetch the <page> from <url>.
+    Extract the <links> from the <page: links>.
+
+    for each <link> in <links> {
+        Emit a <CrawlPage: event> with { url: <link>, base: <base> }.
+    }
+
+    Return an <OK: status> for the <crawl>.
+}
+```
+
+- `dedupe` is a **declaration**, not a comparison, and can be combined with
+  state guards: `Handler<status:new;dedupe:url>`
+- The field is resolved in the event payload, one level down into a nested
+  object, or by dotted path — so it finds `url` whether the emitter spread an
+  object literal or wrapped a named variable
+- An event whose payload does not carry the field has no identity and is never
+  skipped
+- The store belongs to the handler and holds the most recent **100 000**
+  identities, evicting oldest-first, so an endless stream cannot exhaust memory
+- To remember more than that, or to revisit deliberately, keep visited state in
+  a repository instead
+
+Deduplication is opt-in. Before this section existed, the runtime applied it to
+one hard-coded event name (`CrawlPage`) and only when the payload happened to be
+keyed `data` — no other event could ask for it, the compiled runtime did not do
+it at all, and the documented emit shape never triggered it (GitLab #727).
 
 ---
 
@@ -574,8 +615,17 @@ Filtering:
 Retrieve the <user> from the <user-repository> where <id> is <user-id>.
 ```
 
-The `where` field MUST be written in angle brackets (`where <id> is <user-id>`);
-the unbracketed form `where id = <user-id>` is a parse error. Repository
+The `where` field may be written either way: `where <id> is <user-id>` and
+`where id = <user-id>` parse to the same `WhereClause`
+(`AROParser/Parser.swift:1303`), and hyphenated bare names work too
+(`where customer-id = <id>`). This document said the bare form was a parse error
+until GitLab #831; ARO-0018 §2.0 has the newer and correct account, including
+that the relaxation applies **only** to the query `where` clause — the `where`
+guarding a `for each` header, a `match` case or a feature-set header is an
+ordinary boolean expression and still requires angle brackets around every
+variable.
+
+Repository
 filtering is **equality-only**: the storage matches rows through an equality
 index on the named field, so `where <id> is <user-id>` (or the `=` spelling)
 selects rows whose `id` equals `<user-id>`. Range or substring operators
@@ -694,6 +744,44 @@ To delete items and trigger observers:
 ```aro
 Delete the <user> from the <user-repository> where <id> is <userId>.
 ```
+
+The result is a record, so the statement can be *reported on* rather than only
+performed (GitLab #866):
+
+| Field | Meaning |
+|-------|---------|
+| `count` | How many entries were removed. `0` when the `where` matched nothing. |
+| `deleted` | The removed entries, as a list. |
+| `target` | The result name, for the error path. |
+| `success` | `count > 0` — the same question `count` answers, kept for callers that only need the yes/no. |
+
+```aro
+Delete the <gone> from the <order-repository> where <status> is "cancelled".
+Log "removed ${<gone: count>} orders" to the <console>.
+
+for each <order> in <gone: deleted> {
+    Emit an <OrderPurged: event> with { id: <order: id> }.
+}
+```
+
+`count` is what distinguishes a delete that matched nothing from one that
+matched — which nothing in the language could express before, because the
+result held a value with no readable fields at all.
+
+`deleted` is always a list, including when exactly one row matched. A result
+whose *shape* depends on how many things it found is the trap ARO-0038's
+indexing rules exist to avoid, and it would make every reader of a delete
+handle two cases.
+
+Deleting without a `where` clears the repository, and `count` is how many
+entries it held. It is counted before the clear, because afterwards there is
+nothing to count and "cleared 0" would be indistinguishable from "cleared
+everything". `deleted` is empty there: a clear does not hold the rows, and
+reading a whole repository back in order to report on discarding it would be a
+real cost paid for a line of output.
+
+A `where` on a delete keeps exactly one predicate (ARO-0018 §2.2, GitLab #498);
+that is deliberate and unrelated to the result shape.
 
 ### 6.5 Observer Flow
 

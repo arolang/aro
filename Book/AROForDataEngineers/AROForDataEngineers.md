@@ -76,7 +76,11 @@ compiler, so registering it with Jupyter is a command it runs on itself.
 
 ### 2.1 The binary
 
-Download the release archive and put `aro` on your `PATH`:
+<!-- ARO:INCLUDE Install.md -->
+*See [the shared installation instructions](../Install.md).*
+<!-- /ARO:INCLUDE -->
+
+If you prefer to fetch the archive by hand rather than through Homebrew:
 
 ```bash
 # Linux
@@ -89,8 +93,6 @@ sudo mv aro /usr/local/bin/
 
 aro --version
 ```
-
-Windows builds are on the same page as `aro-windows-amd64.zip`.
 
 ### 2.2 The kernel
 
@@ -929,8 +931,11 @@ Run `aro actions --qualifiers` for the live set.
 **"Expected identifier, but got preposition(at)"** — an identifier
 contains a preposition segment. Rename `<ingested-at>` to `<stamp>`.
 
-**"Unknown user-defined action"** — the action is declared in a different
-file. Move it into the calling file (§8.1).
+**"Unknown user-defined action"** — the name does not resolve anywhere in
+the application. Being in a different file is not the cause: `Application.`
+names are application-wide (§8.1). Check the spelling against the "Known
+user-defined actions" list the diagnostic prints, and check that the file
+declaring it is actually inside the application directory you ran.
 
 **"Unknown Compute qualifier 'sort'"** — sorting is an action:
 `Sort the <sorted> for the <numbers>.` The diagnostic names the

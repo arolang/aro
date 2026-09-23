@@ -101,6 +101,42 @@ struct KeybindingOverrideTests {
         #expect(store.conflictingCommandIDs.isEmpty)
     }
 
+    /// Run, Debug and Stop are in the registry (#762).
+    ///
+    /// They had working shortcuts before, hardcoded on the menu items,
+    /// which meant they could not be remapped and never appeared in the
+    /// Settings table — the one place a user looks to find out what the
+    /// app's keys are.
+    @Test func theRunCommandsAreBindable() {
+        let store = freshStore()
+        for id in ["run.play", "run.debug", "run.stop", "run.tests"] {
+            #expect(KeybindingRegistry.shared.contains { $0.id == id },
+                    "\(id) is missing from the registry")
+            #expect(store.resolved(for: id) != nil,
+                    "\(id) resolves to no binding")
+        }
+    }
+
+    @Test func runKeepsItsFamiliarDefaults() {
+        let store = freshStore()
+        // ⌘R is Xcode's, and ⌘. is the standard macOS cancel. Changing
+        // either out from under someone would be its own bug.
+        #expect(store.resolved(for: "run.play")?.key.character == "r")
+        #expect(store.resolved(for: "run.play")?.modifiers == [.command])
+        #expect(store.resolved(for: "run.stop")?.key.character == ".")
+        #expect(store.resolved(for: "run.stop")?.modifiers == [.command])
+    }
+
+    @Test func runCanBeRemapped() {
+        let store = freshStore()
+        store.setOverride(KeybindingBinding(key: "b", modifiers: [.command, .option]),
+                          for: "run.play")
+        #expect(store.resolved(for: "run.play")?.key.character == "b")
+        #expect(store.resolved(for: "run.play")?.modifiers
+                == [.command, .option])
+        #expect(store.conflictingCommandIDs.isEmpty)
+    }
+
     /// After a colliding remap, BOTH sides are flagged — the settings
     /// tab shows the clash instead of a `print()` nobody sees.
     @Test func aCollidingOverrideFlagsBothCommands() {
