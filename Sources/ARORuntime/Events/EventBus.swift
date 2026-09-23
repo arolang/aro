@@ -314,11 +314,14 @@ public actor EventBus {
     /// (incremented before this Task is even scheduled) bridges the race
     /// between publish() returning and this Task starting to run.
     ///
-    /// We deliberately do NOT cap concurrency here: most fire-and-forget
-    /// publishes are lightweight system events (FeatureSetStarted, etc.)
-    /// with no subscribers — a global cap would backpressure those and
-    /// blow up the queue. Bound resource-heavy work (HTTP fetches) at the
-    /// action layer instead (see HTTPClient.sharedLimiter).
+    /// There is no cap here by default: most fire-and-forget publishes are
+    /// lightweight system events (FeatureSetStarted, etc.) with no
+    /// subscribers, and a global cap would backpressure those and blow up
+    /// the queue. A program that asks for one — `Configure the
+    /// <application: concurrency> with N.` (ARO-0088 §10a) — gets it applied
+    /// per *subscribed handler*, so an event nobody handles still costs
+    /// nothing. Resource-heavy work is additionally bounded at the action
+    /// layer (see `HTTPClient.sharedLimiter`).
     private func publishInternal(_ event: any RuntimeEvent) async {
         let eventType = type(of: event).eventType
         let matchingSubscriptions = store.matching(for: eventType)
@@ -333,7 +336,19 @@ public actor EventBus {
         for subscription in matchingSubscriptions {
             inFlightHandlers += 1
             Task {
-                await subscription.handler(event)
+                // Fire-and-forget: nobody awaits this handler, so it takes an
+                // application slot of its own rather than inheriting the
+                // emitter's (ARO-0088 §10a, GitLab #862). That is the whole
+                // point — a handler woken by an `Emit` inside a bounded loop
+                // used to run outside every bound. The awaited path
+                // (`publishAndTrack`, repository observers) deliberately keeps
+                // the inherited slot: a caller waiting on a handler that is
+                // waiting for the caller's slot is a deadlock.
+                await ApplicationLimits.$holdsSlot.withValue(false) {
+                    await ApplicationLimits.withSlot {
+                        await subscription.handler(event)
+                    }
+                }
                 self.fireForgetHandlerCompleted()
             }
         }

@@ -191,6 +191,8 @@ public final class Application: @unchecked Sendable {
             let writableStores = storeFiles.filter { $0.isWritable }
             if !writableStores.isEmpty {
                 let flushService = StoreFlushService(storage: InMemoryRepositoryStorage.shared)
+                // Where `Commit the <r> to the <stores>.` finds it (GitLab #863).
+                StoreFlushRegistry.current = flushService
                 await flushService.register(stores: storeFiles)
                 self.storeFlushService = flushService
 
@@ -251,6 +253,18 @@ public final class Application: @unchecked Sendable {
         await runtime.register(service: service)
     }
 
+    /// Bind the entry point's declared positional arguments (ARO-0047 §Positional
+    /// Arguments, GitLab #857).
+    ///
+    /// The names come from the `Application-Start` header; the values were
+    /// parsed out of `argv` before the application was built. `ParameterStorage`
+    /// joins the two on read, so this may run either side of the parse.
+    private func declarePositionalParameters(of program: AnalyzedProgram) {
+        guard let entry = program.featureSets.first(where: { $0.featureSet.name == entryPoint }),
+              !entry.featureSet.positionalParameters.isEmpty else { return }
+        ParameterStorage.shared.declarePositionals(entry.featureSet.positionalParameters)
+    }
+
     // MARK: - Execution
 
     /// Run the application
@@ -264,6 +278,12 @@ public final class Application: @unchecked Sendable {
         guard let mainProgram = mergedProgram() else {
             throw ApplicationError.noPrograms
         }
+
+        // ARO-0047: the entry point's `takes` clause names its positional
+        // command-line arguments (GitLab #857). Declared here, once the
+        // programs are merged and before the entry point runs, so
+        // `<parameter: url>` resolves against argv the same way a flag does.
+        declarePositionalParameters(of: mainProgram)
 
         // Validate OpenAPI contract against feature sets before opening port
         if let spec = openAPISpec {

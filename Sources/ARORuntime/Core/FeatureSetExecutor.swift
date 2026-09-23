@@ -83,6 +83,20 @@ public final class FeatureSetExecutor: Sendable {
         _ analyzedFeatureSet: AnalyzedFeatureSet,
         context: ExecutionContext
     ) async throws -> Response {
+        // The application concurrency ceiling (ARO-0088 §10a, GitLab #862).
+        // One choke point, so every triggered feature set is counted — an HTTP
+        // request, an event handler, a file change — and not just the loop that
+        // `with <concurrency: N>` happens to bound. A no-op unless a ceiling is
+        // configured, and a no-op for a feature set already running inside one.
+        try await ApplicationLimits.withSlot {
+            try await self.executeGated(analyzedFeatureSet, context: context)
+        }
+    }
+
+    private func executeGated(
+        _ analyzedFeatureSet: AnalyzedFeatureSet,
+        context: ExecutionContext
+    ) async throws -> Response {
         let featureSet = analyzedFeatureSet.featureSet
         let startTime = Date()
 
@@ -1425,15 +1439,21 @@ public final class FeatureSetExecutor: Sendable {
                     }
 
                     group.addTask {
-                        // Create a child context for this iteration
-                        let childContext = context.createChild(featureSetName: context.featureSetName)
-                        childContext.bind(loop.itemVariable, value: item)
-                        if let indexVar = loop.indexVariable {
-                            childContext.bind(indexVar, value: index)
-                        }
+                        // The loop's own bound is `concurrency`; the
+                        // application ceiling (ARO-0088 §10a, GitLab #862) is
+                        // the one that also counts the handlers this body
+                        // wakes. Nested work runs under this slot.
+                        try await ApplicationLimits.withSlot {
+                            // Create a child context for this iteration
+                            let childContext = context.createChild(featureSetName: context.featureSetName)
+                            childContext.bind(loop.itemVariable, value: item)
+                            if let indexVar = loop.indexVariable {
+                                childContext.bind(indexVar, value: index)
+                            }
 
-                        for bodyStatement in loop.body {
-                            try await self.executeStatement(bodyStatement, context: childContext)
+                            for bodyStatement in loop.body {
+                                try await self.executeStatement(bodyStatement, context: childContext)
+                            }
                         }
                     }
 

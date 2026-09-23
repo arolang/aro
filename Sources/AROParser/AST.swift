@@ -82,6 +82,16 @@ public struct FeatureSet: ASTNode {
     public let userActionTakesField: String?
     /// Optional type annotation for the `takes` field (e.g. "Integer").
     public let userActionTakesType: String?
+    /// Positional command-line arguments declared by an `Application-Start`
+    /// header (ARO-0047 §Positional Arguments, GitLab #857):
+    ///
+    /// ```aro
+    /// (Application-Start: Crawler takes <url> <depth>) { … }
+    /// ```
+    ///
+    /// Each name binds the positional at the same index, readable as
+    /// `<parameter: url>`. Empty for every other feature set.
+    public let positionalParameters: [String]
     public let span: SourceSpan
 
     public init(
@@ -91,6 +101,7 @@ public struct FeatureSet: ASTNode {
         whenCondition: (any Expression)? = nil,
         userActionTakesField: String? = nil,
         userActionTakesType: String? = nil,
+        positionalParameters: [String] = [],
         span: SourceSpan
     ) {
         self.name = name
@@ -99,6 +110,7 @@ public struct FeatureSet: ASTNode {
         self.whenCondition = whenCondition
         self.userActionTakesField = userActionTakesField
         self.userActionTakesType = userActionTakesType
+        self.positionalParameters = positionalParameters
         self.span = span
     }
 
@@ -1621,13 +1633,22 @@ public enum BinaryOperator: String, Sendable, CaseIterable {
     // Collection
     case contains = "contains"
     case matches = "matches"
+    /// Set containment: `when <required-roles> subset of <user-roles>`.
+    ///
+    /// A *predicate*, so it belongs here with the condition operators rather
+    /// than in ARO-0042's qualifier table, which holds the operations that
+    /// produce a collection (GitLab #864). Written as an intersect plus a
+    /// length comparison until this existed, which is two statements and a
+    /// subtle one — `length(intersect) == length(required)` is only the same
+    /// question when the required side has no duplicates.
+    case subset = "subset of"
 
     /// True for comparison/equality operators (==, !=, <, >, <=, >=, is, is not, contains, matches)
     public var isComparison: Bool {
         switch self {
         case .equal, .notEqual, .lessThan, .greaterThan,
              .lessEqual, .greaterEqual, .is, .isNot,
-             .contains, .matches:
+             .contains, .matches, .subset:
             return true
         default:
             return false
