@@ -4,6 +4,8 @@
 /Website/node_modules
 /Website/dist
 /Examples/HelloWorld/HelloWorld
+/Examples/DeleteResult/DeleteResult
+/Examples/TimezoneDemo/TimezoneDemo
 /Examples/Comparisons/Comparisons
 .DS_Store
 /.swiftpm

@@ -1254,6 +1254,12 @@ def _prompt_action_reference(catalog=None, kb=None):
     by_role = {}
     for name, entry in sorted(catalog.items()):
         role = (entry.get('role') or 'own').lower()
+        # The catalogue KEY is the canonical verb; `aliases` is sorted, so
+        # `aliases[0]` is merely the alphabetically first one. Leading with it
+        # taught the model the wrong name for 28 of the 71 actions —
+        # `Persist=Save/Store` for Store, `Fail=Raise/Throw` for Throw,
+        # `Calculate=Compute/Derive` for Compute — which is the list the prompt
+        # tells it to use and nothing else in ARO calls them.
         aliases = entry.get('aliases') or [name]
 
         # The CANONICAL verb leads, and every alias follows.

@@ -1,0 +1,8 @@
+winter hour 13
+summer hour 14
+winter dst false
+summer dst true
+tokyo hour 21
+same instant 1784116800 1784116800
+round trip 12
+startup

@@ -1,0 +1,3 @@
+# Test hints for TimezoneDemo (ARO-0041 §7, GitLab #865)
+mode: both
+occurrence-check: true

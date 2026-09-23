@@ -657,18 +657,7 @@ public final class NativeHTTPServer: @unchecked Sendable {
     }
 
     private static func statusText(_ statusCode: Int) -> String {
-        switch statusCode {
-        case 200: return "OK"
-        case 201: return "Created"
-        case 202: return "Accepted"
-        case 204: return "No Content"
-        case 400: return "Bad Request"
-        case 404: return "Not Found"
-        case 413: return "Payload Too Large"
-        case 500: return "Internal Server Error"
-        case 501: return "Not Implemented"
-        default: return "Unknown"
-        }
+        HTTPStatusCatalog.reason(for: statusCode)
     }
 
     private func sendResponse(fd: Int32, statusCode: Int, headers: [String: String] = [:], body: String) {
@@ -676,16 +665,7 @@ public final class NativeHTTPServer: @unchecked Sendable {
     }
 
     private func sendResponse(fd: Int32, statusCode: Int, headers: [String: String] = [:], bodyData: Data?) {
-        let statusText: String
-        switch statusCode {
-        case 200: statusText = "OK"
-        case 201: statusText = "Created"
-        case 400: statusText = "Bad Request"
-        case 404: statusText = "Not Found"
-        case 500: statusText = "Internal Server Error"
-        case 501: statusText = "Not Implemented"
-        default: statusText = "Unknown"
-        }
+        let statusText = HTTPStatusCatalog.reason(for: statusCode)
 
         var response = "HTTP/1.1 \(statusCode) \(statusText)\r\n"
 
@@ -1403,10 +1383,8 @@ public func aro_native_http_server_start(_ port: Int32, _ contextPtr: UnsafeMuta
                     // to the normal response path — which reports it as the
                     // consumed-twice error rather than swallowing it here.
                     guard let chunks = try? body.chunkStream(consumer: statement) else { continue }
-                    let statusLower = response.status.lowercased()
-                    let statusCode = statusLower == "created" ? 201 :
-                                     statusLower == "accepted" ? 202 :
-                                     statusLower == "error" ? 400 : 200
+                    // One catalog, shared with the interpreter (GitLab #830).
+                    let statusCode = HTTPStatusCatalog.code(for: response.status) ?? 200
                     return NativeHTTPResponse(
                         status: statusCode,
                         headers: ["Content-Type": body.contentType ?? "application/octet-stream"],
@@ -1450,12 +1428,7 @@ public func aro_native_http_server_start(_ port: Int32, _ contextPtr: UnsafeMuta
 
                 if let response = ctxHandle.context.getResponse() {
                     // Convert Response.data to JSON, returning just the data portion
-                    let statusLower = response.status.lowercased()
-                    let statusCode = statusLower == "ok" ? 200 :
-                                   statusLower == "created" ? 201 :
-                                   statusLower == "accepted" ? 202 :
-                                   statusLower == "nocontent" ? 204 :
-                                   statusLower == "error" ? 400 : 200
+                    let statusCode = HTTPStatusCatalog.code(for: response.status) ?? 200
 
                     // For 204 No Content, return empty body
                     if statusCode == 204 {

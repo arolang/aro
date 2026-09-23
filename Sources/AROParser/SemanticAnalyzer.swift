@@ -314,6 +314,7 @@ public final class SemanticAnalyzer {
                                         preboundSymbols: preboundSymbols)
         let codeQuality = CodeQualityValidator(diagnostics: diagnostics)
         let collectionOps = CollectionOpValidator(diagnostics: diagnostics)
+        let responseStatus = ResponseStatusValidator(diagnostics: diagnostics)
         let events = EventAnalyzer(diagnostics: diagnostics)
         let userActionAnalyzer = UserActionAnalyzer(diagnostics: diagnostics)
 
@@ -348,6 +349,7 @@ public final class SemanticAnalyzer {
             // then no-op or crash. Decidable from the AST, so decided
             // before the program is allowed to run.
             collectionOps.validate(featureSet)
+            responseStatus.validate(featureSet)
 
             // Register published symbols
             for symbol in analyzed.symbolTable.publishedSymbols.values {
