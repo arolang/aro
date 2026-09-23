@@ -156,6 +156,10 @@ public struct ComputeAction: SynchronousAction {
               summary: "Set difference", op: Self.opDifference),
         .init(name: "union", inputTypes: [.list, .object], acceptsParameters: true,
               summary: "Set union", op: Self.opUnion),
+        .init(name: "symmetric-difference", inputTypes: [.list, .string, .object],
+              acceptsParameters: true,
+              summary: "Elements in exactly one of the two (ARO-0042 §3.7)",
+              op: Self.opSymmetricDifference),
         .init(name: "markdown", inputTypes: [.string], acceptsParameters: false,
               summary: "Render markdown to HTML", op: Self.opMarkdown),
         // Encoding / escaping primitives (GitLab #482)
@@ -976,6 +980,28 @@ public struct ComputeAction: SynchronousAction {
             throw ActionError.missingRequiredField(field: "a 'with' clause", action: "Compute union")
         }
         return try ComputeAction().computeUnion(input, with: secondOperand)
+    }
+
+    /// Everything in exactly one of the two (ARO-0042 §3.7, GitLab #864).
+    ///
+    /// Written as two differences and a union until this existed — three
+    /// statements and two intermediate bindings for one question, which is
+    /// "what changed".
+    private static func opSymmetricDifference(_ input: any Sendable,
+                                              _ context: ExecutionContext) throws -> any Sendable {
+        guard let secondOperand = context.resolveAny("_with_") else {
+            throw ActionError.missingRequiredField(
+                field: "a 'with' clause", action: "Compute symmetric-difference")
+        }
+        let helper = ComputeAction()
+        // (A - B) ∪ (B - A), built from the operations ARO-0042 already
+        // defines, so it inherits their per-type behaviour exactly: multiset
+        // for lists, character-wise for strings, deep for objects. Defining it
+        // independently would be a second answer to "what does difference mean
+        // for an object", and one of the two would drift.
+        let onlyInA = try helper.computeDifference(input, minus: secondOperand)
+        let onlyInB = try helper.computeDifference(secondOperand, minus: input)
+        return try helper.computeUnion(onlyInA, with: onlyInB)
     }
 
     /// Built-in markdown → HTML so apps don't need a plugin for

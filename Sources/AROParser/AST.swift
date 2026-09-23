@@ -1614,13 +1614,22 @@ public enum BinaryOperator: String, Sendable, CaseIterable {
     // Collection
     case contains = "contains"
     case matches = "matches"
+    /// Set containment: `when <required-roles> subset of <user-roles>`.
+    ///
+    /// A *predicate*, so it belongs here with the condition operators rather
+    /// than in ARO-0042's qualifier table, which holds the operations that
+    /// produce a collection (GitLab #864). Written as an intersect plus a
+    /// length comparison until this existed, which is two statements and a
+    /// subtle one — `length(intersect) == length(required)` is only the same
+    /// question when the required side has no duplicates.
+    case subset = "subset of"
 
     /// True for comparison/equality operators (==, !=, <, >, <=, >=, is, is not, contains, matches)
     public var isComparison: Bool {
         switch self {
         case .equal, .notEqual, .lessThan, .greaterThan,
              .lessEqual, .greaterEqual, .is, .isNot,
-             .contains, .matches:
+             .contains, .matches, .subset:
             return true
         default:
             return false
