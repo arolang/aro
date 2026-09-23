@@ -689,6 +689,10 @@ The Compute action transforms data using built-in operations:
 | `unique` | Remove duplicates, first wins | `Compute the <tags: unique> from <all>.` |
 | `random` | Random element, or Int below a bound | `Compute the <pick: random> from <options>.` |
 | `sha256` | SHA-256 hex digest (alias of `hash`) | `Compute the <d: sha256> from <payload>.` |
+| `basename` / `dirname` | Path head and tail | `Compute the <n: basename> from <path>.` |
+| `extension` / `stem` | Type and name, no dot | `Compute the <e: extension> from <path>.` |
+| `absolute` | Resolve `.`/`..` against the working directory | `Compute the <a: absolute> from <path>.` |
+| `path-join` | Join with exactly one separator | `Compute the <p: path-join> from <dir> with <name>.` |
 | `captures` | First regex match, as a record of its groups | `Compute the <p: captures> from <line> by /(?<k>\w+)=(?<v>.*)/.` |
 | `all-captures` | Every match, as a list of those records | `Compute the <ps: all-captures> from <line> by /…/.` |
 | `symmetric-difference` | Elements in exactly one of the two | `Compute the <changed: symmetric-difference> from <before> with <after>.` |
@@ -731,6 +735,19 @@ and `Map the <ns: name> from the <us>.` are the same statement. There is no
 per-element binding, so `with <item> * 0.9` has nothing to range over — it used
 to parse and die on `Undefined variable: item`, and `with 3` was discarded
 silently; both are check-time errors now. Use `for each` to compute per element.
+
+**Path qualifiers are pure functions** (ARO-0036 §9, GitLab #861) — none of
+them touches the filesystem. `extension` has no dot, a dotfile is a name rather
+than an extension, `dirname` of a bare filename is `"."`, and `path-join` uses
+exactly one separator. **An absolute right-hand component does not reset the
+path**: `path-join` of `/uploads` and `/etc/passwd` is `/uploads/etc/passwd`,
+deliberately unlike Python, because the call it exists for is joining a trusted
+directory to an untrusted name.
+
+`Configure the <mode> for the <file: "./run.sh"> with { permissions: "755" }.`
+sets permissions and binds `{ path, permissions, octal, previous }`; octal and
+the symbolic form `Stat` prints are both accepted, so a mode read off one file
+applies to another. `Touch the <m> for the <file: p>.` creates or stamps.
 
 **Regex capture groups** (ARO-0037 §7): the pattern comes from the same
 `by /pattern/flags` clause `Split` uses. `captures` binds the first match's
@@ -975,10 +992,10 @@ Sources/
 │       └── RuntimeExecutionBridge.swift # Expression evaluation for built code
 └── AROCLI/             # CLI (run, compile, check, build commands)
 
-Examples/               # 116 examples organized by category (run `ls Examples/` for full list)
+Examples/               # 117 examples organized by category (run `ls Examples/` for full list)
 │                       #
 │                       # plan.md is the canonical description of an example:
-│                       # 107 of the 116 have one, and it is the prompt the
+│                       # 108 of the 117 have one, and it is the prompt the
 │                       # example was written from. expected.txt is its
 │                       # executable contract, and test.hint tells the
 │                       # integration harness how (or whether) to run it.
@@ -1022,6 +1039,7 @@ Examples/               # 116 examples organized by category (run `ls Examples/`
 ├── FileWatcher/        # File system monitoring
 ├── FileOperations/     # File I/O (read, write, copy, move)
 ├── FileMetadata/       # File stats and attributes
+├── PathOperations/     # basename/dirname/extension/stem/absolute/path-join, chmod, touch (ARO-0036 §9-10)
 ├── FormatAwareIO/      # Auto-detect JSON, YAML, CSV
 ├── DirectoryReplicator/ # Directory operations
 │
@@ -1156,7 +1174,7 @@ The `Proposals/` directory contains language specifications:
 | **0031 Context-Aware Formatting** | Adaptive output for machine/human/developer |
 | **0034 Language Server Protocol** | LSP server, diagnostics, navigation |
 | **0035 Configurable Runtime** | Configure action for timeouts and settings |
-| **0036 Extended File Operations** | Exists, Stat, Make, Copy, Move actions |
+| **0036 Extended File Operations** | Exists, Stat, Make, Touch, Copy, Move, path qualifiers, permissions |
 | **0037 Regex Split** | Split action with regex delimiters, `captures` groups |
 | **0038 List Element Access** | first, last, index, range specifiers |
 | **0040 Format-Aware I/O** | Auto format detection for JSON, YAML, CSV |

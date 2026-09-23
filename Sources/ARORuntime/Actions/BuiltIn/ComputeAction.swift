@@ -220,6 +220,24 @@ public struct ComputeAction: SynchronousAction {
               acceptsParameters: false,
               summary: "A random element, or a random Int below a bound",
               op: Self.opRandom),
+        // Paths (ARO-0036 §9, GitLab #861). Pure functions on a string, so
+        // they belong here rather than in a file action: none of them touches
+        // the filesystem, and `absolute` only consults the working directory.
+        .init(name: "basename", inputTypes: [.string], acceptsParameters: false,
+              summary: "Last path component, extension included", op: Self.opBasename),
+        .init(name: "dirname", inputTypes: [.string], acceptsParameters: false,
+              summary: "Everything before the last path component", op: Self.opDirname),
+        .init(name: "extension", inputTypes: [.string], acceptsParameters: false,
+              summary: "File extension without the dot; empty when there is none",
+              op: Self.opExtension),
+        .init(name: "stem", inputTypes: [.string], acceptsParameters: false,
+              summary: "Last path component without its extension", op: Self.opStem),
+        .init(name: "absolute", inputTypes: [.string], acceptsParameters: false,
+              summary: "Resolved against the working directory, . and .. removed",
+              op: Self.opAbsolute),
+        .init(name: "path-join", inputTypes: [.string, .list], acceptsParameters: true,
+              summary: "Join path components with exactly one separator; "
+                     + "with <name> or with [\"a\", \"b\"]", op: Self.opPathJoin),
         // Regex capture groups (ARO-0037 §7, GitLab #858). The pattern
         // comes from the `by /…/` clause Split already owns, so one
         // regex spelling covers both actions.
@@ -659,6 +677,122 @@ public struct ComputeAction: SynchronousAction {
         if let fragment = components.fragment { parts["fragment"] = fragment }
         if let user = components.user { parts["user"] = user }
         return parts
+    }
+
+    // MARK: - Paths (ARO-0036 §9, GitLab #861)
+
+    /// A path's components, with empty ones dropped and the leading `/` noted.
+    ///
+    /// Written by hand rather than through `URL`: `URL(fileURLWithPath:)`
+    /// consults the filesystem to decide whether a path is a directory, so
+    /// `basename` of a path that happens to exist could differ from
+    /// `basename` of one that does not. A path operation is a string
+    /// operation, and it has to answer the same way on every machine.
+    private static func pathComponents(_ path: String) -> (isAbsolute: Bool, parts: [String]) {
+        let isAbsolute = path.hasPrefix("/")
+        let parts = path.split(separator: "/", omittingEmptySubsequences: true).map(String.init)
+        return (isAbsolute, parts)
+    }
+
+    /// `"/var/data/report.csv"` → `"report.csv"`.
+    ///
+    /// A trailing slash is not a component: the basename of `"/var/data/"` is
+    /// `"data"`, which is what every shell means by it.
+    private static func opBasename(_ input: any Sendable, _ context: ExecutionContext) throws -> any Sendable {
+        let (isAbsolute, parts) = pathComponents(asText(input))
+        return parts.last ?? (isAbsolute ? "/" : "")
+    }
+
+    /// `"/var/data/report.csv"` → `"/var/data"`.
+    ///
+    /// `"."` for a bare filename, because that is the directory it is in and
+    /// the answer composes with `path-join`; `""` would not.
+    private static func opDirname(_ input: any Sendable, _ context: ExecutionContext) throws -> any Sendable {
+        let (isAbsolute, parts) = pathComponents(asText(input))
+        let leading = parts.dropLast()
+        if leading.isEmpty { return isAbsolute ? "/" : "." }
+        return (isAbsolute ? "/" : "") + leading.joined(separator: "/")
+    }
+
+    /// `"report.csv"` → `"csv"`. Without the dot, because every use of it —
+    /// a comparison, a switch, building a new name — otherwise has to strip one.
+    ///
+    /// A dotfile has no extension: `.gitignore` is a name, not an extension,
+    /// and treating it as one is the classic off-by-one here.
+    private static func opExtension(_ input: any Sendable, _ context: ExecutionContext) throws -> any Sendable {
+        guard let name = try opBasename(input, context) as? String,
+              let dot = name.lastIndex(of: "."),
+              dot != name.startIndex,
+              dot != name.index(before: name.endIndex) else { return "" }
+        return String(name[name.index(after: dot)...])
+    }
+
+    /// `"/var/data/report.csv"` → `"report"`.
+    ///
+    /// The piece `basename` and `extension` leave between them, so that
+    /// renaming a file keeps its name and changes its type.
+    private static func opStem(_ input: any Sendable, _ context: ExecutionContext) throws -> any Sendable {
+        guard let name = try opBasename(input, context) as? String else { return "" }
+        guard let ext = try opExtension(input, context) as? String, !ext.isEmpty else { return name }
+        return String(name.dropLast(ext.count + 1))
+    }
+
+    /// Resolve against the working directory and remove `.` and `..`.
+    ///
+    /// Purely lexical after the working-directory prefix: `..` pops a
+    /// component rather than following a symlink, so the answer does not
+    /// depend on what exists.
+    private static func opAbsolute(_ input: any Sendable, _ context: ExecutionContext) throws -> any Sendable {
+        let path = asText(input)
+        let rooted = path.hasPrefix("/") ? path : AROWorkingDirectory.url(path).path
+        let (_, parts) = pathComponents(rooted)
+        var resolved: [String] = []
+        for part in parts {
+            switch part {
+            case ".": continue
+            case "..": if !resolved.isEmpty { resolved.removeLast() }
+            default: resolved.append(part)
+            }
+        }
+        return "/" + resolved.joined(separator: "/")
+    }
+
+    /// `Compute the <full: path-join> from <dir> with <name>.`
+    ///
+    /// Joins with **exactly one** separator, which is the whole point: string
+    /// concatenation gets `"a/" + "/b"` wrong and nobody notices until a path
+    /// arrives with a trailing slash.
+    ///
+    /// **An absolute right-hand component does not reset the path.**
+    /// `path-join` of `"/uploads"` and `"/etc/passwd"` is
+    /// `"/uploads/etc/passwd"`, not `"/etc/passwd"`. This is deliberately
+    /// unlike Python's `os.path.join`, and the reason is the call it is for:
+    /// joining a trusted directory to an untrusted name. A join that a
+    /// leading slash can turn into "anywhere on the filesystem" is a path
+    /// traversal waiting to be written, and the surprising behaviour would be
+    /// found the hard way. Use `absolute` when you want a path resolved.
+    private static func opPathJoin(_ input: any Sendable, _ context: ExecutionContext) throws -> any Sendable {
+        var segments: [any Sendable] = [input]
+        if let extra = context.resolveAny("_with_") ?? context.resolveAny("_literal_") {
+            if let list = extra as? [any Sendable] {
+                segments.append(contentsOf: list)
+            } else {
+                segments.append(extra)
+            }
+        }
+        // A list as the *input* joins its own elements, so
+        // `Compute the <p: path-join> from <parts>.` reads naturally too.
+        if segments.count == 1, let list = input as? [any Sendable] {
+            segments = list
+        }
+
+        let leadingSlash = asText(segments.first ?? "").hasPrefix("/")
+        var parts: [String] = []
+        for segment in segments {
+            parts.append(contentsOf: pathComponents(asText(segment)).parts)
+        }
+        let joined = parts.joined(separator: "/")
+        return leadingSlash ? "/" + joined : joined
     }
 
     // MARK: - Regex capture groups (ARO-0037 §7, GitLab #858)

@@ -59,6 +59,8 @@ public enum ComputeQualifierCatalog {
         "lines", "join", "sum", "avg", "average", "unique", "random",
         // Regex capture groups (ARO-0037 §7, GitLab #858)
         "captures", "all-captures",
+        // Paths (ARO-0036 §9, GitLab #861)
+        "basename", "dirname", "extension", "stem", "absolute", "path-join",
         // Money (GitLab #517)
         "fixed",
     ]
