@@ -6,6 +6,9 @@
 /Examples/HelloWorld/HelloWorld
 /Examples/DeleteResult/DeleteResult
 /Examples/TimezoneDemo/TimezoneDemo
+/Examples/WebhookReceiver/WebhookReceiver
+/Vendor/
+/worktree/
 .DS_Store
 /.swiftpm
 /Editor/intellij-aro/gradlew.bat
