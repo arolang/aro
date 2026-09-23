@@ -36,9 +36,27 @@ public struct ExtractAction: SynchronousAction {
         try validatePreposition(object.preposition)
 
         // Handle environment variable extraction: <env: VAR_NAME>
-        // Returns empty string for unset variables (like shell default behavior)
+        //
+        // An unset variable took the empty string, and there was no way to
+        // say what it should be instead — so every reader wrote
+        // `when <x> == ""` and the books taught that as the idiom
+        // (GitLab #830 item 1). `default` now answers it:
+        //
+        //     Extract the <port> from the <env: PORT> default "8080".
+        //
+        // Only an *unset* variable takes the default. `PORT=` sets it to
+        // the empty string, and that is a value somebody wrote — the same
+        // rule the `default` operator follows for `false`, `0` and `""`
+        // (GitLab #547). Without a default the old empty string stands, so
+        // nothing that worked before reads differently now.
         if object.base == "env", let varName = object.specifiers.first {
-            return ProcessInfo.processInfo.environment[varName] ?? ""
+            if let value = ProcessInfo.processInfo.environment[varName] {
+                return value
+            }
+            if let defaultVal = context.resolveAny("_default_value_") {
+                return defaultVal
+            }
+            return ""
         }
 
         // ARO-0047: Handle command-line parameter extraction: <parameter: NAME>
@@ -46,6 +64,14 @@ public struct ExtractAction: SynchronousAction {
             if let paramName = object.specifiers.first {
                 // Extract specific parameter
                 guard let value = context.container.parameterStorage.get(paramName) else {
+                    // Same clause, same meaning: an absent parameter takes
+                    // the default rather than failing the statement
+                    // (GitLab #830 item 1). Without one it still throws —
+                    // a required parameter that was not passed is an error,
+                    // not an empty string.
+                    if let defaultVal = context.resolveAny("_default_value_") {
+                        return defaultVal
+                    }
                     throw ActionError.undefinedVariable("parameter:\(paramName)")
                 }
                 return value

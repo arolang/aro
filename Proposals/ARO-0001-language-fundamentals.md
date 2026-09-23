@@ -578,6 +578,36 @@ comparison_op = "==" | "!=" | "is" | "is not"
 | `<=` | Less than or equal |
 | `>=` | Greater than or equal |
 
+### Membership and Affix Operators
+
+```ebnf
+membership_op = "in" | "not" , "in" ;
+affix_op      = "starts" , "with" | "ends" , "with" ;
+```
+
+| Operator | Meaning | Example |
+|----------|---------|---------|
+| `in` | Member of a collection or date range | `when <tag> in <allowed>` |
+| `not in` | Not a member | `when <tag> not in <banned>` |
+| `starts with` | Literal prefix | `when <path> starts with "/api"` |
+| `ends with` | Literal suffix | `when <name> ends with ".aro"` |
+| `contains` | Substring, or element of a collection | `when <name> contains "test"` |
+| `matches` | Regular expression | `when <name> matches "^a.c"` |
+
+These are the same operators ARO-0018 §2.1 specifies for `where`, and they mean
+the same thing in both places — the two condition grammars had diverged, so a
+predicate that filtered a collection could not guard a statement (GitLab #830).
+
+`starts with` and `ends with` are **literal**, which is the point of having
+them: `matches "^a.c"` accepts `axc` as readily as `a.c`, and every caller who
+wanted a literal prefix had to remember to escape.
+
+`starts` and `ends` are not reserved words. Only a following `with`, in
+operator position, makes either one an operator — so `<starts>`, `<ends>` and
+`<start-date>` stay available as names, for the reason GitLab #497 describes.
+Likewise `not` alone remains the unary negation; only the pair `not in` is
+infix.
+
 ### Logical Operators
 
 ```ebnf
@@ -799,23 +829,33 @@ The Publish statement exports a variable for other feature sets:
 
 ```ebnf
 publish_statement = "<Publish>" , "as" , "<" , external_name , ">" ,
-                    "<" , internal_variable , ">" , "." ;
+                    "<" , internal_variable , ">" ,
+                    [ "when" , expression ] , "." ;
 ```
 
 **Syntax:**
 ```aro
 Publish as <external-name> <internal-variable>.
+Publish as <external-name> <internal-variable> when <condition>.
 ```
 
 **Example:**
 ```aro
 Publish as <authenticated-user> <user>.
+Publish as <headline-score> <score> when <score> > 50.
 ```
 
 **Semantics:**
 1. `internal-variable` must be defined in the current feature set
 2. `external-name` becomes accessible to feature sets in the same business activity
 3. Both names can be used (alias created)
+4. With a `when` guard, a false condition skips the publish entirely — the
+   external name stays **unpublished** rather than published with a placeholder,
+   so a reader fails the way an absent binding always fails
+
+Publishing is an effect, and the guard is the same clause every action statement
+takes. Without it the condition had to move to every reader, which is both the
+wrong place and once per reader (GitLab #830).
 
 ### Cross-Feature-Set Access
 

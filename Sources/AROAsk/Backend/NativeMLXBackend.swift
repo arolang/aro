@@ -205,11 +205,17 @@ public actor NativeMLXBackend: LMBackend {
         // not enough headroom and the model frequently got cut off mid-
         // `<think>` with no visible output. Qwen3-Coder's context window
         // is 32k+, so 16k of output budget is safe.
+        // From the caller where it said, from the shared defaults otherwise
+        // (GitLab #877) — so the three backends stop decoding differently.
         var genParams = GenerateParameters(
-            temperature: Float(request.temperature ?? 0.2),
-            topP: 0.9
+            temperature: Float(request.temperature ?? SamplingDefaults.aroCoding.temperature),
+            topP: Float(request.topP ?? SamplingDefaults.aroCoding.topP)
         )
-        genParams.maxTokens = 16384
+        genParams.topK = request.topK ?? SamplingDefaults.aroCoding.topK
+        // The caller's reservation where it set one (GitLab #869), which is
+        // how a prompt near the window still gets an answer instead of an
+        // overflow; 16 384 otherwise, for the reason above.
+        genParams.maxTokens = request.maxTokens ?? 16384
 
         // Prepare input with chat template and tools
         let userInput = UserInput(
@@ -219,6 +225,12 @@ public actor NativeMLXBackend: LMBackend {
 
         // Prepare input (applies chat template) then generate
         let lmInput = try await container.prepare(input: userInput)
+
+        // The exact prompt length, from the tokenizer that is about to read
+        // it (GitLab #870). Every other backend has to ask a server for this
+        // number or guess at it; here the tokens are already in hand, so the
+        // budget gets a measurement rather than an estimate.
+        let promptTokens = lmInput.text.tokens.size
         let stream = try await container.generate(
             input: lmInput,
             parameters: genParams
@@ -248,12 +260,17 @@ public actor NativeMLXBackend: LMBackend {
         let detectedToolCalls = parseToolCalls(from: textForToolParsing)
 
         let cleanedText = stripToolCallMarkup(from: accumulated)
+        lastUsage = LMUsage(promptTokens: promptTokens)
         return LMChatResponse.Choice.Message(
             role: "assistant",
             content: cleanedText.isEmpty ? nil : cleanedText,
             toolCalls: detectedToolCalls.isEmpty ? nil : detectedToolCalls
         )
     }
+
+    private var lastUsage: LMUsage?
+
+    public func usageOfLastChat() async -> LMUsage? { lastUsage }
 
     // MARK: - Tool call parsing
 

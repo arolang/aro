@@ -617,7 +617,7 @@ instead of reporting "no action named" (GitLab #828):
 
 | Form | Meaning |
 |------|---------|
-| `Publish as <alias> <variable>.` | Makes a variable visible to other feature sets in the same business activity |
+| `Publish as <alias> <variable> [when <cond>].` | Makes a variable visible to other feature sets in the same business activity; a false guard leaves the name unpublished (GitLab #830) |
 | `Require the <name> from the <source>.` | Declares an external dependency (below) |
 | `match <noun> { case <pattern> { … } otherwise { … } }` | Branches on a value; the first matching case wins |
 | `Break.` | Leaves the innermost loop |
@@ -742,6 +742,49 @@ directory to an untrusted name.
 sets permissions and binds `{ path, permissions, octal, previous }`; octal and
 the symbolic form `Stat` prints are both accepted, so a mode read off one file
 applies to another. `Touch the <m> for the <file: p>.` creates or stamps.
+
+### Condition operators
+
+`when` and `where` take the same operator set (ARO-0001, ARO-0018 §2.1) — they
+had diverged, so a predicate that could filter a collection could not guard a
+statement (GitLab #830):
+
+| Operator | Example |
+|----------|---------|
+| `in` / `not in` | `when <tag> not in <banned>` |
+| `starts with` / `ends with` | `when <path> starts with "/api"` |
+| `contains` | `when <name> contains "test"` |
+| `matches` | `when <name> matches "^a.c"` |
+| `before` / `after` | `when <deadline> before <now>` |
+
+The affix operators are **literal** — that is the point of having them, since
+`matches "^a.c"` also accepts `axc`. `starts` and `ends` are not reserved: only
+a following `with`, in operator position, makes them operators, so `<starts>`
+and `<end-date>` stay usable as names. `not` alone is still the unary negation.
+
+### Absent values
+
+`Extract … default <value>` supplies a value when the source is not there:
+
+```aro
+Extract the <port> from the <env: PORT> default "8080".
+Extract the <mode> from the <parameter: mode> default "fast".
+```
+
+Only an **unset** variable takes the default. `PORT=` is a value somebody wrote
+and wins — the same rule the `default` operator follows for `false`, `0` and
+`""` (GitLab #547). Without the clause an unset variable still binds `""`.
+
+### HTTP status names
+
+`HTTPStatusCatalog` (AROParser) is the single source for
+`Return a <Name: status>` — read by the interpreter, the compiled binary and
+`aro check`. It used to be two hard-coded switches that disagreed (twelve names
+vs five) and **both fell through to 200**, so `<TooManyRequests: status>` was a
+200 with a rate-limit body (GitLab #830). Case and separators do not
+distinguish names. A misspelling within a typo's distance of a real name is a
+check warning; a genuine domain status (`<PendingVerification: status>`,
+ARO-0002 §7) is a deliberate 200 and stays silent.
 
 **Qualifier-as-Name Syntax**: When you need multiple results of the same operation, use the qualifier to specify the operation while the base becomes the variable name:
 

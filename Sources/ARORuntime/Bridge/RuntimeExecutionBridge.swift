@@ -1289,6 +1289,37 @@ func evaluateBinaryOp(op: String, left: any Sendable, right: any Sendable) -> an
         }
         return false
 
+    // `a not in b` — the exact negation of the case above, written out
+    // rather than delegating so the date-range and dictionary paths stay
+    // literally the same code (GitLab #830 item 5).
+    case "not in":
+        if let range = right as? ARODateRange, let date = parseARODate(left) {
+            return !range.contains(date)
+        }
+        if let range = left as? ARODateRange, let date = parseARODate(right) {
+            return !range.contains(date)
+        }
+        if let array = right as? [any Sendable] {
+            let leftStr = asString(left)
+            return !array.contains { asString($0) == leftStr }
+        }
+        if let str = right as? String, let substr = left as? String {
+            return !(substr.isEmpty || str.contains(substr))
+        }
+        if let dict = right as? [String: any Sendable], let key = left as? String {
+            return dict[key] == nil
+        }
+        return true
+
+    // Affix tests (GitLab #830 item 5), matching the interpreter's
+    // `affixText` rendering so a numeric operand behaves the same in
+    // both modes.
+    case "starts with":
+        return asString(left).hasPrefix(asString(right))
+
+    case "ends with":
+        return asString(left).hasSuffix(asString(right))
+
     // Regex matching
     case "matches":
         let str = asString(left)

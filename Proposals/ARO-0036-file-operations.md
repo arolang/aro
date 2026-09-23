@@ -145,9 +145,21 @@ Copy files or directories.
 ### 4.1 Syntax
 
 ```aro
-Copy the <file: source> to the <destination: target>.
-Copy the <directory: source> to the <destination: target>.
+Copy the <name: source> to the <destination: target>.
 ```
+
+The result slot is a **binding whose name the author picks**, and `source` is
+read from its specifier. `file` and `directory` are the conventional names, not
+required ones:
+
+```aro
+Copy the <file: source> to the <destination: target>.        (* conventional *)
+Copy the <backup: source> to the <destination: target>.      (* binds `backup` *)
+```
+
+Requiring the literal word meant two copies in one feature set both rebound
+`file`, which immutability refuses — so the documented workaround was to split
+them across feature sets (GitLab #830). `Move` reads identically.
 
 ### 4.2 Behavior
 
@@ -169,6 +181,10 @@ Copy the <directory: "./src"> to the <destination: "./backup/src">.
 Create the <source-path> with "./data/input.json".
 Create the <dest-path> with "./archive/input.json".
 Copy the <file: source-path> to the <destination: dest-path>.
+
+(* Two copies in one feature set, each binding its own result *)
+Copy the <template-backup: "./template.txt"> to the <destination: "./bak/template.txt">.
+Copy the <config-backup: "./config.yaml"> to the <destination: "./bak/config.yaml">.
 ```
 
 ---

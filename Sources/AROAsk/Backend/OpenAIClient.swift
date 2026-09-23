@@ -19,7 +19,11 @@ final class OpenAIClient: Sendable {
         self.session = session
     }
 
-    func chat(_ request: LMChatRequest) async throws -> LMChatResponse.Choice.Message {
+    /// The message, plus whatever the server said about token usage
+    /// (GitLab #870). Servers that report none give `nil` and the caller
+    /// falls back to its estimate.
+    func chatWithUsage(_ request: LMChatRequest) async throws
+        -> (message: LMChatResponse.Choice.Message, usage: LMUsage?) {
         let url = endpoint.appendingPathComponent("v1/chat/completions")
         var urlRequest = URLRequest(url: url)
         urlRequest.httpMethod = "POST"
@@ -44,6 +48,10 @@ final class OpenAIClient: Sendable {
         guard let first = decoded.choices.first else {
             throw LMBackendError.invalidResponse("no choices in response")
         }
-        return first.message
+        return (first.message, decoded.usage)
+    }
+
+    func chat(_ request: LMChatRequest) async throws -> LMChatResponse.Choice.Message {
+        try await chatWithUsage(request).message
     }
 }
