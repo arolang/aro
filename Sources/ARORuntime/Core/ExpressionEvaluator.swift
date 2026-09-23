@@ -401,6 +401,10 @@ public struct ExpressionEvaluator: Sendable {
         case .matches:
             return matchesPattern(left, right)
 
+        // Set containment (ARO-0042 §3.6, GitLab #864).
+        case .subset:
+            return isSubset(left, of: right)
+
         // Affix tests (GitLab #830 item 5). `where` has dispatched
         // `starts-with` / `ends-with` since ARO-0018; the guard grammar
         // could not say them, so a prefix test in a `when` was written as
@@ -762,6 +766,43 @@ public struct ExpressionEvaluator: Sendable {
             return dict[key] != nil
         }
         return false
+    }
+
+    /// `<a> subset of <b>` — is every element of `a` present in `b`?
+    /// (ARO-0042 §3.6, GitLab #864.)
+    ///
+    /// Set semantics, not multiset: `[1, 1]` is a subset of `[1]`, because the
+    /// question is about membership and a duplicate does not make a new
+    /// member. The collection-producing operations of ARO-0042 are multiset,
+    /// and this deliberately is not — "does this list contain everything that
+    /// one does" is the question people ask, and counting duplicates answers a
+    /// different one.
+    ///
+    /// The empty set is a subset of everything, including itself. That is the
+    /// mathematical convention and also the useful one: "the roles this route
+    /// requires" being empty means every caller is allowed.
+    private func isSubset(_ subset: any Sendable, of superset: any Sendable) -> Bool {
+        // Objects: every key of A present in B with an equal value.
+        if let a = subset as? [String: any Sendable] {
+            guard let b = superset as? [String: any Sendable] else { return false }
+            return a.allSatisfy { key, value in
+                guard let other = b[key] else { return false }
+                return areEqual(value, other)
+            }
+        }
+
+        // Strings: every character of A appears somewhere in B.
+        if let a = subset as? String, let b = superset as? String {
+            let characters = Set(b)
+            return a.allSatisfy { characters.contains($0) }
+        }
+
+        // Lists — and a bare scalar as a one-element list, so
+        // `when "admin" subset of <roles>` reads the way it looks.
+        let elements: [any Sendable] = (subset as? [any Sendable]) ?? [subset]
+        guard superset is [any Sendable] || superset is String
+                || superset is [String: any Sendable] else { return false }
+        return elements.allSatisfy { containsValue(superset, $0) }
     }
 
     /// Text for an affix test. A `starts with` on a number is a

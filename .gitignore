@@ -5,8 +5,14 @@
 /Website/dist
 /Examples/HelloWorld/HelloWorld
 /Examples/DeleteResult/DeleteResult
+/Examples/PositionalArguments/PositionalArguments
+/Examples/CaptureGroups/CaptureGroups
+/Examples/ApplicationLimits/ApplicationLimits
 /Examples/HTMLAttributes/HTMLAttributes
 /Examples/TimezoneDemo/TimezoneDemo
+/Examples/WebhookReceiver/WebhookReceiver
+/Vendor/
+/worktree/
 .DS_Store
 /.swiftpm
 /Editor/intellij-aro/gradlew.bat

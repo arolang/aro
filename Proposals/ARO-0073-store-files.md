@@ -156,24 +156,99 @@ For writable stores, changes are persisted back to disk:
 | `Store` action | Schedule write-back with 1-second debounce |
 | `Update` action | Schedule write-back with 1-second debounce |
 | `Delete` action | Schedule write-back with 1-second debounce |
+| `Commit` statement | Write now, and wait for it (§5a) |
 | Graceful shutdown (SIGINT/SIGTERM) | Flush all pending writes immediately |
 | Crash / SIGKILL | Pending changes lost (last successful write preserved) |
+
+The debounce is why a program that wants a guarantee needs `Commit`: between a
+`Store` and the write it schedules there is a second in which a SIGKILL loses
+the change, and nothing in the source says so.
 
 **Atomic writes:** Write-back always uses a write-to-temporary-then-rename strategy to prevent corruption:
 
 ```
-┌──────────────────────────────────────────────────┐
-│              ATOMIC WRITE-BACK                    │
-│                                                    │
-│   1. Serialize repository to YAML                 │
-│   2. Write to  <name>.store.tmp                   │
-│   3. fsync     <name>.store.tmp                   │
-│   4. Rename    <name>.store.tmp -> <name>.store   │
-│                                                    │
-│   If step 2 or 3 fails: .tmp is abandoned         │
-│   Original .store file is never corrupted         │
-└──────────────────────────────────────────────────┘
++--------------------------------------------------+
+|              ATOMIC WRITE-BACK                    |
+|                                                   |
+|   1. Serialize repository to YAML                 |
+|   2. Write to  <name>.store.tmp                   |
+|   3. fsync     <name>.store.tmp                   |
+|   4. rename(2) <name>.store.tmp -> <name>.store   |
+|                                                   |
+|   If step 2 or 3 fails: .tmp is abandoned         |
+|   Original .store file is never corrupted         |
++--------------------------------------------------+
 ```
+
+Steps 3 and 4 are worth stating exactly, because this document described them
+before the code did them (GitLab #863). `rename(2)` **replaces** its
+destination atomically; the implementation removed the destination first and
+then moved, which left a window in which the `.store` file did not exist at
+all, and it never called `fsync`, so a crash could leave a file whose *name*
+had been renamed into place and whose *contents* had not reached the disk.
+Both are fixed. What the diagram promises is now what happens.
+
+### 5a. Checkpoints
+
+The permission bit decides *whether* a store is written. It says nothing about
+*when*, and until GitLab #863 there was nothing between "on every mutation,
+one second later" and "never".
+
+```aro
+Commit the <saved> to the <orders-repository>.   (* this store, now *)
+Commit the <checkpoint> to the <stores>.         (* every writable store, together *)
+```
+
+`Commit` is the same verb ARO-0080 uses for Git, and deliberately: both are the
+act of taking what is in memory and making it durable. The object says which —
+`<git>` a repository of commits, a `*-repository` or `<stores>` the file behind
+a seeded repository.
+
+The statement binds a record:
+
+| Field | Meaning |
+|-------|---------|
+| `repositories` | the names written, sorted |
+| `written` | how many files were replaced |
+| `items` | how many rows went to disk |
+
+A `Commit` to a repository that no writable `.store` file backs is an error
+naming the repository, not a silent success. Reporting a write that could not
+have happened is the one outcome worth ruling out.
+
+#### Write-back mode
+
+```aro
+Configure the <stores: write-back> with "manual".
+```
+
+| Mode | Behaviour |
+|------|-----------|
+| `auto` (default) | every mutation schedules a debounced write; shutdown flushes |
+| `manual` | mutations mark the store dirty; only `Commit` — and shutdown — write |
+
+`manual` is for the run that rewrites the same rows repeatedly: one write at
+the end instead of one per second of churn. Shutdown still flushes in both
+modes, because losing a run's work to a clean exit would be a worse default
+than any amount of I/O.
+
+#### What "all-or-nothing" means here, exactly
+
+`Commit the <r> to the <stores>.` serialises every store and writes and fsyncs
+every temp file **before** moving any of them into place. So:
+
+- A failure while serialising or writing aborts the whole checkpoint and leaves
+  every `.store` file untouched. The temp files are removed.
+- No `.store` file is ever observed truncated or missing, in any scenario.
+- The renames themselves are separate syscalls. **A crash between two of them
+  can leave one store new and one store old.**
+
+That last line is the honest limit, and the one this section exists to state.
+Closing it needs a write-ahead journal and a recovery pass at startup — which
+is a database, which is the thing a `.store` file exists in order not to be. An
+application that needs two stores to move together as a matter of correctness
+has outgrown `.store` files and wants a database plugin; ARO-0016 is the door.
+
 
 ### 6. Compiled Binaries
 
@@ -343,9 +418,12 @@ The mapping from filename to repository name uses simple English singularization
 | Scenario | Data State |
 |----------|------------|
 | Clean shutdown (SIGINT/SIGTERM) | All pending writes flushed |
-| SIGKILL / power loss | Last successful atomic write preserved |
+| SIGKILL / power loss | Last successful atomic write preserved; changes since it are lost |
+| SIGKILL inside the debounce window | That window's changes are lost — use `Commit` (§5a) |
 | Write-back I/O error | Error logged, retried on next change; original file intact |
 | Disk full during write-back | `.tmp` file abandoned, original intact, error logged |
+| Crash mid-`Commit`, before any rename | Every store unchanged |
+| Crash mid-`Commit`, between renames | Some stores new, some old; none corrupt (§5a) |
 
 ### Debounce Behavior
 
