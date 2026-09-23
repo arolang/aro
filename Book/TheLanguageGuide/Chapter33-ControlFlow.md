@@ -60,6 +60,9 @@ Return a <BadRequest: status> for the <invalid: input> when <validation> is fail
 | `is a Type` | Type check (e.g. `<value> is a Number`) |
 | `contains` | Membership |
 | `matches` | Regex match |
+| `in` / `not in` | Member of a collection or date range |
+| `starts with` / `ends with` | Literal prefix / suffix |
+| `before` / `after` | Instant ordering |
 
 > **Note:** In a `when` guard, `is` only works for `is true`, `is false`,
 > `is null`, and type checks. For value equality use `==` (or `=`), not
@@ -73,6 +76,26 @@ Return a <BadRequest: status> for the <invalid: input> when <validation> is fail
 > zero, or give the `Retrieve` a `default` clause (Chapter 36) so there is
 > always something to work with. `is null` remains the right test for a
 > value that really can be null, such as an absent field in a parsed body.
+
+### Affix and Membership Guards
+
+```aro
+Log "routed to the API" to the <console> when <path> starts with "/api".
+Log "an ARO source file" to the <console> when <name> ends with ".aro".
+Log "allowed" to the <console> when <tag> not in <banned>.
+```
+
+These read the same in a `when` guard and in a `where` clause. They used not
+to: `where` had `in` and `not in`, `when` had only `in`, and neither had the
+affix operators — so a prefix test in a guard was written as
+`matches "^/api"`. That is a regex, and it quietly accepts more than it looks
+like it does: `matches "^a.c"` is true of `axc` as well as `a.c`. The affix
+operators are literal, which is the whole reason to have them.
+
+`starts` and `ends` are not reserved words. Only a following `with`, in
+operator position, makes them operators, so `<starts>`, `<ends>` and
+`<start-date>` remain names you can use. Likewise a bare `not` is still
+negation; only the pair `not in` is an operator.
 
 ### Boolean Operators
 

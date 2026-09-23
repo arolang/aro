@@ -12,7 +12,16 @@ public struct AskSessionConfig: Sendable {
     public var autoApproveAll: Bool
     public var maxToolCallRounds: Int
     public var temperature: Double
+    /// Nucleus mass and top-k cutoff (GitLab #877). Defaults tuned for
+    /// generating a language with a closed vocabulary — see
+    /// `SamplingDefaults.aroCoding`.
+    public var topP: Double
+    public var topK: Int
     public var skipMCP: Bool
+    /// The model is not given the tools that write or execute (GitLab
+    /// #875). A tool the approver would refuse is not a capability — it is
+    /// a round the model spends discovering that.
+    public var readOnly: Bool
     /// File the user currently has open (editor focus). Its fresh content
     /// is injected into every request as a transient context block — never
     /// persisted to `.context`. Change at runtime via `setFocusFile(_:)`.
@@ -31,8 +40,11 @@ public struct AskSessionConfig: Sendable {
         model: String = "ARO-Lang/aro-coder-6bit",
         autoApproveAll: Bool = false,
         maxToolCallRounds: Int = 25,
-        temperature: Double = 0.2,
+        temperature: Double = SamplingDefaults.aroCoding.temperature,
+        topP: Double = SamplingDefaults.aroCoding.topP,
+        topK: Int = SamplingDefaults.aroCoding.topK,
         skipMCP: Bool = false,
+        readOnly: Bool = false,
         focusFile: URL? = nil,
         quiet: Bool = false,
         injectProjectContext: Bool = false
@@ -42,7 +54,10 @@ public struct AskSessionConfig: Sendable {
         self.autoApproveAll = autoApproveAll
         self.maxToolCallRounds = maxToolCallRounds
         self.temperature = temperature
+        self.topP = topP
+        self.topK = topK
         self.skipMCP = skipMCP
+        self.readOnly = readOnly
         self.focusFile = focusFile
         self.quiet = quiet
         self.injectProjectContext = injectProjectContext
@@ -101,6 +116,15 @@ public actor AskSession {
     private var backend: (any LMBackend)?
     private var mcpBridges: [MCPClientBridge] = []
     private var contextLength: Int = 8192
+    /// What the conversation costs and what still fits (GitLab #869, #870).
+    /// Created once `contextLength` is known.
+    private var budget = TokenBudget(window: 8192)
+    /// What this session has already handed the model, so a second search
+    /// returns other things (GitLab #874).
+    private let retrievalMemory = RetrievalMemory()
+    /// What this session cost, and what the harness had to correct in it
+    /// (GitLab #878).
+    private let tally = SessionTally()
     private var focusFile: URL?
     private var eventSink: (@Sendable (AskEvent) -> Void)?
     private var editorHooks: AskEditorHooks?
@@ -134,7 +158,8 @@ public actor AskSession {
         await registry.register(ProposalTools.all(cwd: config.workingDirectory))
         await registry.register([KnowledgeTool.aroKnowledge()])
         await registry.register(ProjectTools.all(guard: pathGuard))
-        await registry.register(SearchTool.searchProject(store: vectorStore, embedder: embedder))
+        await registry.register(SearchTool.searchProject(
+            store: vectorStore, embedder: embedder, memory: retrievalMemory))
 
         // 2. Vector store, MCP bridges, and model resolution run
         // in parallel — they're independent and each is multi-
@@ -157,6 +182,7 @@ public actor AskSession {
         try await selected.start()
         self.backend = selected
         self.contextLength = entry.contextLength ?? 8192
+        await budget.setWindow(contextLength)
     }
 
     /// Register tools + MCP but skip backend startup (for slash commands).
@@ -167,7 +193,8 @@ public actor AskSession {
         await registry.register(ProposalTools.all(cwd: config.workingDirectory))
         await registry.register([KnowledgeTool.aroKnowledge()])
         await registry.register(ProjectTools.all(guard: pathGuard))
-        await registry.register(SearchTool.searchProject(store: vectorStore, embedder: embedder))
+        await registry.register(SearchTool.searchProject(
+            store: vectorStore, embedder: embedder, memory: retrievalMemory))
         try await vectorStore.load()
         if !config.skipMCP {
             await startMCPBridges()
@@ -219,6 +246,18 @@ public actor AskSession {
         focusFile.map { displayPath(for: $0) }
     }
 
+    /// What this session cost, and what the harness had to correct in it
+    /// (GitLab #878). `aro ask --stats` prints it; the training pipeline is
+    /// the real consumer.
+    public func statistics() async -> SessionTally.Snapshot {
+        await tally.current()
+    }
+
+    /// The tally as one line.
+    public func statisticsSummary() async -> String {
+        await tally.summary()
+    }
+
     /// Receive status + tool-activity events while `ask()` runs. Used by
     /// SOLARO to show progress and reload files the model modified.
     public func setEventSink(_ sink: (@Sendable (AskEvent) -> Void)?) {
@@ -243,9 +282,12 @@ public actor AskSession {
     }
 
     private func emitToolResult(name: String, arguments: String, output: String, failed: Bool) {
-        if !config.quiet { TerminalUI.printToolResult(name: name, output: output) }
+        // The provenance trailer (GitLab #879) is for the harness, not for a
+        // reader or an embedder: strip it from everything that leaves here.
+        let shown = ToolResultEnvelope.visible(output)
+        if !config.quiet { TerminalUI.printToolResult(name: name, output: shown) }
         let modified = failed ? nil : Self.modifiedPath(tool: name, argumentsJSON: arguments)
-        eventSink?(.toolCallFinished(name: name, output: output, failed: failed, modifiedPath: modified))
+        eventSink?(.toolCallFinished(name: name, output: shown, failed: failed, modifiedPath: modified))
     }
 
     /// Tools that mutate the workspace, mapped to the argument key that
@@ -371,6 +413,24 @@ public actor AskSession {
     /// OPEN PROJECT and OPEN FILE context blocks right after the system prompt.
     private func requestMessages(from messages: [AskMessage]) async -> [LMChatRequest.Message] {
         var out = messages.map { $0.toRequestMessage() }
+        // Replace the prompt's tool list with the tools actually attached
+        // (GitLab #867). The stored system message keeps the shipped text —
+        // `.context` is a record of the conversation, not of what the harness
+        // did to it — and the substitution happens on the way out, once per
+        // request, so MCP tools that only exist at runtime are listed too.
+        if let first = out.first, first.role == "system", let text = first.content {
+            let scope = ToolScope.apply(
+                to: await registry.list(),
+                situation: ToolScope.Situation(readOnly: config.readOnly))
+            var prompt = ToolPromptCatalogue.substituted(into: text, tools: scope.attached)
+            // A model that finds no way to write should know it is a policy,
+            // so it answers with what to change rather than hunting for a
+            // tool that is not there (#875).
+            if let notice = ToolScope.withheldNotice(scope.withheld) {
+                prompt += "\n\n" + notice + "\n"
+            }
+            out[0].content = prompt
+        }
         var context: [LMChatRequest.Message] = []
         if config.injectProjectContext, let project = projectContextMessage() {
             context.append(project)
@@ -390,13 +450,21 @@ public actor AskSession {
         guard let backend = backend else { throw LMBackendError.notStarted }
 
         var context = try contextStore.loadOrCreate(model: config.model)
+        await tally.record(turn: true)
         context.messages.append(AskMessage(role: "user", content: prompt))
         try contextStore.save(context)
 
         // Auto-compact: summarize old turns when context grows too large
         try await compactIfNeeded(&context)
 
-        let tools = await registry.definitions()
+        // Which of the registered tools this request is given (#875).
+        let allTools = await registry.list()
+        let scope = ToolScope.apply(
+            to: allTools, situation: ToolScope.Situation(readOnly: config.readOnly))
+        let tools = scope.attached.map(\.toolDefinition)
+        if let notice = ToolScope.withheldNotice(scope.withheld) {
+            emitStatus(notice)
+        }
 
         // Per-tool failure tracking + session-wide failure ceiling.
         // A flaky or broken tool would otherwise drive the model into
@@ -407,18 +475,103 @@ public actor AskSession {
         // to the model so it can pick a different approach (#369).
         var toolConsecutiveFailures: [String: Int] = [:]
         var totalToolFailures = 0
+        /// Every tool this run dispatched, for the structural bail-out
+        /// checks (GitLab #871).
+        var toolCallsMade: [String] = []
+        var bailoutsFired: Set<BailoutGuard.Finding> = []
+        /// Whether this run wrote ARO to a file, which is the confirmed
+        /// signal that `aro_check` is owed (GitLab #873).
+        var wroteAROFile = false
+        var groundingChecked = false
+        let grounding = GroundingCheck(
+            root: config.workingDirectory,
+            proposalNumbers: GroundingCheck.proposalNumbers(in: config.workingDirectory))
+        /// Requirements already compelled, so a model that ignores a forced
+        /// call is not forced again for ever.
+        var forcedAlready: Set<String> = []
         let perToolFailureLimit = 3
         let sessionFailureLimit = 20
 
         for round in 0..<config.maxToolCallRounds {
+            // Keep the conversation inside the window on EVERY round, not
+            // once before the loop (GitLab #869). `compactIfNeeded` above
+            // runs when the conversation is smallest; everything that
+            // follows — up to 25 rounds of file contents — used to go in
+            // unmeasured, so a run that opened three large files mid-loop
+            // could pass the check comfortably and still overflow.
+            //
+            // Tool results are shrunk first (#868): deterministic, free, and
+            // it keeps the provenance a later turn needs. Summarising is the
+            // fallback, because it costs a generation and loses paths.
+            if round > 0, await budget.exceeds(fraction: 0.7, messages: context.messages) {
+                // `fits` is called synchronously inside the compactor, so the
+                // ratio is read once here rather than awaited per step. It
+                // cannot change mid-compaction anyway.
+                let ratio = await budget.charsPerToken
+                let ceiling = Int(Double(contextLength) * 0.7)
+                let report = ToolResultCompactor.compactUntilFits(
+                    &context.messages,
+                    fits: { msgs in
+                        TokenBudget.tokens(in: msgs, charsPerToken: ratio) < ceiling
+                    })
+                if report.didAnything {
+                    await tally.record(compacted: report.compacted)
+                    emitStatus("context is filling up — elided \(report.compacted) earlier "
+                             + "tool result(s), keeping their paths")
+                }
+                // Still over after the cheap step: fall back to summarising.
+                if await budget.exceeds(fraction: 0.85, messages: context.messages) {
+                    try await compactIfNeeded(&context)
+                }
+            }
+
+            // What is left for the answer after the prompt (GitLab #869).
+            // nil means "even the floor does not fit" — the compaction above
+            // has already had its turn, so the honest thing is to let the
+            // backend's own default stand and let it say what it says.
+            let allowance = await budget.outputAllowance(
+                for: context.messages, requested: Self.requestedOutputTokens)
+
+            // A lookup this turn owes and has not made (GitLab #873). Named
+            // in `tool_choice`, which takes the third option away: the model
+            // may not answer instead of calling it. Only a *confirmed*
+            // requirement is compelled — one read off what the turn produced,
+            // never one guessed from the words of the request — and only
+            // once, because a model that ignores a forced call will ignore
+            // the next one too.
+            let attachedNames = Set(tools.map { $0.function.name })
+            let forced = ToolRequirement.outstanding(
+                answer: "",
+                toolCallsMade: toolCallsMade,
+                wroteAROFile: wroteAROFile,
+                attached: attachedNames)
+                .first { $0.isCompellable && !forcedAlready.contains($0.preferred) }
+            if let forced {
+                forcedAlready.insert(forced.preferred)
+                await tally.record(forcedCall: true)
+                emitStatus("requiring \(forced.preferred) — \(forced.reason)")
+            }
+
             let request = LMChatRequest(
                 model: config.model,
                 messages: await requestMessages(from: context.messages),
                 tools: tools.isEmpty ? nil : tools,
                 temperature: config.temperature,
-                stream: false
+                stream: false,
+                maxTokens: allowance,
+                topP: config.topP,
+                topK: config.topK,
+                forcedToolCall: forced?.preferred
             )
             var reply = try await backend.chat(request: request)
+
+            // What that request actually cost, from whoever counted it
+            // (GitLab #870). The MLX backend counts exactly; an
+            // OpenAI-compatible server reports `usage.prompt_tokens`; a
+            // backend that does neither returns nil and the estimate stands.
+            await budget.observe(
+                usage: await backend.usageOfLastChat(),
+                promptCharacters: TokenBudget.characters(in: context.messages))
 
             // Verbose mode: dump the raw model output (including `<think>`)
             // to stderr so the user can see what the model was reasoning
@@ -443,10 +596,17 @@ public actor AskSession {
             // once with /no_think prepended to bypass reasoning entirely.
             // The model usually produces a direct answer the second time.
             // Skip the retry if the user already asked for /no_think.
+            // A stall is a message with no answer in it. A `<think>` block
+            // followed by four good paragraphs is an answer with a preamble,
+            // and regenerating it costs the reader the wait and gains
+            // nothing (GitLab #872).
             if stripped.truncatedDuringThinking
+                && stripped.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                && (reply.toolCalls ?? []).isEmpty
                 && Self.thinkingTail(reply.content ?? "") == nil
                 && !prompt.hasPrefix("/no_think") {
                 emitStatus("model stalled while thinking — retrying with /no_think…")
+                await tally.recordRetry("no-think")
                 var retryMessages = context.messages
                 if let lastUser = retryMessages.lastIndex(where: { $0.role == "user" }) {
                     let orig = retryMessages[lastUser].content ?? ""
@@ -462,7 +622,9 @@ public actor AskSession {
                     messages: await requestMessages(from: retryMessages),
                     tools: tools.isEmpty ? nil : tools,
                     temperature: config.temperature,
-                    stream: false
+                    stream: false,
+                    topP: config.topP,
+                    topK: config.topK
                 )
                 let retryReply = try await backend.chat(request: retryRequest)
                 if Self.isVerbose, let raw = retryReply.content, !raw.isEmpty {
@@ -471,7 +633,16 @@ public actor AskSession {
                     ))
                 }
                 let retryStripped = stripThinking(retryReply.content ?? "")
-                if !retryStripped.text.isEmpty || !(retryReply.toolCalls ?? []).isEmpty {
+                // Keep the better of the two, not the later one (GitLab
+                // #872). A retry that comes back level leaves the answer the
+                // user already watched arrive.
+                if ReplyQuality.shouldReplace(
+                    current: ReplyQuality(text: stripped.text,
+                                          toolCalls: reply.toolCalls,
+                                          truncated: stripped.truncatedDuringThinking),
+                    with: ReplyQuality(text: retryStripped.text,
+                                       toolCalls: retryReply.toolCalls,
+                                       truncated: retryStripped.truncatedDuringThinking)) {
                     reply = retryReply
                     stripped = retryStripped
                 }
@@ -490,6 +661,7 @@ public actor AskSession {
                 && (reply.toolCalls ?? []).isEmpty
                 && !prompt.contains(directivePrefix) {
                 emitStatus("model returned no content — retrying with code-only directive…")
+                await tally.recordRetry("code-only")
                 var directiveMessages = context.messages
                 if let lastUser = directiveMessages.lastIndex(where: { $0.role == "user" }) {
                     let orig = directiveMessages[lastUser].content ?? ""
@@ -506,7 +678,9 @@ public actor AskSession {
                     messages: await requestMessages(from: directiveMessages),
                     tools: tools.isEmpty ? nil : tools,
                     temperature: config.temperature,
-                    stream: false
+                    stream: false,
+                    topP: config.topP,
+                    topK: config.topK
                 )
                 let directiveReply = try await backend.chat(request: directiveRequest)
                 if Self.isVerbose, let raw = directiveReply.content, !raw.isEmpty {
@@ -515,8 +689,13 @@ public actor AskSession {
                     ))
                 }
                 let directiveStripped = stripThinking(directiveReply.content ?? "")
-                if !directiveStripped.text.isEmpty
-                    || !(directiveReply.toolCalls ?? []).isEmpty {
+                if ReplyQuality.shouldReplace(
+                    current: ReplyQuality(text: stripped.text,
+                                          toolCalls: reply.toolCalls,
+                                          truncated: stripped.truncatedDuringThinking),
+                    with: ReplyQuality(text: directiveStripped.text,
+                                       toolCalls: directiveReply.toolCalls,
+                                       truncated: directiveStripped.truncatedDuringThinking)) {
                     reply = directiveReply
                     stripped = directiveStripped
                 }
@@ -534,6 +713,7 @@ public actor AskSession {
                     "model wrote a tool call as a code block instead of invoking it — " +
                     "retrying via the tool-call protocol…"
                 )
+                await tally.recordRetry("disguised-tool-call")
                 var nudgeMessages = context.messages
                 nudgeMessages.append(AskMessage(
                     role: "assistant",
@@ -554,7 +734,9 @@ public actor AskSession {
                     messages: await requestMessages(from: nudgeMessages),
                     tools: tools.isEmpty ? nil : tools,
                     temperature: config.temperature,
-                    stream: false
+                    stream: false,
+                    topP: config.topP,
+                    topK: config.topK
                 )
                 let nudgeReply = try await backend.chat(request: nudgeRequest)
                 if Self.isVerbose, let raw = nudgeReply.content, !raw.isEmpty {
@@ -563,7 +745,13 @@ public actor AskSession {
                     ))
                 }
                 let nudgeStripped = stripThinking(nudgeReply.content ?? "")
-                if !(nudgeReply.toolCalls ?? []).isEmpty || !nudgeStripped.text.isEmpty {
+                if ReplyQuality.shouldReplace(
+                    current: ReplyQuality(text: stripped.text,
+                                          toolCalls: reply.toolCalls,
+                                          truncated: stripped.truncatedDuringThinking),
+                    with: ReplyQuality(text: nudgeStripped.text,
+                                       toolCalls: nudgeReply.toolCalls,
+                                       truncated: nudgeStripped.truncatedDuringThinking)) {
                     reply = nudgeReply
                     stripped = nudgeStripped
                 }
@@ -595,10 +783,17 @@ public actor AskSession {
             // Done before persist so the saved turn, the self-repair `aro
             // check`, and the returned text all see the corrected code.
             if !stripped.text.isEmpty {
+                let beforeNormalisation = stripped.text
                 stripped = StrippedReply(
                     text: normalizeAROWhitespace(stripped.text),
                     truncatedDuringThinking: stripped.truncatedDuringThinking
                 )
+                // A repair is a defect the prompt was supposed to prevent.
+                // Counting it keeps the prompt failure visible instead of
+                // quietly papered over (GitLab #878).
+                if stripped.text != beforeNormalisation {
+                    await tally.recordRepair("aro-whitespace")
+                }
             }
 
             // Persist assistant turn (stripped)
@@ -612,6 +807,52 @@ public actor AskSession {
 
             // If no tool calls, we have a final text reply — validate any ARO code
             guard let toolCalls = reply.toolCalls, !toolCalls.isEmpty else {
+                // The turn is about to end. Two failures are visible only
+                // now, and only structurally: an answer that handed the
+                // reader a tool name, and ARO code that was never checked
+                // (GitLab #871). Each nudge fires once — a model that
+                // ignores the first will ignore the second, and each one
+                // costs the reader a regeneration of an answer they already
+                // watched arrive.
+                if let finding = BailoutGuard.inspect(
+                    answer: stripped.text,
+                    toolNames: tools.map { $0.function.name },
+                    toolCallsMade: toolCallsMade,
+                    alreadyFired: bailoutsFired) {
+                    bailoutsFired.insert(finding)
+                    await tally.recordRetry("bail-out")
+                    emitStatus(Self.bailoutStatus(for: finding))
+                    context.messages.append(AskMessage(
+                        role: "assistant",
+                        content: stripped.text.isEmpty ? nil : stripped.text))
+                    context.messages.append(AskMessage(role: "user", content: finding.nudge))
+                    try contextStore.save(context)
+                    continue
+                }
+
+                // Claims this project contradicts — a path that is not here,
+                // a proposal that does not exist, a qualifier ARO does not
+                // have (GitLab #876). Deterministic: everything checked is
+                // checked against the repo, so the verdict cannot itself be
+                // a hallucination. Fires once, like the bail-outs.
+                if !groundingChecked {
+                    groundingChecked = true
+                    let findings = grounding.inspect(answer: stripped.text)
+                    if !findings.isEmpty {
+                        await tally.recordRetry("ungrounded-claim")
+                        emitStatus("answer makes \(findings.count) claim(s) this project "
+                                 + "contradicts — asking for it again…")
+                        context.messages.append(AskMessage(
+                            role: "assistant",
+                            content: stripped.text.isEmpty ? nil : stripped.text))
+                        context.messages.append(AskMessage(
+                            role: "user",
+                            content: GroundingCheck.correction(for: findings)))
+                        try contextStore.save(context)
+                        continue
+                    }
+                }
+
                 let finalText = stripped.text
                 let validated = try await selfRepairIfNeeded(
                     text: finalText,
@@ -679,6 +920,11 @@ public actor AskSession {
                     totalToolFailures += 1
                 } else {
                     toolConsecutiveFailures[name] = 0
+                }
+                toolCallsMade.append(name)
+                await tally.record(toolCall: true, toolFailure: failed)
+                if ToolRequirement.wroteARO(tool: name, argumentsJSON: call.function.arguments) {
+                    wroteAROFile = true
                 }
 
                 emitToolResult(name: name, arguments: call.function.arguments, output: output, failed: failed)
@@ -808,6 +1054,17 @@ public actor AskSession {
     /// protocol, so nothing actually ran. Matches the underscore /
     /// `aro_mcp_`-prefixed TOOL names, never the space-separated `aro check`
     /// CLI form, so legitimate CLI examples in answers are left untouched.
+    /// The status line for a bail-out, phrased so the reader knows why the
+    /// answer they just watched is being redone.
+    static func bailoutStatus(for finding: BailoutGuard.Finding) -> String {
+        switch finding {
+        case .handedOverAToolName(let name):
+            return "model told you to run '\(name)' instead of running it — asking it to call the tool…"
+        case .wroteCodeWithoutChecking:
+            return "model wrote ARO without checking it — asking it to run aro_check…"
+        }
+    }
+
     private func looksLikeDisguisedToolCall(_ text: String, toolNames: [String]) -> Bool {
         guard !toolNames.isEmpty else { return false }
         // Candidate command tokens: each tool name plus the wrapper prefixes
@@ -1019,13 +1276,16 @@ public actor AskSession {
             // Vary temperature across attempts. Same temperature reproduces
             // the same wrong output, which is what the original loop did.
             let temp = min(1.5, config.temperature + Self.repairTempOffsets[attempt - 1])
+            await tally.recordRepair("aro-check")
 
             let request = LMChatRequest(
                 model: config.model,
                 messages: await requestMessages(from: context.messages),
                 tools: tools.isEmpty ? nil : tools,
                 temperature: temp,
-                stream: false
+                stream: false,
+                topP: SamplingDefaults.aroCoding.topP,
+                topK: SamplingDefaults.aroCoding.topK
             )
             let reply = try await backend.chat(request: request)
             let repairStripped = stripThinking(reply.content ?? "").text
@@ -1108,14 +1368,18 @@ public actor AskSession {
 
     /// Rough token estimate: ~4 characters per token, which is conservative
     /// enough to trigger compaction before the backend truncates.
-    private func estimateTokens(_ messages: [AskMessage]) -> Int {
-        messages.reduce(0) { total, msg in
-            let chars = (msg.content?.count ?? 0)
-                + (msg.toolCalls?.count ?? 0)
-                + (msg.name?.count ?? 0)
-                + 4  // role + framing overhead
-            return total + (chars + 3) / 4
-        }
+    /// What the conversation costs, from the budget rather than from a
+    /// constant (GitLab #870). Kept as a method because several call sites
+    /// read it; the arithmetic lives in `TokenBudget`.
+    /// What an answer is allowed to cost before the budget trims it.
+    ///
+    /// Matches the MLX backend's own ceiling, so on a conversation that fits
+    /// comfortably nothing changes: the reservation only binds once the
+    /// prompt has grown enough to make it bind.
+    static let requestedOutputTokens = 16384
+
+    private func estimateTokens(_ messages: [AskMessage]) async -> Int {
+        await budget.tokens(in: messages)
     }
 
     /// When the conversation exceeds 70% of the context window, summarize
@@ -1123,7 +1387,7 @@ public actor AskSession {
     /// Keeps: system prompt (index 0), summary, and the most recent turns.
     private func compactIfNeeded(_ context: inout AskContext) async throws {
         guard let backend = backend else { return }
-        let tokens = estimateTokens(context.messages)
+        let tokens = await estimateTokens(context.messages)
         let threshold = contextLength * 70 / 100
         guard tokens > threshold else { return }
 
@@ -1158,7 +1422,9 @@ public actor AskSession {
             ],
             tools: nil,
             temperature: 0.1,
-            stream: false
+            stream: false,
+            topP: SamplingDefaults.aroCoding.topP,
+            topK: SamplingDefaults.aroCoding.topK
         )
 
         let summaryReply = try await backend.chat(request: summaryRequest)
@@ -1354,7 +1620,9 @@ public actor AskSession {
                 ],
                 tools: nil,
                 temperature: 0.2,
-                stream: false
+                stream: false,
+                topP: SamplingDefaults.aroCoding.topP,
+                topK: SamplingDefaults.aroCoding.topK
             )
 
             guard let reply = try? await backend.chat(request: request),
@@ -1474,7 +1742,9 @@ public actor AskSession {
                 // line five times. Retrying is only worth the tokens if the
                 // next sample can differ.
                 temperature: min(0.7, 0.2 + Double(attempt - 1) * 0.15),
-                stream: false
+                stream: false,
+                topP: SamplingDefaults.aroCoding.topP,
+                topK: SamplingDefaults.aroCoding.topK
             )
 
             let reply = try await backend.chat(request: request)

@@ -78,8 +78,14 @@ public actor LlamaCppBackend: LMBackend {
         client = nil
     }
 
+    private var lastUsage: LMUsage?
+
     public func chat(request: LMChatRequest) async throws -> LMChatResponse.Choice.Message {
         guard let client = client else { throw LMBackendError.notStarted }
-        return try await client.chat(request)
+        let (message, usage) = try await client.chatWithUsage(request)
+        lastUsage = usage
+        return message
     }
+
+    public func usageOfLastChat() async -> LMUsage? { lastUsage }
 }
