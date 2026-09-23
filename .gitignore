@@ -4,6 +4,8 @@
 /Website/node_modules
 /Website/dist
 /Examples/HelloWorld/HelloWorld
+/Examples/DeleteResult/DeleteResult
+/Examples/TimezoneDemo/TimezoneDemo
 /Examples/PathOperations/PathOperations
 /Examples/PathOperations/build-stamp.txt
 .DS_Store

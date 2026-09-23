@@ -127,6 +127,15 @@ public struct ExtractAction: SynchronousAction {
             }
         }
 
+        // ARO-0041 §7: timezone conversion, ahead of schema detection because
+        // a zone name looks like a schema name to it — `UTC` is uppercase and
+        // not a property, so `Extract the <utc: UTC> from <date>.` was routed
+        // to schema validation and failed there (GitLab #865).
+        if let converted = try Self.timezoneConversion(
+            result: result, source: resolvedSource, context: context) {
+            return converted
+        }
+
         // ARO-0046: Check for schema qualifier for typed event extraction
         // PascalCase qualifiers (e.g., ExtractLinksEvent) trigger schema validation
         if let schemaName = detectSchemaQualifier(result.specifiers) {
@@ -194,6 +203,54 @@ public struct ExtractAction: SynchronousAction {
         }
 
         return resolvedSource
+    }
+
+
+    // MARK: - Timezone conversion (ARO-0041 §7, GitLab #865)
+
+    /// `Extract the <local: timezone> from <date> with "Europe/Berlin".`
+    /// `Extract the <berlin: "Europe/Berlin"> from <date>.`
+    ///
+    /// Returns the converted date, or `nil` when the statement is not a
+    /// conversion — in which case the caller falls through to the ordinary
+    /// property lookup.
+    ///
+    /// The instant never moves. Only its rendering does, so two dates in
+    /// different zones still compare as the two moments they are: a comparison
+    /// between instants means the same thing whatever zone each is written in.
+    static func timezoneConversion(
+        result: ResultDescriptor,
+        source: any Sendable,
+        context: ExecutionContext
+    ) throws -> (any Sendable)? {
+        guard let date = source as? ARODate,
+              let specifier = result.specifiers.first else { return nil }
+
+        // Form 1: `<r: timezone>` with the zone in the `with` clause.
+        if specifier.lowercased() == "timezone" {
+            guard let raw = context.resolveAny("_with_") ?? context.resolveAny("_literal_") else {
+                // No zone asked for — this is a read of the date's own zone.
+                return nil
+            }
+            let name = raw as? String ?? String(describing: raw)
+            guard let zone = ARODate.resolveTimezone(name) else {
+                throw ActionError.invalidInput(
+                    "Extract the <\(result.base): timezone>: an IANA zone like "
+                    + "\"Europe/Berlin\", \"UTC\", \"local\", or a UTC offset like \"+02:00\"",
+                    received: name)
+            }
+            return date.converted(to: zone)
+        }
+
+        // Form 2: the zone as the qualifier itself — `<utc: UTC>`,
+        // `<berlin: "Europe/Berlin">`. Only a specifier that is unambiguously
+        // a zone qualifies: every readable property name is rejected first, so
+        // `<d: day>` stays a property read.
+        if date.property(specifier) == nil, let zone = ARODate.resolveTimezone(specifier) {
+            return date.converted(to: zone)
+        }
+
+        return nil
     }
 
     // MARK: - ARO-0046: Schema Qualifier Detection

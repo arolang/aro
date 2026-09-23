@@ -2252,7 +2252,7 @@ public struct DeleteAction: ActionImplementation {
                 field: "a file or directory path",
                 action: "Delete"
             )
-            return try await deleteFile(at: path, context: context)
+            return try await deleteFile(at: path, resultName: result.base, context: context)
         }
 
         // Get the source containing the item to delete
@@ -2264,7 +2264,7 @@ public struct DeleteAction: ActionImplementation {
         // "./f.txt"` arrives here as an `_expression_` binding, and a string
         // variable behaves the same way Write's and Read's path objects do.
         if let path = source as? String {
-            return try await deleteFile(at: path, context: context)
+            return try await deleteFile(at: path, resultName: result.base, context: context)
         }
 
         // Key to delete from result specifiers
@@ -2299,12 +2299,15 @@ public struct DeleteAction: ActionImplementation {
     /// loudly instead of pretending the file was just removed (GitLab #493).
     /// Directories are removed recursively; the service publishes
     /// FileDeletedEvent on success.
-    private func deleteFile(at path: String, context: ExecutionContext) async throws -> any Sendable {
+    private func deleteFile(at path: String, resultName: String,
+                            context: ExecutionContext) async throws -> any Sendable {
         guard let fileService = context.service(FileSystemService.self) else {
             throw ActionError.missingService("FileSystemService")
         }
         try await fileService.delete(path: path)
-        return DeleteResult(target: path, success: true)
+        let outcome = DeleteResult(target: path, success: true, count: 1)
+        context.bind(resultName, value: outcome.asDictionary, allowRebind: true)
+        return outcome.asDictionary
     }
 
     private func deleteFromRepository(
@@ -2330,11 +2333,14 @@ public struct DeleteAction: ActionImplementation {
         // If no where clause, clear the entire repository
         // This supports: <Clear> the <all> from the <message-repository>.
         if whereField == nil || whereValue == nil {
-            if let storage = context.service(RepositoryStorageService.self) {
-                await storage.clear(repository: repositoryName, businessActivity: context.businessActivity)
-            } else {
-                await context.container.repositoryStorage.clear(repository: repositoryName, businessActivity: context.businessActivity)
-            }
+            let storage = context.service(RepositoryStorageService.self)
+                ?? context.container.repositoryStorage
+            // Counted before the clear, because afterwards there is nothing to
+            // count and "cleared 0" would be indistinguishable from "cleared
+            // everything" — which is the distinction GitLab #866 is about.
+            let cleared = await storage.retrieve(
+                from: repositoryName, businessActivity: context.businessActivity).count
+            await storage.clear(repository: repositoryName, businessActivity: context.businessActivity)
             // Emit repository cleared event
             context.emit(RepositoryChangedEvent(
                 repositoryName: repositoryName,
@@ -2343,7 +2349,9 @@ public struct DeleteAction: ActionImplementation {
                 newValue: nil,
                 oldValue: nil
             ))
-            return DeleteResult(target: result.base, success: true)
+            let outcome = DeleteResult(target: result.base, success: true, count: cleared)
+            context.bind(result.base, value: outcome.asDictionary, allowRebind: true)
+            return outcome.asDictionary
         }
 
         guard let field = whereField, let matchValue = whereValue else {
@@ -2390,21 +2398,66 @@ public struct DeleteAction: ActionImplementation {
         // Emit legacy delete event
         context.emit(DataDeletedEvent(target: result.base, source: repositoryName))
 
-        // Bind the deleted items to the result variable
-        if deleteResult.deletedItems.count == 1 {
-            context.bind(result.base, value: deleteResult.deletedItems[0])
-        } else {
-            context.bind(result.base, value: deleteResult.deletedItems)
-        }
+        // Bind the record the statement's result names. The rows used to be
+        // bound here and then overwritten by the returned struct, so `<gone>`
+        // held a `DeleteResult` with nothing an ARO program could read
+        // (GitLab #866). They are a field of the record now:
+        //
+        //   <gone: count>    how many rows went — 0 when nothing matched
+        //   <gone: deleted>  the rows themselves
+        //
+        // A `where` that matches exactly one row still puts that row in
+        // `deleted` as a one-element list, rather than as the row: a result
+        // whose shape depends on how many things it found is the trap
+        // ARO-0038's indexing rules already exist to avoid.
+        let outcome = DeleteResult(
+            target: result.base,
+            success: deleteResult.count > 0,
+            count: deleteResult.count,
+            deleted: deleteResult.deletedItems
+        )
+        context.bind(result.base, value: outcome.asDictionary, allowRebind: true)
 
-        return DeleteResult(target: result.base, success: deleteResult.count > 0)
+        return outcome.asDictionary
     }
 }
 
-/// Result of a delete operation
+/// Result of a delete operation.
+///
+/// `count` and `deleted` exist because the struct alone had nothing an ARO
+/// program could read (GitLab #866): `Delete the <gone> from the
+/// <orders-repository> where <id> is <id>.` bound `<gone>`, and a handler
+/// could not report "deleted 3" or tell a delete that matched nothing from one
+/// that matched.
 public struct DeleteResult: Sendable, Equatable {
     public let target: String
     public let success: Bool
+    /// How many entries were removed. `0` for a delete that matched nothing.
+    public let count: Int
+    /// The removed entries, where the operation had them to hand.
+    ///
+    /// A repository delete already holds the rows — storage returns them so
+    /// the change events can carry each one — so passing them on costs
+    /// nothing that was not already paid for. Clearing a whole repository
+    /// does not hold them, and says so by leaving this empty rather than by
+    /// reading the repository back first.
+    public let deleted: [any Sendable]
+
+    public init(target: String, success: Bool, count: Int = 0, deleted: [any Sendable] = []) {
+        self.target = target
+        self.success = success
+        self.count = count
+        self.deleted = deleted
+    }
+
+    public static func == (lhs: DeleteResult, rhs: DeleteResult) -> Bool {
+        lhs.target == rhs.target && lhs.success == rhs.success && lhs.count == rhs.count
+    }
+
+    /// What an ARO program reads off the statement's result.
+    public var asDictionary: [String: any Sendable] {
+        ["target": target, "success": success, "count": count, "deleted": deleted]
+    }
 }
 
 /// Event emitted when data is deleted
