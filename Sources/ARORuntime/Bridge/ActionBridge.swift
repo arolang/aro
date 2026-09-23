@@ -976,17 +976,21 @@ public func aro_action_make(
     return executeAction(verb: "make", contextPtr: contextPtr, resultPtr: resultPtr, objectPtr: objectPtr)
 }
 
-// `touch`, `mkdir` and `rename` are documented aliases of `make`, `make` and
-// `move` — `ActionCatalog` lists all three and `FileActions` implements them —
-// but no bridge export existed, so `LLVMCodeGenerator` emitted a call to a
-// symbol that was not there and a valid program became a **linker error** with
-// no ARO-level diagnostic (GitLab #679):
-//
-//     Undefined symbols for architecture arm64:
-//       "_aro_action_touch", referenced from: _aro_fs_application_start_entry
-//
-// GitLab #336 tied the code generator to the catalog; nothing tied the catalog
-// to these exports. `ActionBridgeCoverageTests` does that now.
+/// `Touch the <marker> for the <file: "./stamp">.` in a compiled binary
+/// (ARO-0036 §3.4, GitLab #679, #861).
+///
+/// `touch`, `mkdir` and `rename` are documented aliases of `make`, `make` and
+/// `move` — `ActionCatalog` lists all three and `FileActions` implements them —
+/// but no bridge export existed. `LLVMCodeGenerator` therefore emitted a call
+/// to a symbol that was not there, and a valid program became a **linker
+/// error** with no ARO-level diagnostic, while `aro run` worked:
+///
+///     Undefined symbols for architecture arm64:
+///       "_aro_action_touch", referenced from: _aro_fs_application_start_entry
+///
+/// Nothing caught it because the interpreter never asks. GitLab #336 tied the
+/// code generator to the catalog; nothing tied the catalog to these exports.
+/// `ActionBridgeCoverageTests` does that now.
 @_cdecl("aro_action_touch")
 public func aro_action_touch(
     _ contextPtr: UnsafeMutableRawPointer?,

@@ -1189,4 +1189,10 @@ public protocol FileSystemService: Sendable {
     // platform implementations already provided this; it was just absent
     // from the protocol, which is why DeleteAction could not reach it.
     func delete(path: String) async throws
+
+    // ARO-0036 §10 (GitLab #861): set the POSIX permission bits. `Stat` read
+    // them from the start and nothing could write them, so a script a program
+    // had just generated could not be made executable by the program that
+    // generated it.
+    func setPermissions(path: String, mode: FileMode) async throws -> FileMode?
 }

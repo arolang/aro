@@ -1,0 +1,13 @@
+basename: report.csv
+dirname: /var/data
+extension: csv
+stem: report
+renamed: /var/data/report.json
+joined: uploads/photo.png
+not reset: /uploads/etc/passwd
+dotfile: ext=[] stem=[.gitignore]
+absolute: /srv/app/run.sh
+created: true
+mode: rwxr-xr-x (was rw-r--r--)
+stat: rwxr-xr-x
+startup
