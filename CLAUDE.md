@@ -965,14 +965,14 @@ Sources/
 │       └── RuntimeExecutionBridge.swift # Expression evaluation for built code
 └── AROCLI/             # CLI (run, compile, check, build commands)
 
-Examples/               # 113 examples organized by category (run `ls Examples/` for full list)
+Examples/               # 114 examples organized by category (run `ls Examples/` for full list)
 │                       #
 │                       # plan.md is the canonical description of an example:
-│                       # 103 of the 113 have one, and it is the prompt the
+│                       # 105 of the 114 have one, and it is the prompt the
 │                       # example was written from. expected.txt is its
 │                       # executable contract, and test.hint tells the
 │                       # integration harness how (or whether) to run it.
-│                       # README.md is optional narrative — 40 have one — and
+│                       # README.md is optional narrative — 46 have one — and
 │                       # is the layer that goes stale, so when they disagree,
 │                       # plan.md and expected.txt win (GitLab #818).
 │
@@ -1027,6 +1027,7 @@ Examples/               # 113 examples organized by category (run `ls Examples/`
 │   # Dates & Time
 ├── DateTimeDemo/       # Date/time operations
 ├── DateRangeDemo/      # Date ranges and recurrence
+├── TimezoneDemo/       # Timezone conversion, DST, instants vs. rendering (ARO-0041 §7)
 │
 │   # Git
 ├── GitDemo/            # Native Git operations (status, log, stage, commit)

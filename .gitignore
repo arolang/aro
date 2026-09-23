@@ -7,6 +7,7 @@
 /Examples/PositionalArguments/PositionalArguments
 /Examples/CaptureGroups/CaptureGroups
 /Examples/ApplicationLimits/ApplicationLimits
+/Examples/TimezoneDemo/TimezoneDemo
 .DS_Store
 /.swiftpm
 /Editor/intellij-aro/gradlew.bat
