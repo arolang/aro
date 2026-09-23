@@ -7,6 +7,9 @@
 #     python3 Scripts/check-doc-examples.py --write-baseline
 #
 # Format: <file>:<line of the block's first line>
+<<<<<<< HEAD
+=======
+>>>>>>> origin/main
 CLAUDE.md:325
 CLAUDE.md:470
 CLAUDE.md:615
@@ -72,7 +75,7 @@ Proposals/ARO-0006-error-philosophy.md:409
 Proposals/ARO-0007-events-reactive.md:161
 Proposals/ARO-0007-events-reactive.md:507
 Proposals/ARO-0007-events-reactive.md:725
-Proposals/ARO-0007-events-reactive.md:833
+Proposals/ARO-0007-events-reactive.md:871
 Proposals/ARO-0008-io-services.md:1027
 Proposals/ARO-0008-io-services.md:1178
 Proposals/ARO-0008-io-services.md:1231

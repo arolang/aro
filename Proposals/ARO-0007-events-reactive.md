@@ -745,6 +745,44 @@ To delete items and trigger observers:
 Delete the <user> from the <user-repository> where <id> is <userId>.
 ```
 
+The result is a record, so the statement can be *reported on* rather than only
+performed (GitLab #866):
+
+| Field | Meaning |
+|-------|---------|
+| `count` | How many entries were removed. `0` when the `where` matched nothing. |
+| `deleted` | The removed entries, as a list. |
+| `target` | The result name, for the error path. |
+| `success` | `count > 0` — the same question `count` answers, kept for callers that only need the yes/no. |
+
+```aro
+Delete the <gone> from the <order-repository> where <status> is "cancelled".
+Log "removed ${<gone: count>} orders" to the <console>.
+
+for each <order> in <gone: deleted> {
+    Emit an <OrderPurged: event> with { id: <order: id> }.
+}
+```
+
+`count` is what distinguishes a delete that matched nothing from one that
+matched — which nothing in the language could express before, because the
+result held a value with no readable fields at all.
+
+`deleted` is always a list, including when exactly one row matched. A result
+whose *shape* depends on how many things it found is the trap ARO-0038's
+indexing rules exist to avoid, and it would make every reader of a delete
+handle two cases.
+
+Deleting without a `where` clears the repository, and `count` is how many
+entries it held. It is counted before the clear, because afterwards there is
+nothing to count and "cleared 0" would be indistinguishable from "cleared
+everything". `deleted` is empty there: a clear does not hold the rows, and
+reading a whole repository back in order to report on discarding it would be a
+real cost paid for a line of output.
+
+A `where` on a delete keeps exactly one predicate (ARO-0018 §2.2, GitLab #498);
+that is deliberate and unrelated to the result shape.
+
 ### 6.5 Observer Flow
 
 ```
