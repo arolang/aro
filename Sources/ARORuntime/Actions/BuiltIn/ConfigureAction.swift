@@ -29,6 +29,12 @@ public struct ConfigurableSetting: Sendable {
     /// `http-server` names the server, a `*-repository` name names a repository.
     public enum Category: String, Sendable {
         case httpServer = "http-server"
+        case httpClient = "http-client"
+        /// The `.store` files behind seeded repositories (ARO-0073).
+        case stores
+        /// The application itself — the limits that apply across all of it
+        /// (ARO-0088 §10a, GitLab #862).
+        case application
         case repository
     }
 
@@ -59,6 +65,33 @@ public enum ConfigurableSettings {
             keys: ["max-body", "max-request-body", "maxBody"],
             canonicalKey: "max-body",
             expects: "a size like \"1MB\", \"512KB\", or a byte count"
+        ),
+        // Application-wide limits (ARO-0088 §10a, GitLab #862). A ceiling and
+        // a rate are different limits and both can be set: one request at a
+        // time still exceeds a per-minute quota.
+        ConfigurableSetting(
+            category: .application,
+            keys: ["concurrency"],
+            canonicalKey: "concurrency",
+            expects: "a whole number of concurrent units of work, or 0 for no ceiling"
+        ),
+        ConfigurableSetting(
+            category: .httpClient,
+            keys: ["concurrency"],
+            canonicalKey: "concurrency",
+            expects: "a whole number of concurrent requests, or 0 for no ceiling"
+        ),
+        ConfigurableSetting(
+            category: .httpClient,
+            keys: ["rate", "rate-limit"],
+            canonicalKey: "rate",
+            expects: "a rate like \"10/s\", \"100/minute\" or \"5/2s\""
+        ),
+        ConfigurableSetting(
+            category: .stores,
+            keys: ["write-back", "writeback"],
+            canonicalKey: "write-back",
+            expects: "\"auto\" (write as changes land) or \"manual\" (write only on Commit)"
         ),
         ConfigurableSetting(
             category: .repository,
@@ -192,6 +225,126 @@ public enum ConfigurableSettings {
         return record
     }
 
+    /// `Configure the <application: concurrency> with 8.` and
+    /// `Configure the <http-client: rate> with "10/s".` (ARO-0088 §10a,
+    /// GitLab #862).
+    ///
+    /// Returns `nil` when the statement is not one of these, so the caller
+    /// falls through to the entity-update path.
+    static func applyLimitSetting(
+        result: ResultDescriptor,
+        object: ObjectDescriptor,
+        context: ExecutionContext
+    ) throws -> (any Sendable)? {
+        guard let category = ConfigurableSetting.Category(rawValue: result.base),
+              category == .application || category == .httpClient else { return nil }
+
+        let value = context.resolveAny("_literal_")
+            ?? context.resolveAny("_with_")
+            ?? context.resolveAny(object.base)
+            ?? object.base
+
+        // `Configure the <http-client> with { concurrency: 2, rate: "10/s" }.`
+        //
+        // Two statements naming the same category is a rebind, and the parser
+        // says so and points here (GitLab #506) — so the object form has to
+        // work, or the hint sends people somewhere that does not.
+        guard let key = result.specifiers.first else {
+            guard let fields = value as? [String: any Sendable] else { return nil }
+            var applied: [String: any Sendable] = [:]
+            for (field, fieldValue) in fields {
+                guard let one = try applyLimit(category: category, key: field, raw: fieldValue) else {
+                    throw ActionError.invalidInput(
+                        "Configure the <\(result.base)>: '\(field)' is not a setting "
+                        + "(\(keys(for: category).sorted().joined(separator: ", ")))",
+                        received: field)
+                }
+                applied.merge(one) { _, new in new }
+            }
+            return applied.isEmpty ? nil : applied
+        }
+
+        return try applyLimit(category: category, key: key, raw: value)
+    }
+
+    /// Apply one limit. `nil` when `key` names no setting in `category`.
+    private static func applyLimit(
+        category: ConfigurableSetting.Category,
+        key: String,
+        raw: any Sendable
+    ) throws -> [String: any Sendable]? {
+        guard let setting = setting(category: category, key: key) else { return nil }
+
+        switch setting.canonicalKey {
+        case "concurrency":
+            guard let count = wholeNumber(from: raw), count >= 0 else {
+                throw ActionError.invalidInput(
+                    "Configure the <\(category.rawValue): \(key)>: \(setting.expects)",
+                    received: String(describing: raw))
+            }
+            if category == .application {
+                ApplicationLimits.applicationConcurrency = count
+            } else {
+                ApplicationLimits.httpConcurrency = count
+            }
+            return ["concurrency": count]
+
+        case "rate":
+            let text = raw as? String ?? String(describing: raw)
+            guard let spec = RateSpec.parse(text) else {
+                throw ActionError.invalidInput(
+                    "Configure the <\(category.rawValue): \(key)>: \(setting.expects)",
+                    received: text)
+            }
+            ApplicationLimits.httpRate = spec
+            return ["rate": text,
+                    "permits": spec.permits,
+                    "interval": spec.interval]
+
+        default:
+            return nil
+        }
+    }
+
+    /// A whole number written as an Int, a Double, or a numeric string.
+    static func wholeNumber(from value: any Sendable) -> Int? {
+        if let n = value as? Int { return n }
+        if let n = value as? Double, n == n.rounded() { return Int(n) }
+        if let text = value as? String { return Int(text.trimmingCharacters(in: .whitespaces)) }
+        return nil
+    }
+
+    /// Whether the statement configures store write-back — reaches an actor.
+    static func isStoreSetting(result: ResultDescriptor) -> Bool {
+        result.base == ConfigurableSetting.Category.stores.rawValue
+            && result.specifiers.first != nil
+    }
+
+    /// `Configure the <stores: write-back> with "manual".` (ARO-0073 §5,
+    /// GitLab #863) — stop writing on every mutation and write on `Commit`.
+    static func applyStoreSetting(
+        result: ResultDescriptor,
+        object: ObjectDescriptor,
+        context: ExecutionContext
+    ) async throws -> any Sendable {
+        guard let key = result.specifiers.first,
+              let setting = setting(category: .stores, key: key) else {
+            return try EntityUpdate.apply(result: result, object: object, context: context)
+        }
+        let raw = context.resolveAny("_literal_")
+            ?? context.resolveAny("_with_")
+            ?? context.resolveAny(object.base)
+            ?? object.base
+        let text = (raw as? String ?? String(describing: raw)).lowercased()
+        guard let mode = StoreWriteBackMode(rawValue: text) else {
+            throw ActionError.invalidInput(
+                "Configure the <stores: \(key)>: \(setting.expects)",
+                received: text)
+        }
+        await StoreFlushRegistry.current?.setWriteBackMode(mode)
+        return ["write-back": mode.rawValue] as [String: any Sendable]
+    }
+
     /// Whether the statement configures a repository — `<x-repository: ttl>`.
     /// Storage is an actor, so applying it needs `await`.
     static func isRepositorySetting(result: ResultDescriptor) -> Bool {
@@ -285,14 +438,21 @@ public struct ConfigureAction: SynchronousAction {
     ) throws -> any Sendable {
         try validatePreposition(object.preposition)
 
-        // Repository configuration reaches storage, which is an actor; a file
-        // permission change reaches the file service.
+        // Repository configuration reaches storage, which is an actor; store
+        // write-back reaches the flush service, and a file permission change
+        // reaches the file service. All three need `await`.
         if ConfigurableSettings.isRepositorySetting(result: result)
+            || ConfigurableSettings.isStoreSetting(result: result)
             || ConfigurableSettings.isFileSetting(object: object) {
             throw NeedsAsyncExecution()
         }
 
         if let applied = try ConfigurableSettings.applyHTTPServerSetting(
+            result: result, object: object, context: context) {
+            return applied
+        }
+
+        if let applied = try ConfigurableSettings.applyLimitSetting(
             result: result, object: object, context: context) {
             return applied
         }
@@ -318,6 +478,11 @@ public struct ConfigureAction: SynchronousAction {
         if ConfigurableSettings.isRepositorySetting(result: result) {
             try validatePreposition(object.preposition)
             return try await ConfigurableSettings.applyRepositorySetting(
+                result: result, object: object, context: context)
+        }
+        if ConfigurableSettings.isStoreSetting(result: result) {
+            try validatePreposition(object.preposition)
+            return try await ConfigurableSettings.applyStoreSetting(
                 result: result, object: object, context: context)
         }
         return try executeSynchronously(result: result, object: object, context: context)

@@ -252,7 +252,7 @@ EXPORT actions make data available beyond the current execution scope.
 | Action | Verbs | Prepositions | Description |
 |--------|-------|--------------|-------------|
 | **Emit** | emit | to, with | Emits a domain event to trigger event handlers |
-| **GitCommit** | commit | to, with | Creates a commit with staged changes |
+| **GitCommit** | commit | to, with | Creates a commit with staged changes — or writes a `.store` file |
 | **Publish** | export, expose, publish, share | with | Publishes a variable for cross-feature-set access |
 | **Push** | push | to, with | Pushes commits to the remote repository |
 | **Schedule** | schedule | with | Schedules a periodic domain event emission at a fixed interval |

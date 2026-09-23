@@ -9,6 +9,16 @@
   "description": "Resolved against the working directory, . and .. removed",
   "source": "aro actions --qualifiers --format json"
  },
+ "all-captures": {
+  "namespace": "_builtin",
+  "builtin": true,
+  "input_types": [
+   "String"
+  ],
+  "accepts_parameters": true,
+  "description": "Every regex match, as a list of capture records; by /pattern/flags",
+  "source": "aro actions --qualifiers --format json"
+ },
  "average": {
   "namespace": "_builtin",
   "builtin": true,
@@ -77,6 +87,16 @@
   ],
   "accepts_parameters": false,
   "description": "Last path component, extension included",
+  "source": "aro actions --qualifiers --format json"
+ },
+ "captures": {
+  "namespace": "_builtin",
+  "builtin": true,
+  "input_types": [
+   "String"
+  ],
+  "accepts_parameters": true,
+  "description": "First regex match as a record of its capture groups; by /pattern/flags",
   "source": "aro actions --qualifiers --format json"
  },
  "clip": {

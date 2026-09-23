@@ -1,0 +1,33 @@
+(* Regex capture groups — ARO-0037 §7
+ *
+ * `Split` gives you the parts around a delimiter. `captures` gives you the
+ * parts of the match itself, which is what parsing a structured line needs.
+ *)
+
+(Application-Start: Capture Groups) {
+    Create the <line> with "host=example.com port=8080 tls=on".
+
+    (* The first match, as a record of its groups. *)
+    Compute the <first: captures> from the <line> by /(?<key>\w+)=(?<value>\S+)/.
+    Log "first key: ${<first: key>}" to the <console>.
+    Log "first value: ${<first: value>}" to the <console>.
+    Log "whole match: ${<first: match>}" to the <console>.
+
+    (* Every match, as a list of those records. *)
+    Compute the <settings: all-captures> from the <line> by /(?<key>\w+)=(?<value>\S+)/.
+    Compute the <setting-count: length> from <settings>.
+    Log "settings: ${<setting-count>}" to the <console>.
+
+    for each <setting> in <settings> {
+        Log "${<setting: key>} -> ${<setting: value>}" to the <console>.
+    }
+
+    (* A non-match binds an empty record rather than failing, so the program
+     * guards on it — the same call ARO makes for a Retrieve that matches
+     * nothing. *)
+    Compute the <absent: captures> from the <line> by /(?<scheme>https?):/.
+    Compute the <absent-count: length> from <absent>.
+    Log "unmatched fields: ${<absent-count>}" to the <console>.
+
+    Return an <OK: status> for the <startup>.
+}

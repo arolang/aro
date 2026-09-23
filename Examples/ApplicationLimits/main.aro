@@ -1,0 +1,35 @@
+(* Application-wide limits — ARO-0088 §10a
+ *
+ * `with <concurrency: N>` bounds one loop. These two bound the application:
+ * a ceiling on how many units of work run at once, and a rate on how many
+ * outbound requests may start per interval. They are different limits — one
+ * request at a time still exceeds a per-minute quota — so both can be set.
+ *)
+
+(Application-Start: Bounded Crawler) {
+    Configure the <application: concurrency> with 2.
+
+    (* Several settings for one category go in one object — two statements
+     * naming <http-client> would be a rebind, and bindings are immutable. *)
+    Configure the <http-client> with { concurrency: 2, rate: "10/s" }.
+
+    Create the <pages> with [1, 2, 3, 4, 5, 6].
+
+    (* The loop asks for six at once; the application ceiling says two. Work
+     * queues at the ceiling rather than failing. *)
+    parallel for each <page> in <pages> with <concurrency: 6> {
+        Sleep the <pause> for 50 milliseconds.
+        Emit a <PageFetched: event> with { page: <page> }.
+    }
+
+    Log "crawl finished" to the <console>.
+    Return an <OK: status> for the <startup>.
+}
+
+(* A handler woken by an Emit inside the loop used to run outside every bound.
+ * It takes a slot of its own now, so it is counted too. *)
+(Record Page: PageFetched Handler) {
+    Extract the <page> from the <event: page>.
+    Log "fetched ${<page>}" to the <console>.
+    Return an <OK: status> for the <record>.
+}
