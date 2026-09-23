@@ -944,32 +944,17 @@ public final class Application: @unchecked Sendable {
         return nil
     }
 
-    /// Map ARO status string to HTTP status code
+    /// Map ARO status string to HTTP status code.
+    ///
+    /// One catalog, shared with the compiled binary and with `aro check`
+    /// (GitLab #830). This used to be a local switch knowing twelve names
+    /// while `ServiceBridge` knew five, and both answered 200 for anything
+    /// else — so `Return a <TooManyRequests: status>` was a 200 with a
+    /// rate-limit body. An unknown name still answers 200 here, because a
+    /// response is already being written and there is nothing better to
+    /// send; `aro check` is where it is caught, before it runs.
     private func mapStatusToHTTPCode(_ status: String) -> Int {
-        switch status.lowercased() {
-        case "ok", "success":
-            return 200
-        case "created":
-            return 201
-        case "accepted":
-            return 202
-        case "nocontent", "no-content":
-            return 204
-        case "badrequest", "bad-request", "invalid":
-            return 400
-        case "unauthorized":
-            return 401
-        case "forbidden":
-            return 403
-        case "notfound", "not-found":
-            return 404
-        case "conflict":
-            return 409
-        case "error", "servererror", "server-error":
-            return 500
-        default:
-            return 200
-        }
+        HTTPStatusCatalog.code(for: status) ?? 200
     }
 
     // MARK: - Private

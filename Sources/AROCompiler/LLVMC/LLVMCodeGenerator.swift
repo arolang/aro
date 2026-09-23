@@ -1382,6 +1382,43 @@ public final class LLVMCodeGenerator {
     }
 
     private func generatePublishStatement(_ statement: PublishStatement, index: Int, errorBlock: BasicBlock) {
+        // A `when` guard on Publish (GitLab #830 item 14), emitted the same
+        // way `generateAROStatement` emits one: branch past the whole
+        // publish when the condition is false. Interpreter and binary have
+        // to agree here — a publish that happens in one mode and not the
+        // other changes what every reader of that name sees.
+        var guardMergeBlock: BasicBlock?
+        if let condition = statement.statementGuard.condition {
+            let prefix = "pub\(index)"
+            let skipBlock = ctx.module.appendBlock(named: "\(prefix)_skip", to: ctx.currentFunction!)
+            let bodyBlock = ctx.module.appendBlock(named: "\(prefix)_body", to: ctx.currentFunction!)
+            let mergeBlock = ctx.module.appendBlock(named: "\(prefix)_merge", to: ctx.currentFunction!)
+            guardMergeBlock = mergeBlock
+
+            let conditionJSON = ctx.stringConstant(serializer.serializeExpression(condition))
+            let guardResult = ctx.module.insertCall(
+                externals.evaluateWhenGuard,
+                on: [ctx.currentContextVar!, conditionJSON],
+                at: ctx.insertionPoint
+            )
+            let guardPassed = ctx.module.insertIntegerComparison(
+                .ne, guardResult, ctx.i32Type.zero, at: ctx.insertionPoint
+            )
+            ctx.module.insertCondBr(if: guardPassed, then: bodyBlock, else: skipBlock,
+                                    at: ctx.insertionPoint)
+
+            ctx.setInsertionPoint(atEndOf: skipBlock)
+            ctx.module.insertBr(to: mergeBlock, at: ctx.insertionPoint)
+
+            ctx.setInsertionPoint(atEndOf: bodyBlock)
+        }
+        defer {
+            if let mergeBlock = guardMergeBlock {
+                ctx.module.insertBr(to: mergeBlock, at: ctx.insertionPoint)
+                ctx.setInsertionPoint(atEndOf: mergeBlock)
+            }
+        }
+
         let ip = ctx.insertionPoint
 
         // Bind the publish alias

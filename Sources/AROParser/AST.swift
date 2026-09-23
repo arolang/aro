@@ -370,16 +370,33 @@ public struct PublishStatement: Statement {
 
     public let externalName: String
     public let internalVariable: String
+    /// Optional `when` guard, the same one every action statement carries
+    /// (GitLab #830 item 14).
+    ///
+    /// Publishing is an effect like any other, and it is the one effect
+    /// that had no way to say "only if". The workaround the books taught
+    /// was to publish unconditionally and have every reader guard, which
+    /// puts the condition in the wrong place and repeats it once per
+    /// reader.
+    public let statementGuard: StatementGuard
     public let span: SourceSpan
-    
-    public init(externalName: String, internalVariable: String, span: SourceSpan) {
+
+    public init(externalName: String, internalVariable: String,
+                statementGuard: StatementGuard = .none, span: SourceSpan) {
         self.externalName = externalName
         self.internalVariable = internalVariable
+        self.statementGuard = statementGuard
         self.span = span
     }
-    
+
+    /// The guard condition, for callers that only want the expression.
+    public var whenCondition: (any Expression)? { statementGuard.condition }
+
     public var description: String {
-        "Publish as <\(externalName)> <\(internalVariable)>."
+        if let when = statementGuard.condition {
+            return "Publish as <\(externalName)> <\(internalVariable)> when \(when)."
+        }
+        return "Publish as <\(externalName)> <\(internalVariable)>."
     }
     
     public func accept<V: ASTVisitor>(_ visitor: V) throws -> V.Result {
@@ -435,6 +452,15 @@ public enum WhereOperator: String, Sendable, Equatable, CustomStringConvertible 
     case greaterEqual = ">="
     case contains = "contains"
     case matches = "matches"
+    /// `where <name> starts with "ARO-"`.
+    ///
+    /// The runtime has evaluated `starts-with` / `ends-with` since
+    /// ARO-0018 shipped; only the grammar to write them was missing, so
+    /// the books taught a `matches "^ARO-"` regex for a prefix test
+    /// (GitLab #830 item 5). The raw values are the strings
+    /// `WhereConditionEvaluator` already dispatches on.
+    case startsWith = "starts-with"
+    case endsWith = "ends-with"
     case `in` = "in"          // ARO-0042: membership test
     case notIn = "not in"     // ARO-0042: negative membership test
     // Temporal comparison (Book ch. 42 §42.8, GitLab #516) — the
@@ -1568,6 +1594,22 @@ public enum BinaryOperator: String, Sendable, CaseIterable {
     /// (GitLab #558). It is the inverse of `contains`, and evaluates through
     /// the same code.
     case `in` = "in"
+
+    /// `when <tag> not in <banned>` — the negation of `in`.
+    ///
+    /// `where` has had it since ARO-0042; the guard grammar had not, so a
+    /// negative membership test in a `when` had to be written as a
+    /// separate `Validate` statement (GitLab #830 item 5).
+    case notIn = "not in"
+
+    /// `when <path> starts with "/api"` / `when <name> ends with ".aro"`.
+    ///
+    /// Two words, neither of them a lexer keyword — `<starts>` and
+    /// `<ends>` are names people write, and reserving them would break
+    /// those the way GitLab #497 describes. Position disambiguates: after
+    /// a complete expression, `starts`/`ends` can only be an operator.
+    case startsWith = "starts with"
+    case endsWith = "ends with"
 
     // Logical
     case and = "and"

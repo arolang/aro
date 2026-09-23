@@ -41,7 +41,7 @@ Makes a variable globally accessible across feature sets.
 ### Syntax
 
 ```
-Publish as <alias> <variable>.
+Publish as <alias> <variable> [when <condition>].
 ```
 
 ### Components
@@ -50,12 +50,22 @@ Publish as <alias> <variable>.
 |-----------|-------------|
 | alias | Name to publish under |
 | variable | Variable to publish |
+| condition | Optional guard; a false one skips the publish |
 
 ### Example
 
 ```aro
 Read the <config> from the <file: "./config.json">.
 Publish as <app-config> <config>.
+```
+
+A guard makes the publish conditional. A false guard leaves the alias
+**unpublished** — not published with a placeholder — so a reader fails the way
+an absent binding always fails:
+
+```aro
+Compute the <score> from the <results: average>.
+Publish as <headline-score> <score> when <score> > 50.
 ```
 
 ## Guarded Statement (when)

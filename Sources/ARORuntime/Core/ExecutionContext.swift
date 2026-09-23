@@ -596,6 +596,43 @@ public extension VariableBinding {
         throw ActionError.missingRequiredField(field: field, action: action)
     }
 
+    /// Resolve a path where the **specifier carries it and the base is a
+    /// name the caller chose** — `Copy the <backup: "a.txt"> to …`.
+    ///
+    /// `resolveString` reads the base first and falls back to the
+    /// specifier, which is right when the base is the path. For Copy and
+    /// Move it is not: the result slot is a binding whose name the author
+    /// picks, and the path is in the specifier. Reading the base first
+    /// meant only the two literal names `file` and `directory` worked, so
+    /// two Copies in one feature set both bound `file` and the second was
+    /// an immutability error — with the documented workaround being to
+    /// split them across feature sets (GitLab #830 item 13).
+    ///
+    /// Order here: a specifier naming a bound variable, then the
+    /// specifier literally, then the base as a variable, then the base
+    /// literally. `<file: "a.txt">` and `<backup: "a.txt">` both give
+    /// `a.txt`; `<source-path>` alone still resolves as a variable.
+    func resolveNamedPath(
+        base: String,
+        specifiers: [String],
+        reservedBases: Set<String>,
+        field: String,
+        action: String
+    ) throws -> String {
+        let specifier = specifiers.isEmpty ? nil : specifiers.joined(separator: ".")
+        if let spec = specifier {
+            if let v: String = resolve(spec) { return v }
+            return spec
+        }
+        if let v: String = resolve(base) { return v }
+        // No specifier and a reserved base is `Copy the <file> to …`,
+        // which names no path at all.
+        if reservedBases.contains(base) {
+            throw ActionError.missingRequiredField(field: field, action: action)
+        }
+        return base
+    }
+
     // MARK: - Port Resolution Helper
 
     /// Resolve a port number from context bindings and object specifiers, using

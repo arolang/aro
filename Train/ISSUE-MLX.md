@@ -1,5 +1,24 @@
 # [BUG] `steel_gather_mm_rhs_nax` missing float32 kernel instantiation — LoRA training crashes on MoE models
 
+> **Status (GitLab #793).** Fixed upstream. Every mlx from **0.31.2** on ships a
+> metallib containing the float32 instantiation, so the source build with the
+> one-line patch described under *Workaround* is no longer needed —
+> `Train/requirements.txt` floors mlx at 0.32.2, the version the current lock
+> file records.
+>
+> The report below is kept because the failure mode is not detectable from a
+> version number: a cached wheel, a second virtualenv, or a hand-built mlx can
+> each put a metallib on disk that disagrees with what `pip` believes is
+> installed, and the crash then arrives hours into a run, inside the teacher's
+> first validation pass. `Train/script/mlx_preflight.py` therefore checks the
+> metallib itself, `Train/training.sh` runs it before spending any GPU time,
+> and `01_init` runs it before wiping anything.
+>
+> ```bash
+> python3 Train/script/mlx_preflight.py          # ~1s, no GPU work
+> python3 Train/script/mlx_preflight.py --lora   # + one real LoRA iteration
+> ```
+
 ## Summary
 
 LoRA fine-tuning crashes on **Mixture-of-Experts** models (e.g. `Qwen3-Coder-30B-A3B-Instruct-4bit`) with:

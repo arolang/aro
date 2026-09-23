@@ -1,0 +1,72 @@
+(* Four language gaps the books used to teach workarounds for (GitLab #830).
+   Each section shows the spelling that now works, next to the thing the
+   workaround existed to avoid. *)
+
+(Application-Start: Configuration) {
+    Log "=== 1. A default for an absent value ===" to the <console>.
+
+    (* An unset environment variable used to bind "" with no way to say
+       what it should be instead, so every reader wrote `when <x> == ""`. *)
+    Extract the <port> from the <env: ARO_DEMO_PORT> default "8080".
+    Log "port: " ++ <port> to the <console>.
+
+    (* A set variable wins over the default, and a set-but-EMPTY one is a
+       value somebody wrote — it wins too. Defaulting on falsiness is the
+       footgun ARO declines. *)
+    Extract the <region> from the <env: ARO_DEMO_REGION> default "eu-central".
+    Log "region: " ++ <region> to the <console>.
+
+    Log "=== 2. Affix and membership guards ===" to the <console>.
+
+    Compute the <path> from "/api/users".
+    Create the <blocked> with ["/admin", "/internal"].
+
+    (* `starts with` is literal. The `matches "^/api"` workaround is a
+       regex, so a prefix containing . or ? matched things it should not. *)
+    Log "routed to the API" to the <console> when <path> starts with "/api".
+    Log "not a web page" to the <console> when <path> ends with ".html".
+    Log "path is allowed" to the <console> when <path> not in <blocked>.
+
+    (* The same operators in a where clause, over a collection. *)
+    Create the <files> with [
+        { name: "report.aro", size: 120 },
+        { name: "notes.md", size: 40 },
+        { name: "main.aro", size: 300 }
+    ].
+    Filter the <sources> from the <files> where <name> ends with ".aro".
+    Compute the <source-count: length> from the <sources>.
+    Log "aro files: " ++ <source-count> to the <console>.
+
+    Log "=== 3. A guarded Publish ===" to the <console>.
+
+    Compute the <score> from 90.
+
+    (* Publishing is an effect, and it is the one effect that could not say
+       "only if". A false guard leaves the name unpublished — not published
+       with a placeholder. *)
+    Publish as <headline-score> <score> when <score> > 50.
+    Log "headline: " ++ <headline-score> to the <console>.
+
+    Log "=== 4. Two copies in one feature set ===" to the <console>.
+
+    (* The result slot is a binding whose name the author picks. It used to
+       have to be the literal word `file`, so a second Copy in the same
+       feature set was an immutability error. *)
+    Write "first" to the <file: "demo-a.txt">.
+    Write "second" to the <file: "demo-b.txt">.
+    Copy the <backup-a: "demo-a.txt"> to the <destination: "demo-a.bak">.
+    Copy the <backup-b: "demo-b.txt"> to the <destination: "demo-b.bak">.
+    Move the <renamed: "demo-b.bak"> to the <destination: "demo-b.final">.
+
+    Exists the <a-there> for the <file: "demo-a.bak">.
+    Exists the <b-there> for the <file: "demo-b.final">.
+    Log "backup a: " ++ <a-there> to the <console>.
+    Log "backup b: " ++ <b-there> to the <console>.
+
+    Delete the <gone-a> for the <file: "demo-a.txt">.
+    Delete the <gone-b> for the <file: "demo-b.txt">.
+    Delete the <gone-c> for the <file: "demo-a.bak">.
+    Delete the <gone-d> for the <file: "demo-b.final">.
+
+    Return an <OK: status> for the <startup>.
+}

@@ -104,8 +104,10 @@ struct EditorWriteQueueTests {
         }
         try await Task.sleep(for: .milliseconds(150))
         #expect(written.isEmpty)          // still inside the quiet period
-        try await Task.sleep(for: .milliseconds(400))
-        #expect(written == ["typed"])     // the debounce fired on its own
+        // The debounce fires on its own. Polled rather than slept for
+        // (GitLab #849): how long it takes under load is not the subject.
+        let fired = await eventually { written == ["typed"] }
+        #expect(fired)
     }
 
     @Test func continuousTypingStillReachesDiskAtTheCeiling() async throws {

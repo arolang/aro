@@ -104,12 +104,89 @@ RUNS_DIR = DATA_ROOT / 'runs'
 # when notebooks change what/how they emit. SESSION_ID identifies one notebook
 # (or full-pipeline) execution — the META pipeline can pin a single session
 # across all notebooks by exporting ARO_TRAIN_SESSION.
-
-PIPELINE_VERSION = '2026.07'
+#
+# Changelog:
+#   2026.07 — renumbered notebooks; provenance stamping on every pair.
+#   2026.09 — NB28–NB32 script stages; eval-derived merge; TYPE_CAPS v4.
+#             The version sat at 2026.07 through all of that, so nothing
+#             written in September recorded the shape it was written by
+#             (GitLab #792). Bump it when the emitted shape changes, and the
+#             run archive under Train/runs/ records which shape produced it.
+PIPELINE_VERSION = '2026.09'
 
 RUN_TIMESTAMP = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
 SESSION_ID    = (os.environ.get('ARO_TRAIN_SESSION')
                  or f"{datetime.now().strftime('%Y%m%dT%H%M%S')}-{uuid.uuid4().hex[:8]}")
+
+# ── Committed run archive (GitLab #792) ──────────────────────────────────────
+# data/, models/ and release/ are gitignored and regenerated, which is right —
+# but it left nothing behind describing a finished run. RUN_ARCHIVE_ROOT is
+# tracked: `run_archive.py` copies the small, text-shaped summaries of a run
+# (stats.json, dataset_report.md, drop_reasons.csv, promotion_gate.json,
+# loop_metrics.json, model_manifest.json, the experiments CSV) into
+# Train/runs/<release>/ so a finished run is describable from the repository
+# alone. Weights stay out; nothing here is larger than a few hundred KB.
+RUN_ARCHIVE_ROOT = TRAIN_ROOT / 'runs'
+
+
+def run_archive_dir(release=None):
+    """Directory holding the committed summary of one release's run."""
+    release = release or os.environ.get('ARO_TRAIN_RELEASE') or PIPELINE_VERSION
+    return RUN_ARCHIVE_ROOT / str(release)
+
+
+# ── Fresh-run guard (GitLab #792) ────────────────────────────────────────────
+# 01_init wipes every stage directory unconditionally. That is what it is for —
+# but it also wipes the outputs of the expensive later stages, and a mis-started
+# meta run (or a re-run of 01 to regenerate the fix pairs) silently destroyed a
+# validated dataset and a set of adapters that cost GPU-days. Nothing recorded
+# that it had happened, which is one reason the last run cannot be reproduced.
+#
+# assert_fresh_allowed() refuses when a directory produced by a LATER stage
+# still holds files, unless the caller opts in. From a notebook the opt-in is
+# the ARO_TRAIN_FRESH=1 environment variable; from a script it is --fresh.
+
+class NotAFreshRun(RuntimeError):
+    """Raised when a wipe would destroy outputs a later stage produced."""
+
+
+def fresh_requested():
+    """True when the operator asked for a destructive fresh run."""
+    return os.environ.get('ARO_TRAIN_FRESH', '').strip().lower() in {'1', 'true', 'yes'}
+
+
+def _files_in(path):
+    p = Path(path)
+    if not p.exists():
+        return 0
+    return sum(1 for f in p.rglob('*') if f.is_file())
+
+
+def assert_fresh_allowed(protected_dirs, fresh=None):
+    """Refuse to wipe when `protected_dirs` still hold later-stage output.
+
+    `protected_dirs` is an iterable of (path, label). Returns the list of
+    (path, label, file_count) that would be destroyed; raises NotAFreshRun
+    when that list is non-empty and the operator has not opted in.
+    """
+    if fresh is None:
+        fresh = fresh_requested()
+    at_risk = [(Path(d), label, _files_in(d)) for d, label in protected_dirs]
+    at_risk = [row for row in at_risk if row[2] > 0]
+    if at_risk and not fresh:
+        listing = '\n'.join(f'    {p}  ({n} files)  — {label}'
+                            for p, label, n in at_risk)
+        raise NotAFreshRun(
+            'Refusing to wipe: these directories hold output produced by a '
+            'later pipeline stage.\n\n'
+            f'{listing}\n\n'
+            'Re-running 01_init would destroy work that cost GPU time and is '
+            'not reproducible from the repository.\n'
+            'If that is genuinely what you want, set ARO_TRAIN_FRESH=1 '
+            '(notebook) or pass --fresh (script) and run again.\n'
+            'To keep them, skip 01_init: Train/training.sh --from 02'
+        )
+    return at_risk
 
 # ── Dataset assembly type caps (used by 17_dataset_assembly) ─────────────────
 # Versioned so stats.json records which caps produced a given dataset
@@ -161,6 +238,178 @@ TYPE_CAPS = {
     'notebook_authoring':  None,   # uncapped — emit .repl JSON (ARO-0091)
 }
 DEFAULT_TYPE_CAP = None   # uncapped by default for any new task types
+
+# ── Hyper-parameters (GitLab #795) ───────────────────────────────────────────
+# Every training stage used to declare its own constants in its own notebook.
+# Eight notebooks then disagreed with each other, and — worse — disagreed about
+# WHY. The SFT stage raised gradient accumulation to 16 "to smooth
+# heterogeneous-task gradient noise"; the iterative loop, training the same
+# model on an overlapping mixture, lowered it to 4 "for NaN robustness". Two
+# stages appeared to use LoRA rank 16 and two rank 8, and a reader had no way
+# to tell a deliberate difference from a copy-paste.
+#
+# HPARAMS is now the single table. A stage reads its own row; nothing declares
+# a training constant in a notebook cell any more, and check_hparams.py fails
+# CI if one starts again. HPARAMS_VERSION is bumped whenever a value changes,
+# and every training run records the row it used to experiments.db, so a later
+# comparison is a query rather than archaeology.
+#
+# The rules the table follows:
+#
+#   * A stage differing from another needs a reason on the line. "It was like
+#     that" is not one.
+#   * A value nobody has measured is recorded as unmeasured rather than
+#     dressed up. The sweep in NB18 is the only stage that measures anything,
+#     and its results now land in experiments.db.
+#   * lora_rank is 8 everywhere. NB18's 150-iteration sweep spans rank 4, 8 and
+#     16 and picks 8. The two stages that looked like rank 16 (warm start,
+#     distillation) never set a rank at all — they pass only --num-layers and
+#     inherit mlx-lm's default, which is 8. The "rank 16" in the warm-start
+#     chart title was a label, never a setting.
+#
+HPARAMS_VERSION = 'v1-2026-09-21'
+
+_SHARED = {
+    'lora_rank':     8,       # see note above — measured, not inherited
+    'lora_dropout':  0.0,     # unchanged from every stage; no stage has varied it
+    'lora_scale':    20.0,    # ditto
+    'weight_decay':  0.01,    # AdamW; added in #416 against memorisation
+    'max_seq_len':   4096,
+}
+
+HPARAMS = {
+    # Warm start on the action/syntax reference (07). Short, cheap, and its job
+    # is to teach the DSL before generation stages depend on it.
+    'warm_start': dict(_SHARED, **{
+        'lora_layers':   16,
+        'learning_rate': 1e-5,
+        'batch_size':    4,
+        'grad_accum':    1,     # unmeasured: this stage has never accumulated.
+                                # Left alone deliberately — raising it changes
+                                # the one stage whose output every later stage
+                                # resumes from, and nobody has measured it.
+        'val_batches':   25,
+        'max_seq_len':   2048,  # the only stage below the shared 4096, and
+                                # deliberately: it trains on the action/syntax
+                                # reference, whose pairs are short, so a longer
+                                # window buys padding and nothing else.
+    }),
+
+    # Full SFT on the 30B MoE teacher (18). The best-tuned row in the table:
+    # #440 moved LR 1e-5→8e-6, accumulation 8→16, warmup 40→100, iters 800→1000
+    # against a reported train-loss spike and a val plateau.
+    'sft': dict(_SHARED, **{
+        'lora_layers':   16,
+        'learning_rate': 8e-6,
+        'batch_size':    2,
+        'grad_accum':    16,    # effective batch 32
+        'iters':         1000,
+        'lr_warmup':     100,
+        'steps_per_eval': 50,
+        'val_batches':   25,
+    }),
+
+    # Preference pass (19). Lower LR because the data is curated and small;
+    # fewer layers and no accumulation headroom because DPO holds a reference
+    # model resident beside the policy.
+    'preference': dict(_SHARED, **{
+        'lora_layers':   8,
+        'learning_rate': 5e-6,
+        'batch_size':    1,
+        'grad_accum':    8,
+        'iters':         200,
+        'beta':          0.3,
+    }),
+
+    # Iterative self-improvement rounds (21), on the same teacher as 'sft'.
+    # Both values here were changed to match 'sft': see the commit for #795.
+    'iterative': dict(_SHARED, **{
+        'lora_layers':   16,
+        'learning_rate': 8e-6,  # was 1e-5. Same model, overlapping mixture, and
+                                # #440 measured 8e-6 as the rate that stops the
+                                # spikes. Two rates for one model was the
+                                # contradiction, not a finding.
+        'batch_size':    2,
+        'grad_accum':    16,    # was 4, "smaller window reduces NaN risk on MoE".
+                                # Accumulation averages gradients: a smaller
+                                # window makes each optimiser step noisier, not
+                                # safer. The notebook's own NaN advice says to
+                                # lower the LR, which is the real lever.
+        'iters_per_round': 400,
+        'steps_per_eval': 50,
+    }),
+
+    # Distillation into the 8B student (22). Higher LR than the teacher stages
+    # because the student is smaller, dense, and starts from base.
+    'student': dict(_SHARED, **{
+        'lora_layers':   16,    # raised from 8 by the round-2 audit, which
+                                # reported it closing the 30B→8B gap. The one
+                                # layer-count change in the pipeline with a
+                                # recorded result behind it.
+        'learning_rate': 2e-5,
+        'batch_size':    1,
+        'grad_accum':    16,
+    }),
+
+    # Booster 1 — curated Material/ on top of the student (23).
+    'material': dict(_SHARED, **{
+        'lora_layers':   8,     # a few hundred curated pairs; 16 layers on that
+                                # much data is capacity looking for something to
+                                # memorise.
+        'learning_rate': 2e-5,  # was 1e-4 — 5× the student's own rate, on less
+                                # and better data, with no rationale recorded
+                                # anywhere. This is the first booster fused onto
+                                # the model that ships.
+        'batch_size':    1,
+        'grad_accum':    8,
+    }),
+
+    # Booster 2 — reasoning traces (24).
+    'thinking': dict(_SHARED, **{
+        'lora_layers':   16,
+        'learning_rate': 1e-5,
+        'batch_size':    2,
+        'grad_accum':    8,
+        'iters':         400,
+    }),
+
+    # Booster 3 — multi-turn conversation (25). The final model.
+    'conversation': dict(_SHARED, **{
+        'lora_layers':   16,
+        'learning_rate': 1e-5,
+        'batch_size':    1,
+        'grad_accum':    8,
+        'iters':         300,
+        'max_seq_len':   5120,  # justified exception: multi-turn transcripts
+                                # genuinely run past 4096, and truncating one
+                                # mid-turn teaches a conversation that stops.
+    }),
+}
+
+
+def hparams(stage):
+    """The hyper-parameter row for one training stage.
+
+    Raises KeyError naming the known stages rather than returning a default:
+    a typo that silently trains on someone else's settings is the failure this
+    table exists to prevent.
+    """
+    try:
+        return dict(HPARAMS[stage])
+    except KeyError:
+        known = ', '.join(sorted(HPARAMS))
+        raise KeyError(f'unknown training stage {stage!r}; known stages: {known}') from None
+
+
+def hparams_record(stage, **overrides):
+    """The row plus its provenance, shaped for experiment_db.record_run()."""
+    row = hparams(stage)
+    row.update(overrides)
+    row['stage'] = stage
+    row['hparams_version'] = HPARAMS_VERSION
+    row['effective_batch'] = row.get('batch_size', 1) * row.get('grad_accum', 1)
+    return row
+
 
 FINETUNE_MODELS_DIR = MODELS_DIR / 'finetune'
 ITERATIVE_MODELS_DIR = MODELS_DIR / 'iterative'
@@ -1005,6 +1254,12 @@ def _prompt_action_reference(catalog=None, kb=None):
     by_role = {}
     for name, entry in sorted(catalog.items()):
         role = (entry.get('role') or 'own').lower()
+        # The catalogue KEY is the canonical verb; `aliases` is sorted, so
+        # `aliases[0]` is merely the alphabetically first one. Leading with it
+        # taught the model the wrong name for 28 of the 71 actions —
+        # `Persist=Save/Store` for Store, `Fail=Raise/Throw` for Throw,
+        # `Calculate=Compute/Derive` for Compute — which is the list the prompt
+        # tells it to use and nothing else in ARO calls them.
         aliases = entry.get('aliases') or [name]
 
         # The CANONICAL verb leads, and every alias follows.
@@ -1496,7 +1751,47 @@ def save_notebook_pairs(notebook_tag: str, pairs: list[dict],
     if duplicate_dropped:
         print(f'[{notebook_tag}] dedup dropped {duplicate_dropped} repeats '
               f'(run dedup_report() for the breakdown)')
+    _record_pairs_saved(notebook_tag, len(pairs), written, gate_dropped,
+                        generation_strategy,
+                        runtime_dropped=runtime_dropped,
+                        duplicate_dropped=duplicate_dropped)
     return written
+
+
+def _record_pairs_saved(notebook_tag, offered, written, gate_dropped,
+                        generation_strategy=None, runtime_dropped=0,
+                        duplicate_dropped=0):
+    """Log every data stage to experiments.db (GitLab #812).
+
+    Only four stages used to record anything, and all four were training
+    stages — so the half of the pipeline that decides WHAT the model learns
+    was the half with no record. Rather than editing every data notebook to
+    remember, the recording happens here: this is the one funnel every stage
+    writes its pairs through, so a stage that saves pairs is a stage that is
+    logged, including one added tomorrow.
+
+    Never raises. Bookkeeping must not be able to fail a run.
+    """
+    # Every reason a pair was dropped, not just the first one that existed.
+    # The fixtrain gate was alone when this was written; the pair gate and the
+    # deduplicator arrived alongside it, and a record naming one of three
+    # reasons understates the funnel it exists to describe.
+    reasons = {'fixtrain_gate': gate_dropped,
+               'pair_gate': runtime_dropped,
+               'dedup': duplicate_dropped}
+    reasons = {name: count for name, count in reasons.items() if count}
+
+    try:
+        from experiment_db import record_data_stage
+        record_data_stage(
+            notebook_tag, rows_in=offered, rows_out=written,
+            drop_reasons=reasons,
+            artifacts={'pairs_file': str(PAIRS_FILE)},
+            generation_strategy=generation_strategy,
+            type_caps_version=TYPE_CAPS_VERSION)
+    except Exception as exc:
+        print(f'[{notebook_tag}] experiments.db not updated: {exc}',
+              file=sys.stderr)
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -1584,21 +1879,21 @@ def extract_aro_blocks(text):
 
 
 def aro_check_snippet(code, timeout=10, extra_files=None):
-    """Run `aro check` on a code string in a temp dir.
+    """Run `aro check` on a code string in a sandboxed temp dir.
 
     Returns (passed: bool | None, error: str). None means the aro binary is
     not available (caller decides whether that is fatal).
+
+    Sandboxed via sandbox.run_program_dir (GitLab #804): `aro check` does not
+    execute the program, but it does parse a directory of model output, and the
+    same call shape is used for `aro run` — keeping both on one path means the
+    containment cannot be forgotten in the one that matters.
     """
-    import tempfile
+    import sandbox
     try:
-        with tempfile.TemporaryDirectory() as tmp:
-            (Path(tmp) / 'main.aro').write_text(code)
-            if extra_files:
-                for name, content in extra_files.items():
-                    (Path(tmp) / name).write_text(content)
-            r = subprocess.run(['aro', 'check', tmp],
-                               capture_output=True, text=True, timeout=timeout)
-            return r.returncode == 0, (r.stderr or r.stdout).strip()[:500]
+        r = sandbox.run_program_dir(['aro', 'check'], code,
+                                    extra_files=extra_files, timeout=timeout)
+        return r.returncode == 0, (r.stderr or r.stdout).strip()[:500]
     except FileNotFoundError:
         return None, 'aro_not_found'
     except subprocess.TimeoutExpired:
