@@ -50,7 +50,11 @@ public enum FileTools {
                 let lineNum = startIndex + i + 1
                 result += "\(lineNum)\t\(line)\n"
             }
-            return result
+            // The envelope rides along with the numbered lines (GitLab #879):
+            // the model keeps reading exactly what it read before, and the
+            // compactor gains a body it is allowed to drop while the path
+            // stays — which is the field a later `edit_file` needs.
+            return ToolResultEnvelope.file(path: path, contents: result).encoded()
         }
     }
 
@@ -201,6 +205,11 @@ public enum FileTools {
 
             let maxMatches = 200
             var matches: [String] = []
+            // Grouped by file, so the envelope carries one item per file
+            // rather than one per line (GitLab #879). A run that has already
+            // been given a file can then be told so (#874), and compaction
+            // drops the matched lines while the path survives.
+            var byFile: [(path: String, lines: [String])] = []
 
             // Collect files to search
             let files = collectFiles(at: url, glob: globFilter)
@@ -217,23 +226,33 @@ public enum FileTools {
                     ? String(fileURL.path.dropFirst(pg.root.path.count + 1))
                     : fileURL.path
 
+                var hits: [String] = []
                 for (index, line) in lines.enumerated() {
                     if matches.count >= maxMatches { break }
                     let range = NSRange(line.startIndex..., in: line)
                     if regex.firstMatch(in: line, range: range) != nil {
-                        matches.append("\(relativePath):\(index + 1):\(line)")
+                        let rendered = "\(relativePath):\(index + 1):\(line)"
+                        matches.append(rendered)
+                        hits.append(rendered)
                     }
                 }
+                if !hits.isEmpty { byFile.append((relativePath, hits)) }
             }
 
             if matches.isEmpty {
-                return "No matches found."
+                return ToolResultEnvelope.plain("No matches found.").encoded()
             }
             var result = matches.joined(separator: "\n")
             if matches.count >= maxMatches {
                 result += "\n\n(results capped at \(maxMatches) matches)"
             }
-            return result
+            let envelope = ToolResultEnvelope(
+                count: matches.count,
+                items: byFile.map { file in
+                    ToolResultItem(title: file.path, source: file.path,
+                                   body: file.lines.joined(separator: "\n"))
+                })
+            return ToolResultEnvelope.reencode(result, with: envelope)
         }
     }
 
