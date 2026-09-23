@@ -23,6 +23,11 @@ Where `operation` is one of:
 - `intersect` - Elements in both A and B
 - `difference` - Elements in A but not in B
 - `union` - All elements from A and B (deduplicated)
+- `symmetric-difference` - Elements in exactly one of A and B (§3.7)
+
+**`subset of` is not in this list, and deliberately.** It is a *predicate*, not
+an operation that produces a collection, so it is a condition operator rather
+than a Compute qualifier — see §3.6.
 
 ### 1.2 Examples
 
@@ -115,6 +120,78 @@ Create the <users-b> with [
 Compute the <common-users: intersect> from <users-a> with <users-b>.
 (* common-users = [{ name: "Bob", role: "user" }] *)
 ```
+
+### 3.6 Subset — a predicate, not an operation
+
+```aro
+when <required-roles> subset of <user-roles> {
+    Return an <OK: status> for the <request>.
+}
+```
+
+Every other operation here takes two collections and produces a third.
+`subset of` takes two collections and answers a question, so it belongs with
+`in`, `contains` and `matches` in ARO-0002's operator table rather than in the
+qualifier table above (GitLab #864). Writing it as a qualifier would mean
+`Compute the <ok: subset> from <a> with <b>.` followed by a guard on `<ok>` —
+two statements where the language already has a shape for one.
+
+Until it existed this was written as an intersect plus a length comparison:
+
+```aro
+(* What this replaces — and it is not quite the same question *)
+Compute the <both: intersect> from <required> with <granted>.
+Compute the <n: length> from <both>.
+Compute the <m: length> from <required>.
+Return an <OK: status> for the <request> when <n> is <m>.
+```
+
+Not quite the same question, because `intersect` is multiset: if `required`
+lists a role twice, the lengths differ even when every required role is
+granted.
+
+**Set semantics, not multiset.** `[1, 1] subset of [1]` is true: the question
+is about membership, and a duplicate does not make a new member. This is the
+one place in ARO-0042 that is not multiset, because "does this list contain
+everything that one does" is the question people ask and counting duplicates
+answers a different one.
+
+**The empty set is a subset of everything**, including itself — the
+mathematical convention, and the useful one: a route that requires no roles
+admits every caller.
+
+| Left | Right | True when |
+|------|-------|-----------|
+| List | List | every element of the left appears in the right |
+| List | Object | every element of the left is a key of the right |
+| String | String | every character of the left appears in the right |
+| Object | Object | every key of the left is in the right, with an equal value |
+| Scalar | any of the above | the scalar is a member — a bare value counts as a one-element set |
+
+There is no `superset of`. It is `subset of` with the operands the other way
+round, and a second spelling for one relation is a second thing to get wrong.
+
+### 3.7 Symmetric difference
+
+```aro
+Create the <before> with ["read", "write", "admin"].
+Create the <after> with ["read", "write", "billing"].
+
+Compute the <changed: symmetric-difference> from <before> with <after>.
+(* changed = ["admin", "billing"] *)
+```
+
+Everything in exactly one of the two — which is to say, what changed. It was
+written as two differences and a union: three statements and two intermediate
+bindings for one question.
+
+It is *defined* as those three operations, not reimplemented, so it inherits
+their per-type behaviour exactly — multiset for lists, character-wise for
+strings, deep for objects. Defining it independently would be a second answer
+to "what does difference mean for an object", and the two would drift.
+
+The symmetric difference of a collection with itself is empty, which is the
+cheapest "did anything change" a program can ask.
 
 ---
 
@@ -280,6 +357,8 @@ Compute the <all-tags: union> from <existing-tags> with <new-tags>.
 | **intersect** | Elements in both (multiset) | Characters in both | Keys with matching values |
 | **difference** | A minus B (multiset) | A chars not in B | Keys not matching in B |
 | **union** | Unique elements from both | A + unique chars from B | Merged (A wins conflicts) |
+| **symmetric-difference** | In exactly one (multiset) | Chars in exactly one | Keys differing between the two |
+| **`subset of`** *(predicate)* | Every element present | Every character present | Every key present with an equal value |
 
 ---
 
@@ -289,6 +368,8 @@ Compute the <all-tags: union> from <existing-tags> with <new-tags>.
 |-----|--------|------------|-----|
 | `intersect` | `set(a) & set(b)` | `a.filter(x => b.includes(x))` | `INTERSECT` |
 | `difference` | `set(a) - set(b)` | `a.filter(x => !b.includes(x))` | `EXCEPT` |
+| `symmetric-difference` | `set(a) ^ set(b)` | — | `(A EXCEPT B) UNION (B EXCEPT A)` |
+| `subset of` | `set(a) <= set(b)` | `a.every(x => b.includes(x))` | `NOT EXISTS (A EXCEPT B)` |
 | `union` | `set(a) \| set(b)` | `[...new Set([...a, ...b])]` | `UNION` |
 
 ---

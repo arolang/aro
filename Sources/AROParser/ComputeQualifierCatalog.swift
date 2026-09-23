@@ -44,8 +44,8 @@ public enum ComputeQualifierCatalog {
         "uppercase", "lowercase", "trim", "replace", "identity", "clip", "take",
         // Dates
         "date", "format", "distance",
-        // Sets (ARO-0042)
-        "intersect", "difference", "union",
+        // Sets (ARO-0042; symmetric-difference from GitLab #864)
+        "intersect", "difference", "union", "symmetric-difference",
         // Rendering
         "markdown",
         // Encoding / escaping (GitLab #482)

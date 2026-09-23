@@ -1286,6 +1286,34 @@ func evaluateBinaryOp(op: String, left: any Sendable, right: any Sendable) -> an
         }
         return false
 
+    // Set containment (ARO-0042 §3.6, GitLab #864). Mirrors the interpreter's
+    // `isSubset`: set semantics rather than multiset, a bare scalar counts as
+    // a one-element set, and the empty set is a subset of everything.
+    case "subset of", "subset":
+        if let a = left as? [String: any Sendable] {
+            guard let b = right as? [String: any Sendable] else { return false }
+            return a.allSatisfy { key, value in
+                guard let other = b[key] else { return false }
+                return asString(value) == asString(other)
+            }
+        }
+        if let a = left as? String, let b = right as? String {
+            let characters = Set(b)
+            return a.allSatisfy { characters.contains($0) }
+        }
+        let elements: [any Sendable] = (left as? [any Sendable]) ?? [left]
+        if let b = right as? [any Sendable] {
+            let members = Set(b.map { asString($0) })
+            return elements.allSatisfy { members.contains(asString($0)) }
+        }
+        if let b = right as? [String: any Sendable] {
+            return elements.allSatisfy { b[asString($0)] != nil }
+        }
+        if let b = right as? String {
+            return elements.allSatisfy { b.contains(asString($0)) }
+        }
+        return false
+
     // `a not in b` — the exact negation of the case above, written out
     // rather than delegating so the date-range and dictionary paths stay
     // literally the same code (GitLab #830 item 5).
