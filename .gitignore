@@ -5,6 +5,7 @@
 /Website/dist
 /Examples/HelloWorld/HelloWorld
 /Examples/HTMLAttributes/HTMLAttributes
+/Examples/TimezoneDemo/TimezoneDemo
 .DS_Store
 /.swiftpm
 /Editor/intellij-aro/gradlew.bat

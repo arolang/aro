@@ -36,9 +36,27 @@ public struct ExtractAction: SynchronousAction {
         try validatePreposition(object.preposition)
 
         // Handle environment variable extraction: <env: VAR_NAME>
-        // Returns empty string for unset variables (like shell default behavior)
+        //
+        // An unset variable took the empty string, and there was no way to
+        // say what it should be instead — so every reader wrote
+        // `when <x> == ""` and the books taught that as the idiom
+        // (GitLab #830 item 1). `default` now answers it:
+        //
+        //     Extract the <port> from the <env: PORT> default "8080".
+        //
+        // Only an *unset* variable takes the default. `PORT=` sets it to
+        // the empty string, and that is a value somebody wrote — the same
+        // rule the `default` operator follows for `false`, `0` and `""`
+        // (GitLab #547). Without a default the old empty string stands, so
+        // nothing that worked before reads differently now.
         if object.base == "env", let varName = object.specifiers.first {
-            return ProcessInfo.processInfo.environment[varName] ?? ""
+            if let value = ProcessInfo.processInfo.environment[varName] {
+                return value
+            }
+            if let defaultVal = context.resolveAny("_default_value_") {
+                return defaultVal
+            }
+            return ""
         }
 
         // ARO-0047: Handle command-line parameter extraction: <parameter: NAME>
@@ -46,6 +64,14 @@ public struct ExtractAction: SynchronousAction {
             if let paramName = object.specifiers.first {
                 // Extract specific parameter
                 guard let value = context.container.parameterStorage.get(paramName) else {
+                    // Same clause, same meaning: an absent parameter takes
+                    // the default rather than failing the statement
+                    // (GitLab #830 item 1). Without one it still throws —
+                    // a required parameter that was not passed is an error,
+                    // not an empty string.
+                    if let defaultVal = context.resolveAny("_default_value_") {
+                        return defaultVal
+                    }
                     throw ActionError.undefinedVariable("parameter:\(paramName)")
                 }
                 return value
@@ -99,6 +125,15 @@ public struct ExtractAction: SynchronousAction {
             if let parsed = parseJSONString(stringSource) {
                 resolvedSource = parsed
             }
+        }
+
+        // ARO-0041 §7: timezone conversion, ahead of schema detection because
+        // a zone name looks like a schema name to it — `UTC` is uppercase and
+        // not a property, so `Extract the <utc: UTC> from <date>.` was routed
+        // to schema validation and failed there (GitLab #865).
+        if let converted = try Self.timezoneConversion(
+            result: result, source: resolvedSource, context: context) {
+            return converted
         }
 
         // ARO-0046: Check for schema qualifier for typed event extraction
@@ -168,6 +203,54 @@ public struct ExtractAction: SynchronousAction {
         }
 
         return resolvedSource
+    }
+
+
+    // MARK: - Timezone conversion (ARO-0041 §7, GitLab #865)
+
+    /// `Extract the <local: timezone> from <date> with "Europe/Berlin".`
+    /// `Extract the <berlin: "Europe/Berlin"> from <date>.`
+    ///
+    /// Returns the converted date, or `nil` when the statement is not a
+    /// conversion — in which case the caller falls through to the ordinary
+    /// property lookup.
+    ///
+    /// The instant never moves. Only its rendering does, so two dates in
+    /// different zones still compare as the two moments they are: a comparison
+    /// between instants means the same thing whatever zone each is written in.
+    static func timezoneConversion(
+        result: ResultDescriptor,
+        source: any Sendable,
+        context: ExecutionContext
+    ) throws -> (any Sendable)? {
+        guard let date = source as? ARODate,
+              let specifier = result.specifiers.first else { return nil }
+
+        // Form 1: `<r: timezone>` with the zone in the `with` clause.
+        if specifier.lowercased() == "timezone" {
+            guard let raw = context.resolveAny("_with_") ?? context.resolveAny("_literal_") else {
+                // No zone asked for — this is a read of the date's own zone.
+                return nil
+            }
+            let name = raw as? String ?? String(describing: raw)
+            guard let zone = ARODate.resolveTimezone(name) else {
+                throw ActionError.invalidInput(
+                    "Extract the <\(result.base): timezone>: an IANA zone like "
+                    + "\"Europe/Berlin\", \"UTC\", \"local\", or a UTC offset like \"+02:00\"",
+                    received: name)
+            }
+            return date.converted(to: zone)
+        }
+
+        // Form 2: the zone as the qualifier itself — `<utc: UTC>`,
+        // `<berlin: "Europe/Berlin">`. Only a specifier that is unambiguously
+        // a zone qualifies: every readable property name is rejected first, so
+        // `<d: day>` stays a property read.
+        if date.property(specifier) == nil, let zone = ARODate.resolveTimezone(specifier) {
+            return date.converted(to: zone)
+        }
+
+        return nil
     }
 
     // MARK: - ARO-0046: Schema Qualifier Detection
