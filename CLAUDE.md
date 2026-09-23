@@ -686,6 +686,8 @@ The Compute action transforms data using built-in operations:
 | `unique` | Remove duplicates, first wins | `Compute the <tags: unique> from <all>.` |
 | `random` | Random element, or Int below a bound | `Compute the <pick: random> from <options>.` |
 | `sha256` | SHA-256 hex digest (alias of `hash`) | `Compute the <d: sha256> from <payload>.` |
+| `captures` | First regex match, as a record of its groups | `Compute the <p: captures> from <line> by /(?<k>\w+)=(?<v>.*)/.` |
+| `all-captures` | Every match, as a list of those records | `Compute the <ps: all-captures> from <line> by /…/.` |
 | `symmetric-difference` | Elements in exactly one of the two | `Compute the <changed: symmetric-difference> from <before> with <after>.` |
 | `fixed` | Round to N decimal places (2 by default) — money | `Compute the <total: fixed> from <raw>.` |
 | Arithmetic | +, -, *, /, % | `Compute the <total> from <price> * <qty>.` |
@@ -726,6 +728,14 @@ and `Map the <ns: name> from the <us>.` are the same statement. There is no
 per-element binding, so `with <item> * 0.9` has nothing to range over — it used
 to parse and die on `Undefined variable: item`, and `with 3` was discarded
 silently; both are check-time errors now. Use `for each` to compute per element.
+
+**Regex capture groups** (ARO-0037 §7): the pattern comes from the same
+`by /pattern/flags` clause `Split` uses. `captures` binds the first match's
+groups — named ones under their names, numbered ones under `"1"`, `"2"`, …, and
+the whole match under `match`; `all-captures` binds a list of those records. **A
+non-match binds an empty record (or empty list), it does not fail** — the same
+call ARO makes for a `Retrieve` that matches nothing. A group that took part in
+no match is absent rather than empty.
 
 **`subset of` is an operator, not a qualifier** (ARO-0042 §3.6, GitLab #864).
 It answers a question rather than producing a collection, so it sits with `in`,
@@ -798,6 +808,47 @@ is `equal` / `less` / `greater`. The older two-operand spelling
 operand and could never run under immutability.
 
 See `Proposals/ARO-0001-language-fundamentals.md` for the full specification.
+
+### Positional Command-Line Arguments (ARO-0047)
+
+`Application-Start` declares the positionals it reads with the `takes` clause
+ARO-0081 already uses for user-defined actions, so `./crawler https://example.com 3`
+works rather than only `./crawler --url … --depth …` (GitLab #857):
+
+```aro
+(Application-Start: Crawler takes <url> <depth>) {
+    Extract the <site> from the <parameter: url>.
+    Extract the <args> from the <parameter: arguments>.   (* the whole list *)
+    Return an <OK: status> for the <startup>.
+}
+```
+
+A declared name is read exactly like a flag, and a flag of the same name wins.
+`--` ends flag parsing. The one trap predates positionals: `--key value`
+consumes the token after it, so `--verbose https://x` binds `verbose` to the
+URL — write `--verbose=true`, or `--`, to mean two things.
+
+### Application-Wide Limits (ARO-0088 §10a)
+
+`with <concurrency: N>` bounds one loop; these bound the application (GitLab
+#862). Work **queues** at a ceiling, it never fails.
+
+```aro
+Configure the <application: concurrency> with 8.
+Configure the <http-client> with { concurrency: 4, rate: "10/s" }.
+```
+
+Several settings for one category go in **one object** — two statements naming
+the same category rebind an immutable binding. A ceiling and a rate are
+different limits and both apply: one request at a time still exceeds a
+per-minute quota.
+
+The ceiling counts units of work that are not already running inside one — every
+triggered feature set and every `parallel for each` iteration. Work started
+beneath a slot-holder runs under that slot, which is what makes the ceiling
+deadlock-free; the exception is the fire-and-forget event path, where nobody
+awaits the handler, so it takes a slot of its own. `ARO_CONCURRENCY`,
+`ARO_HTTP_CONCURRENCY` and `ARO_HTTP_RATE` set the same three.
 
 ### Long-Running Applications
 
@@ -921,14 +972,14 @@ Sources/
 │       └── RuntimeExecutionBridge.swift # Expression evaluation for built code
 └── AROCLI/             # CLI (run, compile, check, build commands)
 
-Examples/               # 111 examples organized by category (run `ls Examples/` for full list)
+Examples/               # 115 examples organized by category (run `ls Examples/` for full list)
 │                       #
 │                       # plan.md is the canonical description of an example:
-│                       # 101 of the 111 have one, and it is the prompt the
+│                       # 106 of the 115 have one, and it is the prompt the
 │                       # example was written from. expected.txt is its
 │                       # executable contract, and test.hint tells the
 │                       # integration harness how (or whether) to run it.
-│                       # README.md is optional narrative — 40 have one — and
+│                       # README.md is optional narrative — 41 have one — and
 │                       # is the layer that goes stale, so when they disagree,
 │                       # plan.md and expected.txt win (GitLab #818).
 │
@@ -974,6 +1025,7 @@ Examples/               # 111 examples organized by category (run `ls Examples/`
 │   # Data Processing
 ├── DataPipeline/       # Filter, transform, aggregate
 ├── GroupDemo/          # Group action: partition collections by field
+├── CaptureGroups/      # Regex capture groups: captures / all-captures (ARO-0037 §7)
 ├── SetOperations/      # Union, intersect, difference, symmetric-difference, subset of
 ├── CollectionMerge/    # Merging collections and objects
 ├── DeleteResult/       # What a Delete statement's result holds (ARO-0007 §6.4)
@@ -994,6 +1046,7 @@ Examples/               # 111 examples organized by category (run `ls Examples/`
 │   # Sockets & Services
 ├── EchoSocket/         # TCP socket server
 ├── SocketClient/       # TCP client connections
+├── ApplicationLimits/  # Application concurrency ceiling and outbound rate (ARO-0088 §10a)
 ├── MultiService/       # Multiple services in one app
 ├── ExternalService/    # External service integration
 │
@@ -1003,7 +1056,8 @@ Examples/               # 111 examples organized by category (run `ls Examples/`
 ├── MetricsDemo/        # Prometheus metrics export
 │
 │   # CLI & Parameters
-├── Parameters/         # Command-line argument parsing
+├── Parameters/         # Command-line argument parsing (flags)
+├── PositionalArguments/ # `takes <url> <depth>` on Application-Start (ARO-0047)
 ├── ConfigurableTimeout/ # Runtime configuration
 │
 │   # Plugins (multi-language)
@@ -1100,7 +1154,7 @@ The `Proposals/` directory contains language specifications:
 | **0034 Language Server Protocol** | LSP server, diagnostics, navigation |
 | **0035 Configurable Runtime** | Configure action for timeouts and settings |
 | **0036 Extended File Operations** | Exists, Stat, Make, Copy, Move actions |
-| **0037 Regex Split** | Split action with regex delimiters |
+| **0037 Regex Split** | Split action with regex delimiters, `captures` groups |
 | **0038 List Element Access** | first, last, index, range specifiers |
 | **0040 Format-Aware I/O** | Auto format detection for JSON, YAML, CSV |
 | **0041 Date/Time Ranges** | Date arithmetic, ranges, recurrence patterns |
@@ -1109,11 +1163,11 @@ The `Proposals/` directory contains language specifications:
 | **0044 Runtime Metrics** | Execution counts, timing, Prometheus format |
 | **0045 Package Manager** | Plugin installation, aro add/remove, plugin.yaml |
 | **0046 Typed Event Extraction** | Schema-validated event data extraction |
-| **0047 Command-Line Parameters** | CLI argument parsing, Parameters action |
+| **0047 Command-Line Parameters** | CLI argument parsing, flags and positionals |
 | **0048 WebSocket** | WebSocket server support, real-time messaging |
 | **0050 Template Engine** | Mustache-style templates, Render action |
 | **0051 Streaming Execution** | Lazy evaluation, Stream Tee, Aggregation Fusion |
-| **0073 Store Files** | File-backed repositories, YAML seed data, permission-based writability |
+| **0073 Store Files** | File-backed repositories, YAML seed data, permission-based writability, `Commit` checkpoints |
 | **0080 Git Actions** | Native Git via libgit2: status, stage, commit, push, pull, clone, checkout, tag |
 | **0081 User-Defined Actions** | Feature sets callable as `Application.<Name>` from any other feature set |
 | **0082 Numeric Separators** | Underscores in decimal literals (supersedes 0056) |
@@ -1122,7 +1176,7 @@ The `Proposals/` directory contains language specifications:
 | **0085 Terminal Shadow Buffer** | Terminal shadow-buffer optimization (draft) |
 | **0086 Automatic Pipeline Detection** | Implicit pipeline detection |
 | **0087 Plugin SDK** | Plugin SDK & developer experience |
-| **0088 Concurrency Model** | What runs concurrently, ordering guarantees, `parallel for each`, event dispatch |
+| **0088 Concurrency Model** | What runs concurrently, ordering guarantees, `parallel for each`, event dispatch, application limits |
 | **0089 Ranges** | `1..10` / `1..<10` as lazy values, lexing rules, why `[1..10]` stays an error (draft) |
 | **0090 Streaming I/O** | Request bodies that stream vs. bodies that become values, `x-aro-max-body`, anchoring |
 | **0091 Jupyter Kernel** | `aro repl --json` protocol, notebook cell semantics, output capture |

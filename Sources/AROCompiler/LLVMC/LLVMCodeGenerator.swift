@@ -1556,6 +1556,16 @@ public final class LLVMCodeGenerator {
         }
 
         // Parse command-line arguments (ARO-0047)
+        //
+        // The entry point's `takes` clause goes first: the AST is gone by run
+        // time, so the positional names have to be baked in here (GitLab #857).
+        let positionals = program.featureSets
+            .first { $0.featureSet.name == "Application-Start" }?
+            .featureSet.positionalParameters ?? []
+        if !positionals.isEmpty {
+            let namesStr = ctx.stringConstant(positionals.joined(separator: ","))
+            _ = ctx.module.insertCall(externals.declarePositionalParameters, on: [namesStr], at: ip)
+        }
         let argc = mainFunc.parameters[0]
         let argv = mainFunc.parameters[1]
         _ = ctx.module.insertCall(externals.parseArguments, on: [argc, argv], at: ip)

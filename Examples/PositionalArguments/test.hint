@@ -1,0 +1,4 @@
+# Test hints for PositionalArguments (ARO-0047, GitLab #857)
+# Uses test-script because the point of the example is the arguments.
+mode: both
+test-script: $ARO_BIN run ./Examples/PositionalArguments https://example.com 3 | grep -q "site: https://example.com" && $ARO_BIN run ./Examples/PositionalArguments https://example.com 3 | grep -q "depth: 3" && $ARO_BIN run ./Examples/PositionalArguments https://example.com 3 | grep -q "arguments: 2"

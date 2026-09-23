@@ -205,6 +205,15 @@ public struct ComputeAction: SynchronousAction {
               acceptsParameters: false,
               summary: "A random element, or a random Int below a bound",
               op: Self.opRandom),
+        // Regex capture groups (ARO-0037 §7, GitLab #858). The pattern
+        // comes from the `by /…/` clause Split already owns, so one
+        // regex spelling covers both actions.
+        .init(name: "captures", inputTypes: [.string], acceptsParameters: true,
+              summary: "First regex match as a record of its capture groups; "
+                     + "by /pattern/flags", op: Self.opCaptures),
+        .init(name: "all-captures", inputTypes: [.string], acceptsParameters: true,
+              summary: "Every regex match, as a list of capture records; "
+                     + "by /pattern/flags", op: Self.opAllCaptures),
         // Money (GitLab #517).
         .init(name: "fixed", inputTypes: [.int, .double, .string],
               acceptsParameters: true,
@@ -511,6 +520,96 @@ public struct ComputeAction: SynchronousAction {
         }
         let replacement = config["replace"] as? String ?? ""
         return text.replacingOccurrences(of: find, with: replacement)
+    }
+
+    // MARK: - Regex capture groups (ARO-0037 §7, GitLab #858)
+
+    /// The `by /pattern/flags` clause, as a compiled regex.
+    ///
+    /// Shared with `Split`, which binds the same two framework variables —
+    /// there is one regex spelling in the language and this is it.
+    private static func byClauseRegex(_ context: ExecutionContext,
+                                      qualifier: String) throws -> NSRegularExpression {
+        guard let pattern = context.resolveAny("_by_pattern_") as? String else {
+            throw ActionError.missingRequiredField(
+                "\(qualifier) requires a pattern: by /(?<name>…)/"
+            )
+        }
+        let flags = (context.resolveAny("_by_flags_") as? String) ?? ""
+        var options: NSRegularExpression.Options = []
+        if flags.contains("i") { options.insert(.caseInsensitive) }
+        if flags.contains("s") { options.insert(.dotMatchesLineSeparators) }
+        if flags.contains("m") { options.insert(.anchorsMatchLines) }
+        return try RegexCache.shared.regex(pattern, options: options)
+    }
+
+    /// One match as a record: the whole match under `match`, each named group
+    /// under its name, each numbered group under its number as a string.
+    ///
+    /// A group that took part in no match is absent rather than empty — the
+    /// difference between "matched nothing" and "did not participate" is the
+    /// one a caller needs, and an absent key is how ARO says the latter.
+    private static func captureRecord(_ match: NSTextCheckingResult,
+                                      in text: String,
+                                      names: [String]) -> [String: any Sendable] {
+        var record: [String: any Sendable] = [:]
+        if let whole = Range(match.range, in: text) {
+            record["match"] = String(text[whole])
+        }
+        for index in 1..<match.numberOfRanges {
+            guard let range = Range(match.range(at: index), in: text) else { continue }
+            record["\(index)"] = String(text[range])
+        }
+        for name in names {
+            guard let range = Range(match.range(withName: name), in: text) else { continue }
+            record[name] = String(text[range])
+        }
+        return record
+    }
+
+    /// Named groups in a pattern, in source order.
+    ///
+    /// `NSRegularExpression` will hand back a range for a name it knows, but
+    /// will not enumerate the names — so they are read off the pattern.
+    private static func groupNames(in pattern: String) -> [String] {
+        guard let finder = try? NSRegularExpression(pattern: "\\(\\?<([A-Za-z_][A-Za-z0-9_]*)>") else {
+            return []
+        }
+        let range = NSRange(pattern.startIndex..., in: pattern)
+        return finder.matches(in: pattern, range: range).compactMap { match in
+            guard let r = Range(match.range(at: 1), in: pattern) else { return nil }
+            return String(pattern[r])
+        }
+    }
+
+    /// `Compute the <parts: captures> from the <line> by /(?<k>\w+)=(?<v>.*)/.`
+    ///
+    /// Binds the first match's capture groups. **A non-match binds an empty
+    /// record**, it does not fail — the same call ARO-0006 makes for a
+    /// `Retrieve` that matches nothing (GitLab #835): finding nothing is an
+    /// answer, and the program guards on it.
+    private static func opCaptures(_ input: any Sendable,
+                                   _ context: ExecutionContext) throws -> any Sendable {
+        let text = asText(input)
+        let regex = try byClauseRegex(context, qualifier: "captures")
+        let range = NSRange(text.startIndex..., in: text)
+        guard let match = regex.firstMatch(in: text, range: range) else {
+            return [String: any Sendable]()
+        }
+        return captureRecord(match, in: text, names: groupNames(in: regex.pattern))
+    }
+
+    /// Every match, as a list of the records `captures` binds.
+    /// No match binds an empty list, for the same reason.
+    private static func opAllCaptures(_ input: any Sendable,
+                                      _ context: ExecutionContext) throws -> any Sendable {
+        let text = asText(input)
+        let regex = try byClauseRegex(context, qualifier: "all-captures")
+        let range = NSRange(text.startIndex..., in: text)
+        let names = groupNames(in: regex.pattern)
+        return regex.matches(in: text, range: range).map {
+            captureRecord($0, in: text, names: names) as any Sendable
+        }
     }
 
     // MARK: - Collection / text primitives (GitLab #486)
