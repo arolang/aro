@@ -24,6 +24,8 @@ The first part, before the colon, is the feature name. This name must be unique 
 
 Names can take several forms. Simple identifiers like `listUsers` or `getOrder` are common for HTTP handlers because OpenAPI operation identifiers typically follow this style. Hyphenated names like `Application-Start` or `Handle-Error` read more like natural language and are common for lifecycle handlers. Descriptive phrases with spaces like `Send Welcome Email` work well for event handlers because they clearly describe the purpose.
 
+Nothing inside the parentheses is reserved. `Break Room Booking`, `Order Each Item`, `Parallel Work Queue` and `Access Guard` are ordinary names, even though `Break`, `Each`, `Parallel` and `Guard` begin statements in a body. A keyword earns its meaning where a statement can start, and no statement starts in a header — so you name the domain in the words the domain already uses. The header ends at the colon or the closing parenthesis, and a literal is not a word, so `(Demo 42: Activity)` is still a mistake the compiler will point at.
+
 The second part, after the colon, is the business activity. This describes the domain context or purpose of the feature set. For an HTTP API handling user operations, you might use `User API` as the business activity. For an event handler dealing with order processing, you might use `Order Processing`. For the application entry point, you might use the application name itself.
 
 The business activity serves two purposes: documentation and scoping.

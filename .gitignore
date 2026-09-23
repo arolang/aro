@@ -6,6 +6,7 @@
 /Examples/HelloWorld/HelloWorld
 /Examples/DeleteResult/DeleteResult
 /Examples/TimezoneDemo/TimezoneDemo
+/Examples/GuardsAndDefaults/GuardsAndDefaults
 .DS_Store
 /.swiftpm
 /Editor/intellij-aro/gradlew.bat

@@ -2165,16 +2165,38 @@ public final class Parser {
     /// Parses space-separated compound identifiers as a single string
     /// Each compound identifier can contain hyphens (e.g., "Application-Start Entry Point")
     /// Also supports angle bracket suffixes for filters (e.g., "status StateObserver<draft_to_placed>")
+    ///
+    /// **Every word is a word here.** This runs only between `(` and `)`, over
+    /// a feature set's name and its business activity, and both are prose —
+    /// the one place in ARO where the author names their own domain. A
+    /// keyword's reserved meaning belongs where a statement can start, and no
+    /// statement can start inside the header.
+    ///
+    /// It used to consult `isIdentifierLike`, an allowlist of keywords judged
+    /// acceptable as names. That list could only ever be extended one
+    /// bug-report at a time: `guard` was added for *Access Guard* (GitLab
+    /// #584), and `(Application-Start: Env Require)` still failed with
+    /// `Expected ')', but got the keyword 'Require'` — as did *Order Each
+    /// Item*, *Parallel Work Queue* and *Break Room Booking* (GitLab #855).
+    /// Worse, the failed header left the file with no entry point, so the
+    /// author was also told their application had no `Application-Start` when
+    /// it plainly did, four words earlier.
+    ///
+    /// `isWordShaped` is decided on the lexeme rather than the kind precisely
+    /// so it cannot go stale as keywords are added. The sequence still ends at
+    /// `:` or `)`, which are punctuation and so never word-shaped, and
+    /// `isIdentifierLike` is untouched for the places that genuinely need a
+    /// narrow answer.
     private func parseIdentifierSequence() throws -> String {
         var parts: [String] = []
 
-        while peek().kind.isIdentifierLike {
+        while peek().isWordShaped {
             // Parse compound identifier (handles hyphens)
             var compound = advance().lexeme
             while check(.hyphen) {
                 advance()
                 compound += "-"
-                if peek().kind.isIdentifierLike {
+                if peek().isWordShaped {
                     compound += advance().lexeme
                 } else {
                     // Put back the hyphen conceptually by breaking
