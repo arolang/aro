@@ -94,6 +94,8 @@ The result specifier determines what data is extracted from the HTML:
 | content          | {title, content}  | Page title and cleaned body text       |
 | text             | [String]          | Text content from body (default)       |
 | markdown         | {title, markdown} | Page title and body as Markdown        |
+| select           | [String]          | CSS selection; `@attr` reads an        |
+|                  |                   | attribute instead of the text (§1.5)   |
 +------------------+-------------------+----------------------------------------+
 ```
 
@@ -132,6 +134,61 @@ Returns an array of text strings from the document body:
 ```aro
 ParseHtml the <paragraphs: text> from the <html>.
 ```
+
+#### Select Specifier
+
+The fixed specifiers above answer the four questions their names ask. `select`
+answers the rest, including the one that had **no spelling at all** until
+GitLab #860: reading an attribute.
+
+```aro
+Parse the <hrefs: select> from the <page> with "a@href".
+Parse the <srcs: select>  from the <page> with "img@src".
+Parse the <desc: select>  from the <page> with "meta[name=description]@content".
+Parse the <headings: select> from the <page> with "h2".
+```
+
+The `with` clause is an ordinary CSS selector, optionally followed by
+`@attribute`:
+
+- **with `@`** — the attribute's value, per matching element.
+- **without** — the element's text.
+
+One qualifier covers both, so nobody has to remember two names for "the link
+texts" and "the link targets". The `@name` spelling is CSS-adjacent and reads
+in ARO's `with` clause the way it reads in a selector.
+
+##### An element without the attribute contributes nothing
+
+```aro
+(* <a href="/one">One</a> <a>Not a link</a> <a href="/two">Two</a> *)
+Parse the <texts: select> from the <page> with "a".        (* 3 items *)
+Parse the <hrefs: select> from the <page> with "a@href".   (* 2 items *)
+```
+
+The result is the attributes that **exist**, not a list with holes at the
+indexes where they do not. A list with holes is only useful if you are
+correlating it against another list by index — and for that, CSS already says
+what you meant:
+
+```aro
+Parse the <texts: select> from the <page> with "a[href]".
+Parse the <hrefs: select> from the <page> with "a[href]@href".
+(* same length, same order, aligned by construction *)
+```
+
+An attribute that is *present but empty* — `<input value="">` — is reported as
+the empty string rather than dropped. Dropping it would conflate "no value"
+with "an empty value", and only the first is a missing attribute.
+
+##### Splitting the selector
+
+The attribute is taken from the **last** `@`, because an attribute name cannot
+contain one and a CSS selector can: `[data-x="a@b"]@href` selects on the
+`data-x` attribute and reads `href`. A trailing `@`, a leading `@`, or
+something after the `@` that is not an attribute name leaves the whole string
+as the selector, so a malformed one is reported by the parser rather than
+silently selecting something else.
 
 #### Markdown Specifier
 
@@ -281,6 +338,7 @@ The `<ParseHtml>` action uses CSS selectors internally:
 - `content`: Selects `title`, `main`, `article`, or `body`
 - `text`: Selects `body` by default
 - `markdown`: Recursively traverses `main`, `article`, or `body` with element-aware conversion
+- `select`: Any selector the caller gives, with `@attr` reading an attribute (§1.5)
 
 ### 3.2 Error Handling
 

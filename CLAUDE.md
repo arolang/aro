@@ -676,6 +676,9 @@ The Compute action transforms data using built-in operations:
 | `replace` | Substring replacement | `Compute the <out: replace> from <t> with { find: "-", replace: "_" }.` |
 | `html-escape` | Escape `& < > " '` for HTML | `Compute the <safe: html-escape> from <input>.` |
 | `url-encode` / `url-decode` | Percent-encode a query value | `Compute the <enc: url-encode> from <query>.` |
+| `url-resolve` | Resolve a relative URL against a base | `Compute the <abs: url-resolve> from <href> with { base: <page> }.` |
+| `url-defragment` / `url-normalize` | Strip `#frag`; one spelling per address | `Compute the <clean: url-defragment> from <link>.` |
+| `url-parts` | scheme, host, port, path, query, fragment | `Compute the <p: url-parts> from <link>.` |
 | `base64-encode` / `base64-decode` | Standard Base64 | `Compute the <b64: base64-encode> from <creds>.` |
 | `base64url-encode` / `base64url-decode` | URL-safe Base64 (JWTs) | `Compute the <tok: base64url-encode> from <payload>.` |
 | `json-escape` | Escape for a JSON string literal | `Compute the <esc: json-escape> from <text>.` |
@@ -989,10 +992,10 @@ Sources/
 │       └── RuntimeExecutionBridge.swift # Expression evaluation for built code
 └── AROCLI/             # CLI (run, compile, check, build commands)
 
-Examples/               # 117 examples organized by category (run `ls Examples/` for full list)
+Examples/               # 119 examples organized by category (run `ls Examples/` for full list)
 │                       #
 │                       # plan.md is the canonical description of an example:
-│                       # 108 of the 117 have one, and it is the prompt the
+│                       # 110 of the 119 have one, and it is the prompt the
 │                       # example was written from. expected.txt is its
 │                       # executable contract, and test.hint tells the
 │                       # integration harness how (or whether) to run it.
@@ -1160,7 +1163,7 @@ The `Proposals/` directory contains language specifications:
 | **0008 I/O Services** | HTTP, files, sockets, system objects |
 | **0009 Native Compilation** | LLVM, aro build, plugins in binaries |
 | **0010 Advanced Features** | Regex, dates, exec |
-| **0011 HTML Parsing** | Parse action for HTML documents (XML is a sketch) |
+| **0011 HTML Parsing** | Parse action for HTML documents, CSS `select` with `@attr` (XML is a sketch) |
 | **0014 Domain Modeling** | DDD patterns, entities, aggregates |
 | **0015 Testing Framework** | Colocated tests, Given/When/Then |
 | **0016 Interoperability** | External services, Call action, plugins |

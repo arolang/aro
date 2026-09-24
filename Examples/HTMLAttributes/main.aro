@@ -1,0 +1,39 @@
+(* Reading attributes out of HTML — ARO-0011 §1.5
+ *
+ * The fixed specifiers (links, content, text, markdown) answer the four
+ * questions their names ask. `select` answers the rest — including the one
+ * that had no spelling at all: reading an attribute.
+ *)
+
+(Application-Start: HTML Attributes) {
+    Create the <page> with "<html><head><title>Catalogue</title><meta name='description' content='Three things'></head><body><a href='/one' class='nav'>One</a><a>Not a link</a><a href='/two' class='nav'>Two</a><img src='/a.png' alt='A'><img alt='B'></body></html>".
+
+    (* An attribute, per matching element. *)
+    Parse the <hrefs: select> from the <page> with "a@href".
+    Log <hrefs> to the <console>.
+
+    Parse the <srcs: select> from the <page> with "img@src".
+    Log <srcs> to the <console>.
+
+    Parse the <description: select> from the <page> with "meta[name=description]@content".
+    Log <description> to the <console>.
+
+    (* No `@`: the element's text. One qualifier covers both, so there is no
+     * second name to remember for "the link texts". *)
+    Parse the <texts: select> from the <page> with "a".
+    Log <texts> to the <console>.
+
+    (* An element without the attribute contributes nothing — the result is
+     * the attributes that exist, not a list with holes. Three anchors, two
+     * hrefs. *)
+    Compute the <text-count: length> from <texts>.
+    Compute the <href-count: length> from <hrefs>.
+    Log "anchors=${<text-count>} hrefs=${<href-count>}" to the <console>.
+
+    (* When you need the two aligned, CSS already says what you meant. *)
+    Parse the <linked: select> from the <page> with "a[href]".
+    Compute the <linked-count: length> from <linked>.
+    Log "aligned=${<linked-count>}" to the <console>.
+
+    Return an <OK: status> for the <startup>.
+}

@@ -8,6 +8,7 @@
 /Examples/PositionalArguments/PositionalArguments
 /Examples/CaptureGroups/CaptureGroups
 /Examples/ApplicationLimits/ApplicationLimits
+/Examples/HTMLAttributes/HTMLAttributes
 /Examples/TimezoneDemo/TimezoneDemo
 /Examples/WebhookReceiver/WebhookReceiver
 /Examples/GuardsAndDefaults/GuardsAndDefaults
@@ -15,6 +16,7 @@
 /worktree/
 /Examples/PathOperations/PathOperations
 /Examples/PathOperations/build-stamp.txt
+/Examples/URLUtilities/URLUtilities
 /Examples/Comparisons/Comparisons
 .DS_Store
 /.swiftpm

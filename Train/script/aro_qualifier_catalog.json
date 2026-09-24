@@ -451,6 +451,16 @@
   "description": "Decode a percent-encoded value",
   "source": "aro actions --qualifiers --format json"
  },
+ "url-defragment": {
+  "namespace": "_builtin",
+  "builtin": true,
+  "input_types": [
+   "String"
+  ],
+  "accepts_parameters": false,
+  "description": "The URL without its #fragment",
+  "source": "aro actions --qualifiers --format json"
+ },
  "url-encode": {
   "namespace": "_builtin",
   "builtin": true,
@@ -459,6 +469,36 @@
   ],
   "accepts_parameters": false,
   "description": "Percent-encode a query value",
+  "source": "aro actions --qualifiers --format json"
+ },
+ "url-normalize": {
+  "namespace": "_builtin",
+  "builtin": true,
+  "input_types": [
+   "String"
+  ],
+  "accepts_parameters": false,
+  "description": "Lowercase scheme and host, remove . and .. and a default port",
+  "source": "aro actions --qualifiers --format json"
+ },
+ "url-parts": {
+  "namespace": "_builtin",
+  "builtin": true,
+  "input_types": [
+   "String"
+  ],
+  "accepts_parameters": false,
+  "description": "Split into scheme, host, port, path, query, fragment",
+  "source": "aro actions --qualifiers --format json"
+ },
+ "url-resolve": {
+  "namespace": "_builtin",
+  "builtin": true,
+  "input_types": [
+   "String"
+  ],
+  "accepts_parameters": true,
+  "description": "Resolve a relative URL against a base; with { base: \u2026 } or with <base>",
   "source": "aro actions --qualifiers --format json"
  }
 }

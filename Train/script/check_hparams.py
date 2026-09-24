@@ -35,7 +35,7 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 # notebook -> (stage, {notebook constant name: HPARAMS key})
 NOTEBOOK_STAGES = {
     '07_warmstart_finetune.ipynb': ('warm_start', {
-        'batch_size': 'batch_size',
+        'batch_size': 'batch_size', 'grad_accum': 'grad_accum',
     }),
     '18_finetune.ipynb': ('sft', {
         'BATCH_SIZE': 'batch_size', 'GRAD_ACCUM': 'grad_accum',
