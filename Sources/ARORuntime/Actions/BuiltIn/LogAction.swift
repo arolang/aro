@@ -149,14 +149,20 @@ public struct LogAction: ActionImplementation {
             // JSON format for machine consumption
             formattedMessage = "{\"level\":\"info\",\"source\":\"\(context.featureSetName)\",\"message\":\"\(message.replacingOccurrences(of: "\"", with: "\\\""))\"}"
         case .human:
-            // Readable format for CLI/console
-            // Compiled binaries and stdin-pipe scripts get clean output
-            // without the feature set prefix.
-            if context.isCompiled || context.suppressLogPrefix {
-                formattedMessage = message
-            } else {
-                formattedMessage = "[\(context.featureSetName)] \(message)"
-            }
+            // Readable format for CLI/console: the message, and nothing else.
+            //
+            // This used to be `[\(featureSetName)] \(message)` unless the
+            // program was compiled or read from stdin, so `aro run` and the
+            // binary built from the same source printed different text — the
+            // interpreter prefixed every line and the binary prefixed none
+            // (GitLab #814). ARO-0009 promises the two modes agree, and every
+            // "Example Output" block in the tree was wrong for one of them.
+            //
+            // The prefix is diagnostic, so per ARO-0031 it belongs in the
+            // developer context, which already carries the feature set's name
+            // in a fuller form. The human context is what a user pipes into
+            // another tool, and it should not have to be stripped first.
+            formattedMessage = message
         case .developer:
             // Diagnostic format for testing/debugging
             formattedMessage = "LOG[\(target)] \(context.featureSetName): \(message)"
@@ -212,15 +218,13 @@ public struct LogAction: ActionImplementation {
         return count
     }
 
-    /// One line of streamed log output: the formatted value, prefixed with the
-    /// feature set's name unless the caller owns the line already (compiled
-    /// binaries and piped stdin).
+    /// One line of streamed log output: the formatted value, and nothing else.
+    ///
+    /// Streamed lines followed the same rule as single ones and change with
+    /// them (GitLab #814) — a stream logged interpreted and the same stream
+    /// logged compiled now produce the same bytes.
     private func line(for value: any Sendable, context: ExecutionContext) -> String {
-        let formatted = ResponseFormatter.formatValue(value, for: context.outputContext)
-        if context.isCompiled || context.suppressLogPrefix {
-            return formatted
-        }
-        return "[\(context.featureSetName)] \(formatted)"
+        ResponseFormatter.formatValue(value, for: context.outputContext)
     }
 
     /// Write one line to standard output.

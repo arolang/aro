@@ -115,20 +115,13 @@ public final class REPLSession: @unchecked Sendable {
     /// instead of layering a second handler on the same verb.
     private var userActionHost: UserDefinedActionHost?
 
-    /// The flag the session was constructed with. Persisted so that
-    /// `clear()` can rebuild the underlying RuntimeContext with the same
-    /// formatting behavior.
-    private let suppressLogPrefix: Bool
-
     /// Construct a REPL session. The action registry defaults to
     /// the process-wide singleton; tests can pass an isolated
     /// instance so concurrent sessions don't see each other's
     /// dynamic registrations (#363).
     public init(
-        suppressLogPrefix: Bool = false,
         actionRegistry: ActionRegistry = .shared
     ) {
-        self.suppressLogPrefix = suppressLogPrefix
         self.actionRegistry = actionRegistry
         self.eventBus = EventBus()
         self.globalSymbols = GlobalSymbolStorage()
@@ -136,8 +129,7 @@ public final class REPLSession: @unchecked Sendable {
             featureSetName: "_repl_session_",
             businessActivity: "Interactive",
             outputContext: .human,
-            eventBus: eventBus,
-            suppressLogPrefix: suppressLogPrefix
+            eventBus: eventBus
         )
 
         // Register services for REPL session
@@ -333,7 +325,13 @@ public final class REPLSession: @unchecked Sendable {
             wrappedSource += "\n\n" + companions.joined(separator: "\n\n")
         }
 
-        let result = compiler.compile(wrappedSource)
+        // The session's own bindings are pre-bound as far as this cell is
+        // concerned: it is compiled alone, but `<w>` from an earlier cell is
+        // there at run time. Without this, `Publish as <x> <w>.` failed static
+        // analysis — the one statement that *errors* on an undefined name
+        // rather than warning, and the one cross-cell operation Publish is for
+        // (GitLab #689).
+        let result = compiler.compile(wrappedSource, preboundSymbols: Set(context.variableNames))
 
         if !result.isSuccess {
             let errorMsg = result.diagnostics.map { $0.message }.joined(separator: "\n")
@@ -615,8 +613,7 @@ public final class REPLSession: @unchecked Sendable {
             featureSetName: "_repl_session_",
             businessActivity: "Interactive",
             outputContext: .human,
-            eventBus: eventBus,
-            suppressLogPrefix: suppressLogPrefix
+            eventBus: eventBus
         )
 
         // Re-register services after context reset

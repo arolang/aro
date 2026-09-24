@@ -21,7 +21,7 @@ struct DiagnosticHeadlineTests {
 
     @Test("Unknown qualifier is the first line of the session error")
     func unknownQualifierIsHeadline() async throws {
-        let session = REPLSession(suppressLogPrefix: true)
+        let session = REPLSession()
         _ = try await session.executeStatement("Create the <y> with \"text\".")
         let result = try await session.executeStatement(
             "Compute the <x: sparkle> from <y>.")

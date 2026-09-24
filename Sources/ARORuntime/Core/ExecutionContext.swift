@@ -348,10 +348,6 @@ public protocol ContextMetadata: AnyObject, Sendable {
     /// Whether execution is from a compiled binary (vs interpreter)
     var isCompiled: Bool { get }
 
-    /// Whether the Log action should omit the `[featureSetName]` prefix
-    /// in `.human` output. Used by stdin-pipe entry point so one-liners
-    /// produce clean output.
-    var suppressLogPrefix: Bool { get }
 }
 
 /// Wait-state signaling for long-running (server/watcher) applications.
@@ -484,8 +480,6 @@ public extension ContextMetadata {
     /// Default: not compiled (interpreter mode)
     var isCompiled: Bool { false }
 
-    /// Default: show feature set prefix in Log output
-    var suppressLogPrefix: Bool { false }
 }
 
 public extension TemplateBuffering {

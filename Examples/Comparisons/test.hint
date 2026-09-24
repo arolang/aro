@@ -1,0 +1,4 @@
+# Test hints for Comparisons (ARO-0001, GitLab #469/#663)
+# mode: both is the point — the `against` operand was dropped in compiled mode.
+mode: both
+occurrence-check: true

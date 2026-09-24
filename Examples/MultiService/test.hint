@@ -1,12 +1,23 @@
 # Test hints for MultiService
 # Multi-service example with HTTP, Socket, and File Monitor
 type: multiservice
-# mode: interpreter — compiled mode diverges from interpreter:
-# socket welcome lines arrive before the harness's client subscribes
-# (race only at compiled speed), and file events emit FILE MODIFIED
-# instead of FILE CREATED / FILE DELETED. Both are real runtime
-# parity gaps; revisit once the file-monitor + socket bring-up are
-# fixed rather than papering over with per-platform expected files.
+# mode: interpreter — one of the two gaps this pinned is now closed.
+#
+# File events were the first: the compiled binary reported FILE MODIFIED for a
+# creation on macOS and reported nothing at all on Linux, because only the
+# FSEvents backend ever published an event — inotify and the polling fallback
+# just printed a line. Fixed in GitLab #693; both FILE CREATED and FILE DELETED
+# now arrive in compiled mode, and `expected.linux-compiled.txt` is obsolete.
+#
+# The socket welcome is the second, and it is not a race: the compiled socket
+# *server* never dispatches to `Socket Event Handler` feature sets at all.
+# `aro_native_socket_server_start` wires `onConnect`/`onData`/`onDisconnect` to
+# hardcoded `print` statements that imitate a handler's output, and broadcasts
+# every datagram, so `Handle Client Connected` never runs and no welcome is
+# sent. That is GitLab #881 — a different bug from this one, and fixing it
+# means unpicking behaviour SimpleChat and EchoSocket currently depend on.
+#
+# Flip to `mode: both` once #881 lands.
 mode: interpreter
 timeout: 20
 skip-on-windows: Multi-service tests not supported on Windows CI

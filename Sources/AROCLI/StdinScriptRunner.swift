@@ -38,7 +38,7 @@ public enum StdinScriptRunner {
         let units = REPLCellSplitter.split(source)
         guard !units.isEmpty else { return .empty }
 
-        let session = REPLSession(suppressLogPrefix: true)
+        let session = REPLSession()
         do {
             for unit in units {
                 let result: REPLResult

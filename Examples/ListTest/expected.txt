@@ -5,4 +5,4 @@
 ---
 Listing directory...
 Found __NUMBER__ entries
-test
+[OK] test

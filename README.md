@@ -193,11 +193,11 @@ Most of ARO works everywhere. This table is the contract; please keep it current
 | Socket client (`Connect`) | ✅ | ✅ | ❌ ³ |
 | File operations | ✅ | ✅ | ✅ |
 | File monitoring | ✅ FSEvents | ✅ inotify | ⚠️ polling |
-| `Exec` / `Shell` | ✅ | ✅ | ❌ ⁴ |
+| `Exec` / `Shell` | ✅ | ✅ | ✅ ⁴ |
 | Git actions (ARO-0080) | ✅ | ✅ | ❌ ⁵ |
-| `.store` write-back | ✅ opt-in | ✅ opt-in | ⚠️ ⁶ |
-| Terminal UI | ✅ | ✅ | ⚠️ ⁷ |
-| Metrics | ✅ | ✅ | ❌ ⁸ |
+| `.store` write-back | ✅ opt-in | ✅ opt-in | ✅ opt-in ⁶ |
+| Terminal UI | ✅ | ✅ | ✅ ⁷ |
+| Metrics | ✅ | ✅ | ✅ ⁸ |
 | **Tools** ||||
 | `aro lsp`, `mcp`, `ask`, `kernel` | ✅ | ✅ | ❌ ¹⁰ |
 | Jupyter kernel | ✅ native | ✅ native | ⚠️ Python shim |
@@ -206,11 +206,17 @@ Most of ARO works everywhere. This table is the contract; please keep it current
 ¹ requires LLVM, not yet wired up on Windows — GitLab #613
 ² Windows uses FlyingFox rather than SwiftNIO: no body streaming, no WebSocket
 ³ GitLab #681
-⁴ hard-codes `/bin/sh` — GitLab #682
+⁴ runs through `%COMSPEC%` (`cmd.exe /c`); a bare executable in the array
+   form is found with `where.exe` rather than `/usr/bin/env` — GitLab #682
 ⁵ the module is compiled out — GitLab #683
-⁶ writability is inverted: every store is writable — GitLab #684
-⁷ Windows Terminal only, and hidden input echoes — GitLab #699
-⁸ reports zeros rather than absence — GitLab #700
+⁶ opt-in is a `# aro-store: writable` marker in the file's leading comment
+   block, since Windows has no other-write bit; ARO-0073 §3a — GitLab #684
+⁷ registered whenever stdout is a console (cmd.exe and PowerShell included);
+   size from `GetConsoleScreenBufferInfo`, hidden input via `ENABLE_ECHO_INPUT`
+   — GitLab #699
+⁸ `GetProcessTimes`, `GetProcessMemoryInfo`, `GetSystemTimes`,
+   `GlobalMemoryStatusEx`; file-descriptor counts stay 0, as Windows has none
+   — GitLab #700
 ⁹ `Log` output is captured; stray `print`s from plugins are not
 ¹⁰ not registered as subcommands — GitLab #701
 ¹¹ needs `ARO_STATIC_PYTHON` pointing at an embeddable CPython; otherwise the

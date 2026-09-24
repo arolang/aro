@@ -83,7 +83,7 @@ final class JupyterKernelServer: @unchecked Sendable {
     init(connection: JupyterConnection) throws {
         self.connection = connection
         self.signer = JupyterSigner(key: connection.key)
-        self.session = REPLSession(suppressLogPrefix: true)
+        self.session = REPLSession()
         self.engine = REPLCellEngine(session: session)
         self.logFD = dup(STDERR_FILENO)
 

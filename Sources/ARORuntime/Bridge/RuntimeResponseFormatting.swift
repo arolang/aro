@@ -91,6 +91,12 @@ public func aro_context_print_error(_ contextPtr: UnsafeMutableRawPointer?) {
                 } else {
                     print("Runtime error: \(message)")
                 }
+            case .statementFailed(let aroError):
+                // The interpreter's own rendering — feature set, business
+                // activity, statement and trace (GitLab #692). `AROError`
+                // already knows how to print itself; the compiled path just
+                // has to stop paraphrasing.
+                print("Runtime error: \(aroError.description)")
             default:
                 print("Runtime error: \(error.localizedDescription)")
             }
@@ -102,7 +108,7 @@ public func aro_context_print_error(_ contextPtr: UnsafeMutableRawPointer?) {
 
 /// Parse a throw error message in format "<type> in <context>: <reason>"
 /// Returns the type and reason components, or nil if format doesn't match
-private func parseThrowErrorMessage(_ message: String) -> (type: String, reason: String)? {
+func parseThrowErrorMessage(_ message: String) -> (type: String, reason: String)? {
     // Pattern: "<type> in <context>: <reason>"
     // Example: "InputError in Application-Start: negative-value"
     guard let inRange = message.range(of: " in "),

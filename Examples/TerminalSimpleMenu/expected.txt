@@ -1,4 +1,4 @@
-# Generated: Mon Mar  2 09:51:23 2026
+# Generated: Wed Sep 23 00:47:15 2026
 # Type: console
 # Command: aro run ./Examples/TerminalSimpleMenu
 # Timeout: 10s
@@ -30,4 +30,4 @@ Exit
 ↑↓ navigate · Enter select · q quit
 
 
-startup
+[OK] startup

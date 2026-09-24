@@ -105,8 +105,8 @@ Proposals/ARO-0010-advanced-features.md:683
 Proposals/ARO-0010-advanced-features.md:727
 Proposals/ARO-0010-advanced-features.md:756
 Proposals/ARO-0010-advanced-features.md:777
-Proposals/ARO-0011-html-xml-parsing.md:306
-Proposals/ARO-0011-html-xml-parsing.md:315
+Proposals/ARO-0011-html-xml-parsing.md:364
+Proposals/ARO-0011-html-xml-parsing.md:373
 Proposals/ARO-0014-domain-modeling.md:268
 Proposals/ARO-0014-domain-modeling.md:381
 Proposals/ARO-0014-domain-modeling.md:414
@@ -129,7 +129,7 @@ Proposals/ARO-0018-query-language.md:467
 Proposals/ARO-0018-query-language.md:59
 Proposals/ARO-0018-query-language.md:98
 Proposals/ARO-0019-standard-library.md:138
-Proposals/ARO-0019-standard-library.md:282
+Proposals/ARO-0019-standard-library.md:353
 Proposals/ARO-0022-state-guards.md:126
 Proposals/ARO-0022-state-guards.md:149
 Proposals/ARO-0022-state-guards.md:17
@@ -209,11 +209,11 @@ Proposals/ARO-0083-terminal-ui.md:153
 Proposals/ARO-0083-terminal-ui.md:170
 Proposals/ARO-0083-terminal-ui.md:185
 Proposals/ARO-0083-terminal-ui.md:402
-Proposals/ARO-0083-terminal-ui.md:600
-Proposals/ARO-0083-terminal-ui.md:649
-Proposals/ARO-0083-terminal-ui.md:694
-Proposals/ARO-0083-terminal-ui.md:803
-Proposals/ARO-0083-terminal-ui.md:833
+Proposals/ARO-0083-terminal-ui.md:607
+Proposals/ARO-0083-terminal-ui.md:656
+Proposals/ARO-0083-terminal-ui.md:701
+Proposals/ARO-0083-terminal-ui.md:810
+Proposals/ARO-0083-terminal-ui.md:840
 Proposals/ARO-0085-terminal-shadow-buffer.md:456
 Proposals/ARO-0085-terminal-shadow-buffer.md:474
 Proposals/ARO-0085-terminal-shadow-buffer.md:492

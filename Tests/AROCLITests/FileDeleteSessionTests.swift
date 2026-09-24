@@ -39,7 +39,7 @@ struct FileDeleteSessionTests {
         defer { try? FileManager.default.removeItem(at: scratch) }
         let file = try makeFile(in: scratch)
 
-        let session = REPLSession(suppressLogPrefix: true)
+        let session = REPLSession()
         let result = try await session.executeStatement(
             "Delete the <gone> from \"\(file.path)\".")
 
@@ -53,7 +53,7 @@ struct FileDeleteSessionTests {
         defer { try? FileManager.default.removeItem(at: scratch) }
         let file = try makeFile(in: scratch)
 
-        let session = REPLSession(suppressLogPrefix: true)
+        let session = REPLSession()
         let result = try await session.executeStatement(
             "Delete the <gone> from the <file: \"\(file.path)\">.")
 
@@ -69,7 +69,7 @@ struct FileDeleteSessionTests {
         try FileManager.default.createDirectory(at: tree, withIntermediateDirectories: true)
         _ = try makeFile(in: tree, name: "leaf.txt")
 
-        let session = REPLSession(suppressLogPrefix: true)
+        let session = REPLSession()
         let target = scratch.appendingPathComponent("tree")
         let result = try await session.executeStatement(
             "Delete the <dropped> from the <directory: \"\(target.path)\">.")
@@ -84,7 +84,7 @@ struct FileDeleteSessionTests {
         defer { try? FileManager.default.removeItem(at: scratch) }
         let file = try makeFile(in: scratch)
 
-        let session = REPLSession(suppressLogPrefix: true)
+        let session = REPLSession()
         _ = try await session.executeStatement(
             "Create the <target> with \"\(file.path)\".")
         let result = try await session.executeStatement(
@@ -100,7 +100,7 @@ struct FileDeleteSessionTests {
         defer { try? FileManager.default.removeItem(at: scratch) }
         let file = try makeFile(in: scratch)
 
-        let session = REPLSession(suppressLogPrefix: true)
+        let session = REPLSession()
         let first = try await session.executeStatement(
             "Delete the <gone> from \"\(file.path)\".")
         #expect(first.isSuccess)
@@ -117,7 +117,7 @@ struct FileDeleteSessionTests {
 
     @Test("An unsupported delete target errors instead of answering ok")
     func deleteUnsupportedTargetErrors() async throws {
-        let session = REPLSession(suppressLogPrefix: true)
+        let session = REPLSession()
         _ = try await session.executeStatement("Create the <n> with 42.")
         let result = try await session.executeStatement(
             "Delete the <gone> from the <n>.")
@@ -130,7 +130,7 @@ struct FileDeleteSessionTests {
 
     @Test("Repository delete with a where clause still works")
     func repositoryDeleteStillWorks() async throws {
-        let session = REPLSession(suppressLogPrefix: true)
+        let session = REPLSession()
         let repo = "del\(UUID().uuidString.lowercased().filter { $0.isLetter }.prefix(8))-repository"
 
         _ = try await session.executeStatement(
@@ -151,7 +151,7 @@ struct FileDeleteSessionTests {
 
     @Test("Repository delete without a where clause clears the repository")
     func repositoryClearAllStillWorks() async throws {
-        let session = REPLSession(suppressLogPrefix: true)
+        let session = REPLSession()
         let repo = "clr\(UUID().uuidString.lowercased().filter { $0.isLetter }.prefix(8))-repository"
 
         _ = try await session.executeStatement(
@@ -172,7 +172,7 @@ struct FileDeleteSessionTests {
 
     @Test("Dictionary delete still removes the key")
     func dictionaryDeleteStillWorks() async throws {
-        let session = REPLSession(suppressLogPrefix: true)
+        let session = REPLSession()
         _ = try await session.executeStatement(
             "Create the <d> with { a: 1, b: 2 }.")
         let result = try await session.executeStatement(

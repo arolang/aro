@@ -895,17 +895,12 @@ public final class KeepaliveSignalHandler: @unchecked Sendable {
         // which also executes Application-End handlers.
         guard !RuntimeSignalHandler.shared.isActive else { return }
 
-        signal(SIGINT) { _ in
+        // Ctrl-C and SIGTERM on POSIX; the console control events on Windows,
+        // which delivers neither — so `Keepalive` never unblocked there and
+        // `Application-End` never ran (GitLab #685).
+        ShutdownSignals.install {
             ShutdownCoordinator.shared.signalShutdown()
             // Safety exit: gives Application-End handlers time to run
-            DispatchQueue.global().asyncAfter(deadline: .now() + 5.0) {
-                fflush(nil)
-                exit(0)
-            }
-        }
-
-        signal(SIGTERM) { _ in
-            ShutdownCoordinator.shared.signalShutdown()
             DispatchQueue.global().asyncAfter(deadline: .now() + 5.0) {
                 fflush(nil)
                 exit(0)

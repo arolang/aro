@@ -8,13 +8,16 @@
 /Examples/PositionalArguments/PositionalArguments
 /Examples/CaptureGroups/CaptureGroups
 /Examples/ApplicationLimits/ApplicationLimits
+/Examples/HTMLAttributes/HTMLAttributes
 /Examples/TimezoneDemo/TimezoneDemo
 /Examples/WebhookReceiver/WebhookReceiver
+/Examples/GuardsAndDefaults/GuardsAndDefaults
 /Vendor/
 /worktree/
 /Examples/PathOperations/PathOperations
 /Examples/PathOperations/build-stamp.txt
-/Examples/GuardsAndDefaults/GuardsAndDefaults
+/Examples/URLUtilities/URLUtilities
+/Examples/Comparisons/Comparisons
 .DS_Store
 /.swiftpm
 /Editor/intellij-aro/gradlew.bat

@@ -33,7 +33,7 @@ struct ExistsBooleanTests {
         let file = scratch.appendingPathComponent("present.txt")
         try "here".write(to: file, atomically: true, encoding: .utf8)
 
-        let session = REPLSession(suppressLogPrefix: true)
+        let session = REPLSession()
         let result = try await session.executeStatement(
             "Exists the <flag> for \"\(file.path)\".")
         #expect(result.isSuccess)
@@ -48,7 +48,7 @@ struct ExistsBooleanTests {
         defer { try? FileManager.default.removeItem(at: scratch) }
         let missing = scratch.appendingPathComponent("nope.txt")
 
-        let session = REPLSession(suppressLogPrefix: true)
+        let session = REPLSession()
         let result = try await session.executeStatement(
             "Exists the <flag> for \"\(missing.path)\".")
         #expect(result.isSuccess)
@@ -66,7 +66,7 @@ struct ExistsBooleanTests {
         let file = scratch.appendingPathComponent("agree.txt")
         try "x".write(to: file, atomically: true, encoding: .utf8)
 
-        let session = REPLSession(suppressLogPrefix: true)
+        let session = REPLSession()
 
         // Existing file: both true.
         _ = try await session.executeStatement("Exists the <bare-yes> for \"\(file.path)\".")
@@ -89,7 +89,7 @@ struct ExistsBooleanTests {
         let file = scratch.appendingPathComponent("guard.txt")
         try "x".write(to: file, atomically: true, encoding: .utf8)
 
-        let session = REPLSession(suppressLogPrefix: true)
+        let session = REPLSession()
         _ = try await session.executeStatement("Exists the <present> for \"\(file.path)\".")
         _ = try await session.executeStatement(
             "Exists the <absent> for \"\(scratch.appendingPathComponent("missing.txt").path)\".")
@@ -113,7 +113,7 @@ struct ExistsBooleanTests {
         let file = scratch.appendingPathComponent("via-var.txt")
         try "x".write(to: file, atomically: true, encoding: .utf8)
 
-        let session = REPLSession(suppressLogPrefix: true)
+        let session = REPLSession()
         _ = try await session.executeStatement("Create the <target> with \"\(file.path)\".")
         let result = try await session.executeStatement(
             "Exists the <flag> for the <file: target>.")
@@ -128,7 +128,7 @@ struct ExistsBooleanTests {
         let file = scratch.appendingPathComponent("plain.txt")
         try "x".write(to: file, atomically: true, encoding: .utf8)
 
-        let session = REPLSession(suppressLogPrefix: true)
+        let session = REPLSession()
         let dirCheck = try await session.executeStatement(
             "Exists the <seen-dir> for the <directory: \"\(file.path)\">.")
         let fileCheck = try await session.executeStatement(

@@ -1,0 +1,9 @@
+climbed: https://example.com/docs/other/x.html
+protocol-relative: https://cdn.example.org/lib.js
+fragment-only: https://example.com/docs/guide/page.html?x=1#section
+absolute: https://other.test/z
+defragmented: https://example.com/docs/guide/page.html?x=1
+normalized: https://example.com/a/c
+scheme=https host=example.com
+path=/docs/guide/page.html query=x=1 fragment=top
+startup

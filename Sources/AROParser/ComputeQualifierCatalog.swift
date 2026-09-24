@@ -50,6 +50,8 @@ public enum ComputeQualifierCatalog {
         "markdown",
         // Encoding / escaping (GitLab #482)
         "html-escape", "url-encode", "url-decode",
+        // URL arithmetic (ARO-0019 §3.1a, GitLab #859)
+        "url-resolve", "url-defragment", "url-normalize", "url-parts",
         "base64-encode", "base64-decode",
         "base64url-encode", "base64url-decode",
         "json-escape",

@@ -49,10 +49,14 @@ public final class Compiler {
     ///   `UserActionRegistry.declared(inFiles:)` before the compile loop.
     ///   `nil` means "one file, no application context", and the unknown-action
     ///   diagnostic then says so rather than claiming nothing is declared.
+    /// - Parameter preboundSymbols: names already bound outside this source.
+    ///   A REPL or notebook cell is compiled alone, wrapped in a throwaway
+    ///   feature set, while its values live in the session (GitLab #689).
     public func compile(
         _ source: String,
         externallyHandledEvents: Set<String> = [],
-        declaredUserActions: UserActionRegistry? = nil
+        declaredUserActions: UserActionRegistry? = nil,
+        preboundSymbols: Set<String> = []
     ) -> CompilationResult {
         // Clear diagnostics from previous compilations
         diagnostics.clear()
@@ -70,7 +74,8 @@ public final class Compiler {
             let analyzedProgram = analyzer.analyze(
                 program,
                 externallyHandledEvents: externallyHandledEvents,
-                declaredUserActions: declaredUserActions)
+                declaredUserActions: declaredUserActions,
+                preboundSymbols: preboundSymbols)
             
             return CompilationResult(
                 program: program,

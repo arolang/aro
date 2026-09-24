@@ -283,11 +283,14 @@ HPARAMS = {
     'warm_start': dict(_SHARED, **{
         'lora_layers':   16,
         'learning_rate': 1e-5,
-        'batch_size':    4,
-        'grad_accum':    1,     # unmeasured: this stage has never accumulated.
-                                # Left alone deliberately — raising it changes
-                                # the one stage whose output every later stage
-                                # resumes from, and nobody has measured it.
+        'batch_size':    2,     # measured: at 4 the 30B bf16 MoE overran
+                                # physical RAM and the run lived in swap —
+                                # 23M swapouts, ~3% CPU, no progress. The SFT
+                                # stage trains this same base at 2 and peaks
+                                # near 79 GB, so 2 is the proven size.
+        'grad_accum':    2,     # keeps the effective batch at 4, so the
+                                # iteration count and epoch maths are
+                                # unchanged by the batch_size drop above.
         'val_batches':   25,
         'max_seq_len':   2048,  # the only stage below the shared 4096, and
                                 # deliberately: it trains on the action/syntax

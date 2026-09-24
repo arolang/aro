@@ -119,6 +119,42 @@ $ ls -l *.store
 -rw-r--rw-  1 user  staff  102  config.store      # writable (other-write set)
 ```
 
+### 3a. Writability on Windows
+
+Windows has no other-write bit, and no permission that means what `o+w` means
+here. The check that stood in for it asked `FileManager.isWritableFile`, which
+is true for any file the current user owns -- so every `.store` on Windows was
+writable and a seed file the author meant to be read-only was rewritten at
+shutdown. That is the contract inverted, not approximated (GitLab #684).
+
+On Windows, and only on Windows, writability is declared in the file:
+
+```yaml
+# aro-store: writable
+- name: Alice
+  role: admin
+```
+
+| Marker | Behavior |
+|--------|----------|
+| absent (default) | Seed at startup, no write-back |
+| `# aro-store: writable` | Seed at startup, persist changes |
+
+The marker must appear in the leading comment block, before the first entry.
+A marker below the data is ignored, so an application writing to its own store
+cannot opt that store in. Matching ignores case and spacing.
+
+Alternative 1 below rejects exactly this header for POSIX, and that rejection
+stands: there, file permissions already exist and are visible in `ls -l`. On
+Windows there is nothing to prefer them to, and the alternative is no opt-in at
+all.
+
+The marker is a YAML comment, so the file stays valid everywhere and stays
+portable. A store authored on Windows and carried to a POSIX host is read-only
+until someone runs `chmod o+w` -- the marker is not consulted there. A store
+drifting toward read-only is the safe direction; the reverse would mean a file
+that quietly began persisting when it changed machines.
+
 ### 4. Lifecycle
 
 ```
