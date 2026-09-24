@@ -188,4 +188,55 @@ final class DependencyResolverTests: XCTestCase {
 
         XCTAssertEqual(Set(missing), ["dep1", "dep2"])
     }
+
+    // MARK: - Version constraints (GitLab #734)
+
+    /// The resolver used to carry its own semver implementation next to
+    /// `AROVersionChecker`. These exercise the constraint forms through
+    /// `resolve()`, which is the only way in from outside: the ones both
+    /// implementations understood must still behave the same, and the ones only
+    /// `AROVersionChecker` understands (`>`, `<`, multi-clause ranges) must now
+    /// work too, instead of falling through to an exact string comparison that
+    /// could never match.
+    private func satisfied(installed: String, required: String) throws -> Bool {
+        let dep = PluginManifest(
+            name: "dep", version: installed,
+            provides: [ProvideEntry(type: .aroFiles, path: "features/")]
+        )
+        let resolver = DependencyResolver(installed: ["dep": dep])
+        let manifest = PluginManifest(
+            name: "app", version: "1.0.0",
+            provides: [ProvideEntry(type: .aroFiles, path: "features/")],
+            dependencies: ["dep": DependencySpec(git: "git@example.com:dep.git", ref: required)]
+        )
+        let result = try resolver.resolve(manifest)
+        return result.satisfied == ["dep"] && result.conflicts.isEmpty
+    }
+
+    func testVersionConstraintsSharedWithAROVersionChecker() throws {
+        // Forms the old private implementation already handled.
+        XCTAssertTrue(try satisfied(installed: "1.5.0", required: ">=1.0.0"))
+        XCTAssertFalse(try satisfied(installed: "0.9.0", required: ">=1.0.0"))
+        XCTAssertTrue(try satisfied(installed: "1.0.0", required: "<=1.0.0"))
+        XCTAssertTrue(try satisfied(installed: "1.5.0", required: "^1.2.0"))
+        XCTAssertFalse(try satisfied(installed: "2.0.0", required: "^1.2.0"))
+        XCTAssertTrue(try satisfied(installed: "1.2.9", required: "~1.2.0"))
+        XCTAssertFalse(try satisfied(installed: "1.3.0", required: "~1.2.0"))
+        XCTAssertTrue(try satisfied(installed: "1.2.3", required: "1.2.3"))
+        XCTAssertFalse(try satisfied(installed: "1.2.3", required: "1.2.4"))
+        XCTAssertTrue(try satisfied(installed: "1.2.3", required: "v1.2.3"))
+
+        // A `ref:` is not always a version — a branch or a pre-release tag must
+        // still match itself, which is what the old exact-string branch did.
+        XCTAssertTrue(try satisfied(installed: "main", required: "main"))
+        XCTAssertTrue(try satisfied(installed: "1.0.0-beta", required: "1.0.0-beta"))
+        XCTAssertFalse(try satisfied(installed: "main", required: "develop"))
+
+        // Forms only AROVersionChecker understands — these used to fall through
+        // to an exact match and were therefore always a conflict.
+        XCTAssertTrue(try satisfied(installed: "1.9.9", required: "<2.0.0"))
+        XCTAssertFalse(try satisfied(installed: "2.0.0", required: "<2.0.0"))
+        XCTAssertTrue(try satisfied(installed: "1.0.1", required: ">1.0.0"))
+        XCTAssertFalse(try satisfied(installed: "1.0.0", required: ">1.0.0"))
+    }
 }

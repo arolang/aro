@@ -543,15 +543,16 @@ struct RebuildPlugins: ParsableCommand {
                 continue
             }
 
+            // Detect plugin type from the manifest's `provides:` entries.
             let manifestURL = pluginDir.appendingPathComponent("plugin.yaml")
-            guard let manifestData = try? String(contentsOf: manifestURL, encoding: .utf8) else {
-                print("  ✗ \(pluginName): cannot read plugin.yaml")
+            let pluginType: NativePluginLanguage?
+            do {
+                pluginType = try PluginManifest.parse(from: manifestURL).nativeLanguage
+            } catch {
+                print("  ✗ \(pluginName): cannot read plugin.yaml — \(error)")
                 failed += 1
                 continue
             }
-
-            // Detect plugin type from manifest
-            let pluginType = detectNativePluginType(manifest: manifestData)
 
             switch pluginType {
             case .rust:
@@ -588,7 +589,7 @@ struct RebuildPlugins: ParsableCommand {
                     failed += 1
                 }
 
-            case .none:
+            case nil:
                 print("  - \(pluginName): not a native plugin, skipped")
                 skipped += 1
             }
@@ -600,26 +601,6 @@ struct RebuildPlugins: ParsableCommand {
         if failed > 0 {
             throw ExitCode.failure
         }
-    }
-
-    // MARK: - Plugin Type Detection
-
-    private enum NativePluginType: Equatable {
-        case rust, c, cpp, swift
-        case none
-    }
-
-    private func detectNativePluginType(manifest: String) -> NativePluginType {
-        if manifest.contains("rust-plugin") {
-            return .rust
-        } else if manifest.contains("cpp-plugin") {
-            return .cpp
-        } else if manifest.contains("c-plugin") {
-            return .c
-        } else if manifest.contains("swift-plugin") {
-            return .swift
-        }
-        return .none
     }
 
     // MARK: - Compilation Helpers
@@ -815,9 +796,19 @@ struct DocsPlugins: ParsableCommand {
             throw ExitCode.failure
         }
 
-        // Parse plugin.yaml manually (avoid importing Yams in CLI)
-        let manifestYAML = try String(contentsOf: manifestURL, encoding: .utf8)
-        let metadata = parseBasicManifest(yaml: manifestYAML)
+        // GitLab #734: this used to scan the manifest's line prefixes by hand
+        // "to avoid importing Yams in the CLI" — but this target already links
+        // AROPackageManager, whose PluginManifest is the canonical reader, and
+        // the hand-rolled scan saw only top-level scalars (it never populated
+        // `provides`) and mistook an indented `name:` inside another block for
+        // the plugin's own.
+        let metadata: PluginManifest
+        do {
+            metadata = try PluginManifest.parse(from: manifestURL)
+        } catch {
+            print("Cannot read \(manifestURL.path): \(error)")
+            throw ExitCode.failure
+        }
 
         // Try to get richer info by loading the compiled library
         let pluginInfo = loadPluginInfo(pluginDir: pluginDir, metadata: metadata)
@@ -834,24 +825,6 @@ struct DocsPlugins: ParsableCommand {
         } else {
             print(doc)
         }
-    }
-
-    // MARK: - Manifest Parsing (lightweight, no Yams dependency in CLI layer)
-
-    struct BasicManifest {
-        var name: String
-        var version: String
-        var description: String?
-        var author: String?
-        var license: String?
-        var handle: String?
-        var provides: [BasicProvide] = []
-    }
-
-    struct BasicProvide {
-        var type: String
-        var path: String
-        var handler: String?
     }
 
     struct PluginDocInfo {
@@ -889,30 +862,7 @@ struct DocsPlugins: ParsableCommand {
         var description: String?
     }
 
-    private func parseBasicManifest(yaml: String) -> BasicManifest {
-        var m = BasicManifest(name: pluginName, version: "1.0.0")
-
-        for line in yaml.components(separatedBy: "\n") {
-            let trimmed = line.trimmingCharacters(in: .whitespaces)
-            if trimmed.hasPrefix("name:") {
-                m.name = trimmed.dropPrefix("name:").trimmingCharacters(in: .whitespaces).unquoted
-            } else if trimmed.hasPrefix("version:") {
-                m.version = trimmed.dropPrefix("version:").trimmingCharacters(in: .whitespaces).unquoted
-            } else if trimmed.hasPrefix("description:") {
-                m.description = trimmed.dropPrefix("description:").trimmingCharacters(in: .whitespaces).unquoted
-            } else if trimmed.hasPrefix("author:") {
-                m.author = trimmed.dropPrefix("author:").trimmingCharacters(in: .whitespaces).unquoted
-            } else if trimmed.hasPrefix("license:") {
-                m.license = trimmed.dropPrefix("license:").trimmingCharacters(in: .whitespaces).unquoted
-            } else if trimmed.hasPrefix("handle:") {
-                m.handle = trimmed.dropPrefix("handle:").trimmingCharacters(in: .whitespaces).unquoted
-            }
-        }
-
-        return m
-    }
-
-    private func loadPluginInfo(pluginDir: URL, metadata: BasicManifest) -> PluginDocInfo {
+    private func loadPluginInfo(pluginDir: URL, metadata: PluginManifest) -> PluginDocInfo {
         var info = PluginDocInfo()
 
         // Try to find and call aro_plugin_info from the compiled library
@@ -1019,7 +969,7 @@ struct DocsPlugins: ParsableCommand {
 
     // MARK: - Markdown Generation
 
-    private func generateMarkdown(metadata: BasicManifest, info: PluginDocInfo) -> String {
+    private func generateMarkdown(metadata: PluginManifest, info: PluginDocInfo) -> String {
         var lines: [String] = []
 
         let handle = metadata.handle.map { " (`\($0)`)" } ?? ""
@@ -1122,7 +1072,7 @@ struct DocsPlugins: ParsableCommand {
     /// was injected verbatim into the page the user then opened in a browser
     /// (GitLab #741). `escaped` is short precisely so that escaping is the
     /// path of least resistance at every interpolation below.
-    static func generateHTML(metadata: BasicManifest, info: PluginDocInfo) -> String {
+    static func generateHTML(metadata: PluginManifest, info: PluginDocInfo) -> String {
         let escaped = htmlEscape
         let handle = metadata.handle.map { " (<code>\(escaped($0))</code>)" } ?? ""
         var html = """

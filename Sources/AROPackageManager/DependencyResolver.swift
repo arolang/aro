@@ -172,71 +172,15 @@ public final class DependencyResolver: Sendable {
 
     // MARK: - Version Checking
 
-    /// Check if an installed version satisfies the requirement
+    /// Check if an installed version satisfies the requirement.
+    ///
+    /// GitLab #734: this used to be a private semver implementation
+    /// (`compareVersions` / `isMajorCompatible` / `isMinorCompatible`) sitting
+    /// next to `AROVersionChecker`, which does the same job and additionally
+    /// understands `>`, `<` and multi-clause constraints. One implementation
+    /// means a constraint means the same thing wherever it is written.
     private func isVersionCompatible(installed: String, required: String) -> Bool {
-        // Handle version constraints like >=1.0.0, ^1.0.0, ~1.0.0
-        if required.hasPrefix(">=") {
-            let minVersion = String(required.dropFirst(2))
-            return compareVersions(installed, minVersion) >= 0
-        } else if required.hasPrefix("<=") {
-            let maxVersion = String(required.dropFirst(2))
-            return compareVersions(installed, maxVersion) <= 0
-        } else if required.hasPrefix("^") {
-            // Caret: compatible with major version
-            let baseVersion = String(required.dropFirst(1))
-            return isMajorCompatible(installed, baseVersion)
-        } else if required.hasPrefix("~") {
-            // Tilde: compatible with minor version
-            let baseVersion = String(required.dropFirst(1))
-            return isMinorCompatible(installed, baseVersion)
-        } else if required.hasPrefix("v") {
-            // Exact version with v prefix
-            return installed == String(required.dropFirst(1)) || installed == required
-        } else {
-            // Exact version match or ref name
-            return installed == required
-        }
-    }
-
-    /// Compare two semver version strings
-    /// Returns: negative if v1 < v2, 0 if equal, positive if v1 > v2
-    private func compareVersions(_ v1: String, _ v2: String) -> Int {
-        let parts1 = v1.split(separator: ".").compactMap { Int($0) }
-        let parts2 = v2.split(separator: ".").compactMap { Int($0) }
-
-        let maxLen = max(parts1.count, parts2.count)
-        for i in 0..<maxLen {
-            let p1 = i < parts1.count ? parts1[i] : 0
-            let p2 = i < parts2.count ? parts2[i] : 0
-            if p1 != p2 {
-                return p1 - p2
-            }
-        }
-        return 0
-    }
-
-    /// Check major version compatibility (^1.0.0 style)
-    private func isMajorCompatible(_ installed: String, _ required: String) -> Bool {
-        let instParts = installed.split(separator: ".").compactMap { Int($0) }
-        let reqParts = required.split(separator: ".").compactMap { Int($0) }
-
-        guard !instParts.isEmpty, !reqParts.isEmpty else { return false }
-
-        // Major must match, installed >= required
-        return instParts[0] == reqParts[0] && compareVersions(installed, required) >= 0
-    }
-
-    /// Check minor version compatibility (~1.0.0 style)
-    private func isMinorCompatible(_ installed: String, _ required: String) -> Bool {
-        let instParts = installed.split(separator: ".").compactMap { Int($0) }
-        let reqParts = required.split(separator: ".").compactMap { Int($0) }
-
-        guard instParts.count >= 2, reqParts.count >= 2 else { return false }
-
-        // Major and minor must match, installed >= required
-        return instParts[0] == reqParts[0] &&
-               instParts[1] == reqParts[1] &&
-               compareVersions(installed, required) >= 0
+        AROVersionChecker.satisfies(version: installed, constraint: required)
     }
 }
 

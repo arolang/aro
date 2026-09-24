@@ -160,6 +160,38 @@ public struct PluginManifest: Codable, Sendable, Equatable {
         )
     }
 
+    // MARK: - Declared languages
+
+    /// Whether the manifest declares a Python plugin, which runs through an
+    /// interpreter rather than being compiled and statically linked.
+    public var declaresPythonPlugin: Bool {
+        provides.contains { $0.type == .pythonPlugin }
+    }
+
+    /// Whether the manifest declares compiled code (Swift/C/C++/Rust). A
+    /// manifest with none of those ships only feature sets or templates and has
+    /// nothing to statically link.
+    public var declaresNativePlugin: Bool {
+        nativeLanguage != nil
+    }
+
+    /// The language a native plugin is built as.
+    ///
+    /// Read off the decoded `provides` entries rather than by looking for the
+    /// type name somewhere in the manifest text (GitLab #734): a *comment*
+    /// mentioning `rust-plugin`, or a description that happens to contain it,
+    /// used to decide how a plugin was compiled.
+    ///
+    /// The order reproduces the old first-match-wins chain for the (unusual)
+    /// manifest that declares more than one native language.
+    public var nativeLanguage: NativePluginLanguage? {
+        let declared = Set(provides.map(\.type))
+        for language in NativePluginLanguage.allCases where declared.contains(language.provideType) {
+            return language
+        }
+        return nil
+    }
+
     // MARK: - Parsing
 
     /// Parse a plugin.yaml file
@@ -316,6 +348,27 @@ public struct ProvideEntry: Codable, Sendable, Equatable {
     public func validate() throws {
         guard !path.isEmpty else {
             throw ManifestError.invalidProvideEntry("path cannot be empty")
+        }
+    }
+}
+
+/// A compiled language a plugin can be written in.
+///
+/// Declaration order is the precedence used when a manifest declares several
+/// (`nativeLanguage`).
+public enum NativePluginLanguage: String, Sendable, Equatable, CaseIterable {
+    case rust
+    case cpp
+    case c
+    case swift
+
+    /// The `provides:` entry type that declares this language.
+    public var provideType: ProvideType {
+        switch self {
+        case .rust: return .rustPlugin
+        case .cpp: return .cppPlugin
+        case .c: return .cPlugin
+        case .swift: return .swiftPlugin
         }
     }
 }
