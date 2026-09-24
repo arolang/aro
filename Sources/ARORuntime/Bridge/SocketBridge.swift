@@ -284,6 +284,66 @@ public final class NativeSocketServer: @unchecked Sendable {
     }
 }
 
+// MARK: - Announcing what the native server saw (GitLab #881)
+//
+// These three exist because the compiled socket *server* used to announce
+// nothing. `aro_native_socket_server_start` wired its callbacks to `print`
+// statements that imitated what a handler would have logged, and broadcast
+// every datagram it received — so a compiled server looked like it worked
+// while every `Socket Event Handler` in the program was dead code. A compiled
+// socket *client* worked, because `AROSocketClient` co-publishes all three.
+//
+// The payload shapes are the client's, exactly: a handler reads
+// `<connection: id>`, `<packet: message>` or `<event: connectionId>` and must
+// not care which end of the socket it is on, nor whether it was interpreted
+// or compiled.
+//
+// The typed event is published alongside the DomainEvent for the same reason
+// `reportFileWatchChange` does it: the DomainEvent is what a compiled handler
+// is registered against, the typed one is what the interpreter's own
+// subscribers expect, and an embedded runtime may have both.
+
+/// A client reached the native server.
+func reportSocketConnect(connectionId: String, remoteAddress: String) {
+    EventBus.shared.publish(ClientConnectedEvent(connectionId: connectionId,
+                                                remoteAddress: remoteAddress))
+    EventBus.shared.publish(DomainEvent(
+        eventType: "socket.connected",
+        payload: ["connection": ["id": connectionId,
+                                 "remoteAddress": remoteAddress] as [String: any Sendable]]
+    ))
+}
+
+/// A client sent bytes.
+///
+/// Nothing is echoed or broadcast here. The bridge used to broadcast every
+/// datagram to every connection, which made `EchoSocket` look correct without
+/// its `Handle Data Received` ever running — and sent one client's bytes to
+/// all the others in any program that did not want that. Echoing is a decision
+/// the program states, with `Send the <data> to the <client>.`
+func reportSocketData(connectionId: String, data: Data) {
+    EventBus.shared.publish(DataReceivedEvent(connectionId: connectionId, data: data))
+    let message = String(data: data, encoding: .utf8) ?? ""
+    EventBus.shared.publish(DomainEvent(
+        eventType: "socket.data",
+        payload: ["packet": ["message": message,
+                             "buffer": message,
+                             "data": message,
+                             "connection": connectionId] as [String: any Sendable]]
+    ))
+}
+
+/// A client went away.
+func reportSocketDisconnect(connectionId: String) {
+    EventBus.shared.publish(ClientDisconnectedEvent(connectionId: connectionId,
+                                                   reason: "connection closed"))
+    EventBus.shared.publish(DomainEvent(
+        eventType: "socket.disconnected",
+        payload: ["event": ["connectionId": connectionId,
+                            "reason": "connection closed"] as [String: any Sendable]]
+    ))
+}
+
 /// Global native socket server instance
 nonisolated(unsafe) public var nativeSocketServer: NativeSocketServer?
 private let socketServerLock = NSLock()
@@ -298,21 +358,17 @@ public func aro_native_socket_server_start(_ port: Int32) -> Int32 {
     if nativeSocketServer == nil {
         nativeSocketServer = NativeSocketServer(port: Int(port))
 
-        // Set up handlers for broadcast behavior
+        // Announce what happened; let the program decide what to do about it.
         nativeSocketServer?.onConnect { connectionId, remoteAddress in
-            print("[Handle Client Connected] SocketConnection(id: \"\(connectionId)\", remoteAddress: \"\(remoteAddress)\")")
+            reportSocketConnect(connectionId: connectionId, remoteAddress: remoteAddress)
         }
 
         nativeSocketServer?.onData { connectionId, data in
-            // Broadcast to all clients (including sender for chat-style apps)
-            _ = nativeSocketServer?.broadcast(data: data)
-            if let str = String(data: data, encoding: .utf8) {
-                print("[Handle Data Received] Broadcast: \(str.trimmingCharacters(in: .whitespacesAndNewlines))")
-            }
+            reportSocketData(connectionId: connectionId, data: data)
         }
 
         nativeSocketServer?.onDisconnect { connectionId in
-            print("[Handle Client Disconnected] \(connectionId)")
+            reportSocketDisconnect(connectionId: connectionId)
         }
     }
 
