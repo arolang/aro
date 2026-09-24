@@ -154,17 +154,24 @@ struct ListPlugins: ParsableCommand {
             // Calculate column widths
             let maxSourceLen = max(30, localPlugins.map { $0.source.count }.max() ?? 30)
 
-            // Header
+            // Header. The Built column exists because listing no longer
+            // compiles anything (GitLab #850): "not built" is the honest answer
+            // for a plugin whose library isn't on disk yet, and a far better
+            // one than starting a `swift build` inside a `list`.
             let sourceHeader = "Source".padding(toLength: maxSourceLen, withPad: " ", startingAt: 0)
-            print(" \(sourceHeader)  Service           Methods")
+            print(" \(sourceHeader)  Built      Service           Methods")
 
             for plugin in localPlugins {
                 let source = plugin.source.padding(toLength: maxSourceLen, withPad: " ", startingAt: 0)
+                let built = (plugin.isBuilt ? "yes" : "no")
+                    .padding(toLength: 9, withPad: " ", startingAt: 0)
 
                 if let error = plugin.error {
-                    print(" \(source)  (error: \(error.prefix(40)))")
+                    print(" \(source)  \(built)  (error: \(error.prefix(40)))")
+                } else if !plugin.isBuilt {
+                    print(" \(source)  \(built)  (not built — run `aro plugins rebuild`)")
                 } else if plugin.services.isEmpty {
-                    print(" \(source)  (no services exported)")
+                    print(" \(source)  \(built)  (no services exported)")
                 } else {
                     for (index, service) in plugin.services.enumerated() {
                         // Service name already includes convention, no need to add suffix
@@ -172,9 +179,9 @@ struct ListPlugins: ParsableCommand {
                         let methods = service.methods.isEmpty ? "(any)" : service.methods.joined(separator: ", ")
 
                         if index == 0 {
-                            print(" \(source)  \(serviceName)  \(methods)")
+                            print(" \(source)  \(built)  \(serviceName)  \(methods)")
                         } else {
-                            let padding = String(repeating: " ", count: maxSourceLen + 1)
+                            let padding = String(repeating: " ", count: maxSourceLen + 10)
                             print(" \(padding)  \(serviceName)  \(methods)")
                         }
                     }
