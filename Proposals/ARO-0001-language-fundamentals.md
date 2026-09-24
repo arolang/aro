@@ -310,8 +310,27 @@ feature_set = "(" , feature_set_name , ":" , business_activity , ")" ,
 
 feature_set_name   = identifier_sequence ;
 business_activity  = identifier_sequence ;
-identifier_sequence = identifier , { identifier } ;
+identifier_sequence = word , { word } ;
+word                = ? any lexeme of word shape, keywords included ? ;
 ```
+
+#### A header is prose
+
+`word` is deliberately wider than `identifier`. Between `(` and `)` an author
+is naming their own domain, and the language reserves nothing there: `(Break
+Room Booking: Env Require)`, `(Order Each Item: Warehouse)` and `(Access Guard:
+Security)` are all ordinary headers, even though `Break`, `Require`, `Each` and
+`Guard` begin statements elsewhere.
+
+A keyword's reserved meaning belongs where a statement can start, and no
+statement can start inside a header. The sequence ends at `:` or `)`, which are
+punctuation rather than words; a literal is not a word either, so `(Demo 42:
+Activity)` remains an error rather than being absorbed into the name.
+
+This matters beyond convenience, because a header that fails to parse takes its
+whole feature set with it — an application whose entry point is spelled
+`(Application-Start: Env Require)` was reported as having no entry point at all
+(GitLab #855, and #584 before it).
 
 **Syntax:**
 ```aro
