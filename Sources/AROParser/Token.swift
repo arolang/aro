@@ -92,7 +92,6 @@ public enum TokenKind: Sendable, Equatable, CustomStringConvertible {
     case `is`               // is
     case exists             // exists
     case defined            // defined
-    case null               // null
     case empty              // empty
     case contains           // contains
     case matches            // matches
@@ -188,7 +187,6 @@ public enum TokenKind: Sendable, Equatable, CustomStringConvertible {
         case .is: return "is"
         case .exists: return "exists"
         case .defined: return "defined"
-        case .null: return "null"
         case .empty: return "empty"
         case .contains: return "contains"
         case .matches: return "matches"
@@ -301,7 +299,7 @@ extension TokenKind {
         switch self {
         case .identifier, .stringLiteral, .intLiteral, .floatLiteral, .regexLiteral,
              .stringSegment, .interpolationStart, .interpolationEnd,
-             .true, .false, .nil, .null,
+             .true, .false, .nil,
              .article, .preposition, .eof:
             return false
         default:
@@ -404,13 +402,4 @@ extension TokenKind {
         }
     }
 
-    /// Checks if this is a keyword that starts a statement
-    public var isStatementKeyword: Bool {
-        switch self {
-        case .if, .match, .for, .parallel, .guard, .defer, .assert, .precondition:
-            return true
-        default:
-            return false
-        }
-    }
 }

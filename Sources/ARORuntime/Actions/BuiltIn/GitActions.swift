@@ -268,6 +268,8 @@ public struct PushAction: ActionImplementation {
         try process.run()
         process.waitUntilExit()
 
+        // A detached HEAD or a repository with no commits yet has no current
+        // branch; "unknown" is the honest answer and the push already happened.
         let branchName = branch ?? (try? git.currentBranch(in: repoURL)) ?? "unknown"
         let value: [String: any Sendable] = ["remote": remote, "branch": branchName]
         context.bind(result.base, value: value)

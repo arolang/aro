@@ -563,6 +563,8 @@ public struct ExtractAction: SynchronousAction {
     private func parseJSONString(_ source: String) -> (any Sendable)? {
         let trimmed = source.trimmingCharacters(in: .whitespacesAndNewlines)
 
+        // Asking "is this string JSON?". A parse failure is the answer "no",
+        // not an error to report: the caller falls back to the raw string.
         guard trimmed.hasPrefix("{") || trimmed.hasPrefix("["),
               let data = trimmed.data(using: .utf8),
               let parsed = try? JSONSerialization.jsonObject(with: data, options: []) else {

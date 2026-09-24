@@ -630,24 +630,6 @@ public func aro_action_listen(
     return executeAction(verb: "listen", contextPtr: contextPtr, resultPtr: resultPtr, objectPtr: objectPtr)
 }
 
-@_cdecl("aro_action_route")
-public func aro_action_route(
-    _ contextPtr: UnsafeMutableRawPointer?,
-    _ resultPtr: UnsafeRawPointer?,
-    _ objectPtr: UnsafeRawPointer?
-) -> UnsafeMutableRawPointer? {
-    return executeAction(verb: "route", contextPtr: contextPtr, resultPtr: resultPtr, objectPtr: objectPtr)
-}
-
-@_cdecl("aro_action_watch")
-public func aro_action_watch(
-    _ contextPtr: UnsafeMutableRawPointer?,
-    _ resultPtr: UnsafeRawPointer?,
-    _ objectPtr: UnsafeRawPointer?
-) -> UnsafeMutableRawPointer? {
-    return executeAction(verb: "watch", contextPtr: contextPtr, resultPtr: resultPtr, objectPtr: objectPtr)
-}
-
 @_cdecl("aro_action_stop")
 public func aro_action_stop(
     _ contextPtr: UnsafeMutableRawPointer?,
@@ -909,15 +891,6 @@ public func aro_action_join(
     _ objectPtr: UnsafeRawPointer?
 ) -> UnsafeMutableRawPointer? {
     return executeAction(verb: "join", contextPtr: contextPtr, resultPtr: resultPtr, objectPtr: objectPtr)
-}
-
-@_cdecl("aro_action_concat")
-public func aro_action_concat(
-    _ contextPtr: UnsafeMutableRawPointer?,
-    _ resultPtr: UnsafeRawPointer?,
-    _ objectPtr: UnsafeRawPointer?
-) -> UnsafeMutableRawPointer? {
-    return executeAction(verb: "concat", contextPtr: contextPtr, resultPtr: resultPtr, objectPtr: objectPtr)
 }
 
 @_cdecl("aro_action_close")

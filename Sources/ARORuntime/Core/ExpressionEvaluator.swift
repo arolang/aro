@@ -689,6 +689,8 @@ public struct ExpressionEvaluator: Sendable {
             return date
         }
         if let str = value as? String {
+            // Asking whether this string is a date. Unparseable means "not a
+            // date", which the nil return says; the caller decides if that matters.
             return try? ARODate.parse(str)
         }
         return nil

@@ -943,7 +943,7 @@ public final class Parser {
     /// Check if the token could start an expression
     private func isExpressionStart(_ token: Token) -> Bool {
         switch token.kind {
-        case .stringLiteral, .intLiteral, .floatLiteral, .true, .false, .nil, .null:
+        case .stringLiteral, .intLiteral, .floatLiteral, .true, .false, .nil:
             return true
         case .leftAngle, .leftBracket, .leftBrace, .leftParen:
             return true
@@ -979,7 +979,7 @@ public final class Parser {
         // 4. Variable reference (without article): <Log> <data>
         //    Note: Standard syntax has article: <Log> the <result>
         switch token.kind {
-        case .stringLiteral, .intLiteral, .floatLiteral, .true, .false, .nil, .null:
+        case .stringLiteral, .intLiteral, .floatLiteral, .true, .false, .nil:
             return true
         case .leftBrace, .leftBracket:
             return true
@@ -1121,7 +1121,7 @@ public final class Parser {
     /// Check if the token is a literal value
     private func isLiteralToken(_ token: Token) -> Bool {
         switch token.kind {
-        case .stringLiteral, .intLiteral, .floatLiteral, .regexLiteral, .true, .false, .nil, .null:
+        case .stringLiteral, .intLiteral, .floatLiteral, .regexLiteral, .true, .false, .nil:
             return true
         default:
             return false
@@ -1400,7 +1400,7 @@ public final class Parser {
         case .false:
             advance()
             return .boolean(false)
-        case .nil, .null:
+        case .nil:
             advance()
             return .null
         case .leftBracket:
@@ -2546,7 +2546,7 @@ extension Parser {
             advance()
             return LiteralExpression(value: .boolean(false), span: token.span)
 
-        case .nil, .null:
+        case .nil:
             advance()
             return LiteralExpression(value: .null, span: token.span)
 
@@ -2810,7 +2810,7 @@ extension Parser {
             if actualOp == .is || actualOp == .isNot {
                 // Check if next token is a boolean literal or nil
                 switch peek().kind {
-                case .true, .false, .nil, .null:
+                case .true, .false, .nil:
                     // Treat as equality comparison: <expr> == true/false/nil
                     let right = try parsePrefix()
                     let span = left.span.merged(with: right.span)

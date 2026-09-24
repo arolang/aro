@@ -241,7 +241,6 @@ public struct ValidationResult: Sendable {
 public enum ScannerError: Error, CustomStringConvertible {
     case directoryNotFound(String)
     case circularDependency([String])
-    case missingDependency(plugin: String, dependency: String)
 
     public var description: String {
         switch self {
@@ -249,8 +248,6 @@ public enum ScannerError: Error, CustomStringConvertible {
             return "Plugins directory not found: \(path)"
         case .circularDependency(let plugins):
             return "Circular dependency detected involving: \(plugins.joined(separator: ", "))"
-        case .missingDependency(let plugin, let dependency):
-            return "Plugin '\(plugin)' requires '\(dependency)' which is not installed"
         }
     }
 }

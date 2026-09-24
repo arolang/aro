@@ -265,35 +265,6 @@ public final class CCompiler {
 
     // MARK: - Compilation
 
-    /// Compile C source to an object file
-    /// - Parameters:
-    ///   - sourcePath: Path to C source file
-    ///   - outputPath: Path for output object file
-    ///   - optimize: Enable optimizations
-    public func compileToObject(
-        sourcePath: String,
-        outputPath: String,
-        optimize: Bool = false
-    ) throws {
-        var args = [findCompiler()]
-        args.append("-c")
-        args.append(sourcePath)
-        args.append("-o")
-        args.append(outputPath)
-
-        if optimize {
-            args.append("-O2")
-        } else {
-            args.append("-g") // Debug info
-        }
-
-        // Standard flags
-        args.append("-std=c11")
-        args.append("-Wall")
-
-        try runProcess(args)
-    }
-
     /// Linker options for size and stripping
     /// How the Swift runtime is bound to the produced binary.
     ///
@@ -376,21 +347,21 @@ public final class CCompiler {
         options: LinkOptions
     ) throws {
         #if os(Linux)
-        FileHandle.standardError.write(Data("[LINKER] ===== ENTERED link() method =====\n".utf8))
-        FileHandle.standardError.write(Data("[LINKER] link() called with objectFiles: \(objectFiles)\n".utf8))
-        FileHandle.standardError.write(Data("[LINKER] outputPath: \(outputPath)\n".utf8))
-        FileHandle.standardError.write(Data("[LINKER] Finding compiler...\n".utf8))
+        debugLog("[LINKER] ===== ENTERED link() method =====")
+        debugLog("[LINKER] link() called with objectFiles: \(objectFiles)")
+        debugLog("[LINKER] outputPath: \(outputPath)")
+        debugLog("[LINKER] Finding compiler...")
         #endif
 
         var args = [findCompiler()]
 
         #if os(Linux)
-        FileHandle.standardError.write(Data("[LINKER] Array created with compiler: \(args[0])\n".utf8))
-        FileHandle.standardError.write(Data("[LINKER] Building arguments...\n".utf8))
+        debugLog("[LINKER] Array created with compiler: \(args[0])")
+        debugLog("[LINKER] Building arguments...")
         #endif
 
         #if os(Linux)
-        FileHandle.standardError.write(Data("[LINKER] 1. Handling output type...\n".utf8))
+        debugLog("[LINKER] 1. Handling output type...")
         #endif
 
         // Output type
@@ -411,7 +382,7 @@ public final class CCompiler {
         }
 
         #if os(Linux)
-        FileHandle.standardError.write(Data("[LINKER] 2. Adding object files...\n".utf8))
+        debugLog("[LINKER] 2. Adding object files...")
 
         // On Linux, export all symbols to the dynamic symbol table
         // This is required for dlsym() to find feature set functions (aro_fs_*)
@@ -425,7 +396,7 @@ public final class CCompiler {
         args.append(contentsOf: objectFiles)
 
         #if os(Linux)
-        FileHandle.standardError.write(Data("[LINKER] 3. Adding output path...\n".utf8))
+        debugLog("[LINKER] 3. Adding output path...")
         #endif
 
         // Issue #231 — `-g` on the link line tells clang's driver that
@@ -442,7 +413,7 @@ public final class CCompiler {
         args.append(outputPath)
 
         #if os(Linux)
-        FileHandle.standardError.write(Data("[LINKER] 4. Processing runtime library...\n".utf8))
+        debugLog("[LINKER] 4. Processing runtime library...")
         #endif
 
         // Runtime library (ARORuntime contains C-callable bridge via @_cdecl)
@@ -472,7 +443,7 @@ public final class CCompiler {
         }
 
         #if os(Linux)
-        FileHandle.standardError.write(Data("[LINKER] 5. Checking platform-specific libraries...\n".utf8))
+        debugLog("[LINKER] 5. Checking platform-specific libraries...")
         #endif
 
         // Platform-specific libraries
@@ -515,9 +486,9 @@ public final class CCompiler {
             let compiler = args[0]
             let usingSwiftc = compiler.contains("swiftc")
 
-            FileHandle.standardError.write(Data("[LINKER] Swift lib path: \(swiftLibPath)\n".utf8))
-            FileHandle.standardError.write(Data("[LINKER] Using compiler: \(usingSwiftc ? "swiftc" : "clang")\n".utf8))
-            FileHandle.standardError.write(Data("[LINKER] Link mode: \(options.linkMode.rawValue)\n".utf8))
+            debugLog("[LINKER] Swift lib path: \(swiftLibPath)")
+            debugLog("[LINKER] Using compiler: \(usingSwiftc ? "swiftc" : "clang")")
+            debugLog("[LINKER] Link mode: \(options.linkMode.rawValue)")
 
             // The toolchain ships static archives next to the .so directory:
             //   <swiftLibPath>/swift/linux       <- .so files (dynamic)
@@ -594,7 +565,7 @@ public final class CCompiler {
                 let swiftRTPath = findSwiftRuntimeObject(swiftLibPath: useStatic ? swiftStaticLibPath : swiftLibPath)
                     ?? findSwiftRuntimeObject(swiftLibPath: swiftLibPath)
                 if let rtPath = swiftRTPath {
-                    FileHandle.standardError.write(Data("[LINKER] Found swiftrt.o at: \(rtPath)\n".utf8))
+                    debugLog("[LINKER] Found swiftrt.o at: \(rtPath)")
                     // swiftrt.o must be linked FIRST to initialize Swift runtime before any Swift code runs
                     args.insert(rtPath, at: 1)  // Insert right after compiler, before object files
                 } else {
@@ -739,73 +710,15 @@ public final class CCompiler {
         }
 
         #if os(Linux)
-        FileHandle.standardError.write(Data("[LINKER] Arguments built, calling runProcess...\n".utf8))
-        FileHandle.standardError.write(Data("[LINKER] Total args: \(args.count)\n".utf8))
+        debugLog("[LINKER] Arguments built, calling runProcess...")
+        debugLog("[LINKER] Total args: \(args.count)")
         #endif
 
         try runProcess(args)
 
         #if os(Linux)
-        FileHandle.standardError.write(Data("[LINKER] runProcess completed successfully\n".utf8))
+        debugLog("[LINKER] runProcess completed successfully")
         #endif
-    }
-
-    /// Compile C source directly to executable (single step)
-    /// - Parameters:
-    ///   - sourcePath: Path to C source file
-    ///   - outputPath: Path for output executable
-    ///   - optimize: Enable optimizations
-    public func compileAndLink(
-        sourcePath: String,
-        outputPath: String,
-        optimize: Bool = false
-    ) throws {
-        var args = [findCompiler()]
-        args.append(sourcePath)
-        args.append("-o")
-        args.append(outputPath)
-
-        // Standard flags
-        args.append("-std=c11")
-        args.append("-Wall")
-
-        // Runtime library (ARORuntime contains C-callable bridge via @_cdecl)
-        if let runtimePath = runtimeLibraryPath {
-            #if os(Windows)
-            // On Windows, use the full path to the library directly
-            args.append(runtimePath)
-            #else
-            let libDir = URL(fileURLWithPath: runtimePath).deletingLastPathComponent().path
-            args.append("-L\(libDir)")
-            args.append("-lARORuntime")
-            args.append("-Wl,-rpath,\(libDir)")
-            #endif
-        }
-
-        // Platform-specific
-        #if os(macOS)
-        if let swiftLibPath = findSwiftLibPath() {
-            args.append("-L\(swiftLibPath)")
-            args.append("-Wl,-rpath,\(swiftLibPath)")
-        }
-        args.append("-lSystem")
-        #elseif os(Linux)
-        args.append("-lpthread")
-        args.append("-ldl")
-        args.append("-lm")
-        if let swiftLibPath = findSwiftLibPath() {
-            args.append("-L\(swiftLibPath)")
-            args.append("-Wl,-rpath,\(swiftLibPath)")
-        }
-        #endif
-
-        if optimize {
-            args.append("-O2")
-        } else {
-            args.append("-g")
-        }
-
-        try runProcess(args)
     }
 
     // MARK: - Private Methods
@@ -818,7 +731,7 @@ public final class CCompiler {
 
     private func findCompiler() -> String {
         #if os(Linux)
-        FileHandle.standardError.write(Data("[LINKER] findCompiler() called on Linux\n".utf8))
+        debugLog("[LINKER] findCompiler() called on Linux")
 
         // On Linux, use clang for linking Swift static libraries
         // swiftc on GitHub Actions runners is unreliable (hangs intermittently)
@@ -826,18 +739,18 @@ public final class CCompiler {
 
         // 1. Check for generic clang (may be symlinked to clang-20 in CI)
         if FileManager.default.fileExists(atPath: "/usr/bin/clang") {
-            FileHandle.standardError.write(Data("[LINKER] Found clang at /usr/bin/clang\n".utf8))
+            debugLog("[LINKER] Found clang at /usr/bin/clang")
             return "/usr/bin/clang"
         }
 
         // 2. Check for clang-14 (Ubuntu fallback)
         if FileManager.default.fileExists(atPath: "/usr/bin/clang-14") {
-            FileHandle.standardError.write(Data("[LINKER] Found clang-14 at /usr/bin/clang-14\n".utf8))
+            debugLog("[LINKER] Found clang-14 at /usr/bin/clang-14")
             return "/usr/bin/clang-14"
         }
 
         // 3. Try to find clang in PATH
-        FileHandle.standardError.write(Data("[LINKER] Trying to find clang in PATH...\n".utf8))
+        debugLog("[LINKER] Trying to find clang in PATH...")
         do {
             let whichProcess = Process()
             whichProcess.executableURL = URL(fileURLWithPath: "/usr/bin/which")
@@ -854,12 +767,12 @@ public final class CCompiler {
                 let data = whichPipe.fileHandleForReading.readDataToEndOfFile()
                 if let path = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
                    !path.isEmpty {
-                    FileHandle.standardError.write(Data("[LINKER] Found clang in PATH: \(path)\n".utf8))
+                    debugLog("[LINKER] Found clang in PATH: \(path)")
                     return path
                 }
             }
         } catch {
-            FileHandle.standardError.write(Data("[LINKER] Error searching for clang: \(error)\n".utf8))
+            debugLog("[LINKER] Error searching for clang: \(error)")
         }
 
         // 4. Final fallback
@@ -1493,7 +1406,7 @@ public final class CCompiler {
             }
         }
 
-        FileHandle.standardError.write(Data("[LINKER] Searched for swiftrt.o in: \(potentialPaths)\n".utf8))
+        debugLog("[LINKER] Searched for swiftrt.o in: \(potentialPaths)")
         #endif
 
         return nil
@@ -1505,7 +1418,7 @@ public final class CCompiler {
         }
 
         #if os(Linux)
-        FileHandle.standardError.write(Data("[LINKER] runProcess() called with \(args.count) args\n".utf8))
+        debugLog("[LINKER] runProcess() called with \(args.count) args")
         #endif
 
         // Debug: Print command being run (only in verbose mode)
@@ -1524,7 +1437,7 @@ public final class CCompiler {
         process.standardError = errorPipe
 
         #if os(Linux)
-        FileHandle.standardError.write(Data("[LINKER] Starting process...\n".utf8))
+        debugLog("[LINKER] Starting process...")
         #endif
 
         // Thread-safe data storage
@@ -1551,7 +1464,7 @@ public final class CCompiler {
         do {
             try process.run()
             #if os(Linux)
-            FileHandle.standardError.write(Data("[LINKER] Process started, waiting for exit...\n".utf8))
+            debugLog("[LINKER] Process started, waiting for exit...")
             #endif
 
             // Read pipes in background to prevent deadlock
@@ -1574,7 +1487,7 @@ public final class CCompiler {
             Thread.sleep(forTimeInterval: 0.1)
 
             #if os(Linux)
-            FileHandle.standardError.write(Data("[LINKER] Process exited with status: \(process.terminationStatus)\n".utf8))
+            debugLog("[LINKER] Process exited with status: \(process.terminationStatus)")
             #endif
         } catch {
             throw LinkerError.compilationFailed("Failed to run compiler: \(error)")
@@ -1584,15 +1497,16 @@ public final class CCompiler {
         let errorMessage = String(data: errorBox.get(), encoding: .utf8) ?? ""
         let outputMessage = String(data: outputBox.get(), encoding: .utf8) ?? ""
 
-        #if os(Linux)
-        // On Linux, always print compiler output for debugging
+        // The compiler's own chatter, on demand. This used to print on every
+        // Linux build "for debugging" — on stdout, so it landed in anything
+        // piping `aro build`. A failing link still reports all of it: the
+        // throw below carries both streams (GitLab #672).
         if !errorMessage.isEmpty {
-            print("[LINKER] stderr: \(errorMessage)")
+            debugLog("[LINKER] stderr: \(errorMessage)")
         }
         if !outputMessage.isEmpty {
-            print("[LINKER] stdout: \(outputMessage)")
+            debugLog("[LINKER] stdout: \(outputMessage)")
         }
-        #endif
 
         if process.terminationStatus != 0 {
             let combined = [errorMessage, outputMessage].filter { !$0.isEmpty }.joined(separator: "\n")
