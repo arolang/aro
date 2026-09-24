@@ -1167,6 +1167,27 @@ public final class NativeSocketBroadcaster: @unchecked Sendable {
             return Int(aro_native_socket_broadcast(ptr.assumingMemoryBound(to: UInt8.self), data.count))
         }
     }
+
+    /// Send data to one connection. `false` when the native server does not
+    /// know that connection — or when there is no native server, which is the
+    /// answer in every interpreted process.
+    ///
+    /// `Send` reaches for this because a compiled binary deliberately registers
+    /// no `SocketServerService` (see `AROCContextHandle.init`), so the service
+    /// lookup that serves the interpreter finds nothing and used to fall
+    /// through to "emit an event and report success" — which is why a compiled
+    /// server's `Send the <welcome> to the <client>.` went nowhere and said it
+    /// had worked (GitLab #881). Broadcast already had this wrapper; send did
+    /// not.
+    public func send(data: Data, to connectionId: String) -> Bool {
+        return connectionId.withCString { idPtr in
+            data.withUnsafeBytes { buffer in
+                guard let ptr = buffer.baseAddress else { return false }
+                return aro_native_socket_send(
+                    idPtr, ptr.assumingMemoryBound(to: UInt8.self), data.count) == 0
+            }
+        }
+    }
 }
 
 /// Result of a broadcast operation

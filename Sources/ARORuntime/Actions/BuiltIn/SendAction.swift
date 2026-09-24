@@ -70,6 +70,28 @@ public struct SendAction: ActionImplementation {
                 // Fall through to other services
             }
         }
+
+
+        // Try the native BSD socket server (compiled binaries).
+        //
+        // A compiled binary registers no `SocketServerService` on purpose — the
+        // NIO server cannot be wired up there — so both attempts above find
+        // nothing and a server's `Send the <welcome> to the <client>.` used to
+        // fall through to the event emission below, which reports success
+        // without writing a byte (GitLab #881). Broadcast already consulted the
+        // native server; send now does too, and only claims success if the
+        // connection was actually written to.
+        let payload: Data
+        if let dataValue = data as? Data {
+            payload = dataValue
+        } else if let stringValue = data as? String {
+            payload = Data(stringValue.utf8)
+        } else {
+            payload = Data(String(describing: data).utf8)
+        }
+        if NativeSocketBroadcaster.shared.send(data: payload, to: destination) {
+            return SendResult(destination: destination, success: true)
+        }
         #endif
 
         // Try messaging service

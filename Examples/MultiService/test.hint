@@ -1,23 +1,31 @@
 # Test hints for MultiService
 # Multi-service example with HTTP, Socket, and File Monitor
 type: multiservice
-# mode: interpreter — one of the two gaps this pinned is now closed.
+# mode: interpreter — two of the three gaps this pinned are now closed.
 #
 # File events were the first: the compiled binary reported FILE MODIFIED for a
 # creation on macOS and reported nothing at all on Linux, because only the
 # FSEvents backend ever published an event — inotify and the polling fallback
-# just printed a line. Fixed in GitLab #693; both FILE CREATED and FILE DELETED
-# now arrive in compiled mode, and `expected.linux-compiled.txt` is obsolete.
+# just printed a line. Fixed in GitLab #693.
 #
-# The socket welcome is the second, and it is not a race: the compiled socket
-# *server* never dispatches to `Socket Event Handler` feature sets at all.
-# `aro_native_socket_server_start` wires `onConnect`/`onData`/`onDisconnect` to
-# hardcoded `print` statements that imitate a handler's output, and broadcasts
-# every datagram, so `Handle Client Connected` never runs and no welcome is
-# sent. That is GitLab #881 — a different bug from this one, and fixing it
-# means unpicking behaviour SimpleChat and EchoSocket currently depend on.
+# The socket welcome was the second: the compiled socket *server* dispatched to
+# no `Socket Event Handler` at all, so `Handle Client Connected` never ran and
+# nothing was sent. Fixed in GitLab #881 — compiled, this example now sends the
+# welcome, echoes through its own `Handle Data Received`, and runs its
+# disconnect handler.
 #
-# Flip to `mode: both` once #881 lands.
+# What still pins it is GitLab #882: a compiled file monitor watches the
+# process's working directory rather than the path it was given. The harness
+# runs examples from the project root, so the compiled binary reports a
+# FILE CREATED for every build artefact anything else happens to write:
+#
+#   Socket: FILE CREATED: ./.build/index-build/.../AROLSPTests~partial.swiftmodule.tmp
+#
+# It therefore passes only while the tree is quiet — during a full run with
+# builds in flight it fails and passes on retry. Flipping to `mode: both` now
+# would buy a flaky job rather than coverage.
+#
+# Flip to `mode: both` once #882 lands.
 mode: interpreter
 timeout: 20
 skip-on-windows: Multi-service tests not supported on Windows CI
