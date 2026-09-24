@@ -71,7 +71,7 @@ struct InvokeJSONTests {
 
     @Test("A brace-led argument reaches the command with its quotes intact")
     func tokenizerPassesJSONThrough() async {
-        let session = REPLSession(suppressLogPrefix: true)
+        let session = REPLSession()
         let registry = MetaCommandRegistry.shared
 
         // `:fs` echoes nothing useful, so exercise the path that reports the
@@ -89,7 +89,7 @@ struct InvokeJSONTests {
 
     @Test("A feature set name with spaces still parses alongside the JSON")
     func multiWordNameWithJSON() async {
-        let session = REPLSession(suppressLogPrefix: true)
+        let session = REPLSession()
         let registry = MetaCommandRegistry.shared
 
         let result = try? await registry.execute(
@@ -106,7 +106,7 @@ struct InvokeJSONTests {
 
     @Test("An ARO-0081 feature set reads its arguments off `input`")
     func inputRecordIsBound() async throws {
-        let session = REPLSession(suppressLogPrefix: true)
+        let session = REPLSession()
         let engine = REPLCellEngine(session: session)
         _ = await engine.executeCell("""
         (Calculate Area: Action) {
@@ -129,7 +129,7 @@ struct InvokeJSONTests {
 
     @Test("The top-level binds still work, so existing invocations keep running")
     func topLevelBindsStillWork() async throws {
-        let session = REPLSession(suppressLogPrefix: true)
+        let session = REPLSession()
         let engine = REPLCellEngine(session: session)
         _ = await engine.executeCell("""
         (Double It: Action) {

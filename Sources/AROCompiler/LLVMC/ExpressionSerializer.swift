@@ -60,7 +60,20 @@ struct ExpressionSerializer {
             return """
             {"$typeCheck":{"expr":\(serializeExpression(typeCheck.expression)),"type":"\(typeCheck.typeName)"}}
             """
+        } else if let emptiness = expr as? EmptinessCheckExpression {
+            // GitLab #652. This fell through to `$unknown`, which the bridge
+            // evaluates as the empty string and `asBool` reads as false — so
+            // `when <list> is empty` never performed the test in a compiled
+            // binary, and `is not empty` was false too. Both directions wrong,
+            // silently, for the idiom the docs recommend after a `Retrieve`
+            // miss.
+            return """
+            {"$empty":{"expr":\(serializeExpression(emptiness.expression)),"negated":\(emptiness.negated)}}
+            """
         }
+        // Reaching here means the parser can build a node this serializer does
+        // not know, and the binary will silently evaluate it as "". See
+        // `ExpressionSerializerCoverageTests` (#652), which fails instead.
         return "{\"$unknown\":true}"
     }
 

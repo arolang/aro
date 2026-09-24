@@ -32,6 +32,8 @@ public final class LLVMExternalDeclEmitter {
     private var _contextCreate: Function?
     private var _contextCreateNamed: Function?
     private var _contextCreateChild: Function?
+    private var _contextRequireEnvironment: Function?
+    private var _contextHasResponse: Function?
     private var _contextDestroy: Function?
     private var _contextPrintResponse: Function?
     private var _contextHasError: Function?
@@ -215,10 +217,22 @@ public final class LLVMExternalDeclEmitter {
             types.functionType(parameters: [ptr], returning: ptr)
         )
 
-        // ptr @aro_context_create_named(ptr, ptr)
+        // ptr @aro_context_create_named(ptr name, ptr activity) — GitLab #692
         _contextCreateNamed = ctx.module.declareFunction(
             "aro_context_create_named",
-            types.functionType(parameters: [ptr, ptr], returning: ptr)
+            types.functionType(parameters: [ptr, ptr, ptr], returning: ptr)
+        )
+
+        // i32 @aro_context_has_response(ptr) - GitLab #665
+        _contextHasResponse = ctx.module.declareFunction(
+            "aro_context_has_response",
+            types.functionType(parameters: [ptr], returning: i32)
+        )
+
+        // void @aro_context_require_environment(ptr, ptr) - GitLab #854
+        _contextRequireEnvironment = ctx.module.declareFunction(
+            "aro_context_require_environment",
+            types.voidFunctionType(parameters: [ptr, ptr])
         )
 
         // ptr @aro_context_create_child(ptr, ptr)
@@ -606,6 +620,8 @@ public final class LLVMExternalDeclEmitter {
     public var logWarning: Function { _logWarning! }
     public var contextCreate: Function { _contextCreate! }
     public var contextCreateNamed: Function { _contextCreateNamed! }
+    public var contextRequireEnvironment: Function { _contextRequireEnvironment! }
+    public var contextHasResponse: Function { _contextHasResponse! }
     public var contextCreateChild: Function { _contextCreateChild! }
     public var contextDestroy: Function { _contextDestroy! }
     public var contextPrintResponse: Function { _contextPrintResponse! }

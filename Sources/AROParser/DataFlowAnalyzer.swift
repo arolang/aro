@@ -23,8 +23,22 @@ public struct DataFlowAnalyzer {
 
     private let diagnostics: DiagnosticCollector
 
-    public init(diagnostics: DiagnosticCollector) {
+    /// Names that are already bound outside the source being analyzed.
+    ///
+    /// A REPL or notebook cell is compiled on its own, wrapped in a throwaway
+    /// feature set, while the values it refers to live in the session. Reading
+    /// such a name is only a warning, so every other statement worked — but
+    /// `Publish` *errors* on an undefined variable, so `Publish as <x> <w>.`
+    /// failed for a `<w>` bound in an earlier cell, which is precisely the
+    /// cross-cell operation `Publish` exists for (GitLab #689).
+    ///
+    /// Empty for an ordinary compile, where a name not defined in the source
+    /// genuinely is not defined.
+    private let preboundSymbols: Set<String>
+
+    public init(diagnostics: DiagnosticCollector, preboundSymbols: Set<String> = []) {
         self.diagnostics = diagnostics
+        self.preboundSymbols = preboundSymbols
     }
 
     // MARK: - Feature Set Analysis
@@ -637,7 +651,8 @@ public struct DataFlowAnalyzer {
         definedSymbols: Set<String>
     ) -> (DataFlowInfo, Set<String>) {
 
-        if !definedSymbols.contains(statement.internalVariable) {
+        if !definedSymbols.contains(statement.internalVariable),
+           !preboundSymbols.contains(statement.internalVariable) {
             diagnostics.error(
                 "Cannot publish undefined variable '\(statement.internalVariable)'",
                 at: statement.span.start

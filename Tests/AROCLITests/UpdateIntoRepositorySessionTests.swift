@@ -24,7 +24,7 @@ struct UpdateIntoRepositorySessionTests {
 
     @Test("Update with a where clause replaces the matching row's fields")
     func updateWithWhereClause() async throws {
-        let session = REPLSession(suppressLogPrefix: true)
+        let session = REPLSession()
         _ = try await session.executeStatement(
             "Create the <init> with { id: \"c1\", total: 0 }.")
         _ = try await session.executeStatement(
@@ -48,7 +48,7 @@ struct UpdateIntoRepositorySessionTests {
 
     @Test("Update without a where clause matches by the value's id")
     func updateByIdentityField() async throws {
-        let session = REPLSession(suppressLogPrefix: true)
+        let session = REPLSession()
         _ = try await session.executeStatement(
             "Create the <init> with { id: \"acc\", sum: 0, count: 0 }.")
         _ = try await session.executeStatement(
@@ -68,7 +68,7 @@ struct UpdateIntoRepositorySessionTests {
 
     @Test("Update merges — fields the update omits survive")
     func partialUpdatePreservesOtherFields() async throws {
-        let session = REPLSession(suppressLogPrefix: true)
+        let session = REPLSession()
         _ = try await session.executeStatement(
             "Create the <init> with { id: \"u1\", name: \"Ada\", role: \"admin\" }.")
         _ = try await session.executeStatement(
@@ -88,7 +88,7 @@ struct UpdateIntoRepositorySessionTests {
 
     @Test("The immutable pattern binds the fresh name to the updated row")
     func immutablePatternBindsResult() async throws {
-        let session = REPLSession(suppressLogPrefix: true)
+        let session = REPLSession()
         _ = try await session.executeStatement(
             "Create the <init> with { id: \"c1\", total: 1 }.")
         _ = try await session.executeStatement(
@@ -103,7 +103,7 @@ struct UpdateIntoRepositorySessionTests {
 
     @Test("No matching entry is an error — Update never inserts")
     func noMatchErrors() async throws {
-        let session = REPLSession(suppressLogPrefix: true)
+        let session = REPLSession()
         _ = try await session.executeStatement(
             "Create the <init> with { id: \"c1\", total: 0 }.")
         _ = try await session.executeStatement(
@@ -127,7 +127,7 @@ struct UpdateIntoRepositorySessionTests {
 
     @Test("`into` a non-repository target keeps the pre-#505 refusal")
     func intoNonRepositoryErrors() async throws {
-        let session = REPLSession(suppressLogPrefix: true)
+        let session = REPLSession()
         _ = try await session.executeStatement(
             "Create the <v> with { a: 1 }.")
         let result = try await session.executeStatement(
@@ -141,7 +141,7 @@ struct UpdateIntoRepositorySessionTests {
 
     @Test("Chapter 46 accumulator: repeated Update accumulates across cells")
     func accumulatorPattern() async throws {
-        let session = REPLSession(suppressLogPrefix: true)
+        let session = REPLSession()
         _ = try await session.executeStatement(
             "Create the <init> with { id: \"acc\", sum: 0, count: 0 }.")
         _ = try await session.executeStatement(

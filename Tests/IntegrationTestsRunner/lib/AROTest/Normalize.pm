@@ -67,10 +67,13 @@ sub normalize_output {
     # Remove leading whitespace from lines (test output has indentation)
     $output =~ s/^[ \t]+//gm;
 
-    # Remove bracketed prefixes at start of lines (e.g., [Application-Start], [OK], etc.)
-    # Binary applications don't output these, only the interpreter does.
-    # Use [ \t]* (not \s*) to preserve newlines from empty Log statements.
-    $output =~ s/^\[[A-Za-z][A-Za-z0-9 -]*\][ \t]*//gm;
+    # (Removed: the rule that stripped any leading [Bracketed] token.
+    #  It existed because the interpreter prefixed every Log line with the
+    #  feature set's name and the binary did not, so the two modes could only
+    #  be compared with the prefix erased -- and erasing it also erased
+    #  application output like [OK] and [AUDIT], on both sides, hiding any
+    #  difference in those too. The interpreter no longer adds the prefix, so
+    #  there is nothing left to strip. GitLab #814.)
 
     # Remove ISO timestamps
     $output =~ s/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z?/__TIMESTAMP__/g;

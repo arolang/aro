@@ -491,6 +491,12 @@ public final class LLVMCodeGenerator {
                 gen.generateRequireStatement(requireStmt, index: index, errorBlock: errorBlock)
             }
         },
+        ObjectIdentifier(WhenStatement.self): { gen in
+            { stmt, index, errorBlock in
+                guard let whenStmt = stmt as? WhenStatement else { return }
+                gen.generateWhenStatement(whenStmt, index: index, errorBlock: errorBlock)
+            }
+        },
         ObjectIdentifier(PipelineStatement.self): { gen in
             { stmt, index, errorBlock in
                 // ARO-0067: A pipeline is just a sequence of ARO statements where
@@ -1092,7 +1098,8 @@ public final class LLVMCodeGenerator {
         let outerResultPtr  = ctx.currentResultPtr
         let outerIP         = ctx.currentInsertionPoint
         // The body is its own function: an early-return block belonging to the
-        // enclosing feature set is not a valid branch target from here.
+        // enclosing feature set is not a valid branch target from here. A block
+        // inside the body function is installed below (GitLab #665).
         let outerEarlyReturn = ctx.currentEarlyReturnBlock
         ctx.currentEarlyReturnBlock = nil
 
@@ -1116,6 +1123,21 @@ public final class LLVMCodeGenerator {
         let bodyErrorBlock = ctx.module.appendBlock(named: "\(prefix)_error", to: bodyFunc)
         ctx.setInsertionPoint(atEndOf: bodyErrorBlock)
         ctx.module.insertReturn(ctx.ptrType.null, at: ctx.insertionPoint)
+
+        // `Return` inside the body ends the feature set (GitLab #665). The body
+        // is its own function, so it cannot branch to the enclosing feature
+        // set's early-return block — it returns a NON-NULL sentinel instead,
+        // and `aro_runtime_foreach_stream` reads that as "stop". The sentinel
+        // is the body's own context parameter: non-null by construction and
+        // owned by nobody, so the driver has nothing to free.
+        //
+        // Without this the loop kept iterating and each later iteration
+        // overwrote the response the `Return` had set. The array path has
+        // always branched; only the stream path was deaf.
+        let bodyReturnBlock = ctx.module.appendBlock(named: "\(prefix)_ret", to: bodyFunc)
+        ctx.setInsertionPoint(atEndOf: bodyReturnBlock)
+        ctx.module.insertReturn(bodyCtxParam, at: ctx.insertionPoint)
+        ctx.currentEarlyReturnBlock = bodyReturnBlock
 
         // Continue generating in the entry block
         ctx.setInsertionPoint(atEndOf: bodyEntry)
@@ -1189,6 +1211,21 @@ public final class LLVMCodeGenerator {
         ctx.module.insertCondBr(if: errorOccurred, then: errorBlock, else: continueBlock, at: ctx.insertionPoint)
         ctx.setInsertionPoint(atEndOf: continueBlock)
 
+        // A `Return` in the body stopped the stream. The body could only say
+        // "stop"; whether that was a Return is answered here, and the feature
+        // set ends rather than running the statements after the loop
+        // (GitLab #665).
+        if let earlyReturn = ctx.currentEarlyReturnBlock {
+            let hasResponse = ctx.module.insertCall(
+                externals.contextHasResponse, on: [ctx.currentContextVar!], at: ctx.insertionPoint)
+            let returned = ctx.module.insertIntegerComparison(
+                .ne, hasResponse, ctx.i32Type.zero, at: ctx.insertionPoint)
+            let noReturnBlock = ctx.module.appendBlock(named: "\(prefix)_noret", to: ctx.currentFunction!)
+            ctx.module.insertCondBr(if: returned, then: earlyReturn, else: noReturnBlock,
+                                    at: ctx.insertionPoint)
+            ctx.setInsertionPoint(atEndOf: noReturnBlock)
+        }
+
         // Jump to endBlock (shared with array path)
         ctx.module.insertBr(to: endBlock, at: ctx.insertionPoint)
     }
@@ -1261,9 +1298,19 @@ public final class LLVMCodeGenerator {
         // Push break target so inner BreakStatement knows where to jump
         breakBlockStack.append(endBlock)
 
-        // Generate body statements
+        // Generate body statements.
+        //
+        // `errorBlock`, not `incrBlock` (GitLab #654). Passing the loop's own
+        // increment block made a failing action inside `for <i> from a to b`
+        // advance to the *next iteration* instead of aborting the feature set:
+        // every remaining iteration then ran its first action before
+        // `contextHasError` was consulted, so side effects kept happening
+        // after the error and the program only stopped when the loop ended.
+        // The interpreter stops at the first error, and `generateForEachLoop`
+        // and `generateWhileLoop` both already pass `errorBlock` — this was
+        // the one loop form out of step.
         for (stmtIndex, stmt) in loop.body.enumerated() {
-            generateStatement(stmt, index: index * 100 + stmtIndex, errorBlock: incrBlock)
+            generateStatement(stmt, index: index * 100 + stmtIndex, errorBlock: errorBlock)
         }
 
         // Pop break target when leaving this loop
@@ -1465,6 +1512,47 @@ public final class LLVMCodeGenerator {
 
     // MARK: - Require Statement Generation
 
+    /// `when <condition> { … }` — the guarded *block* of GitLab #516.
+    ///
+    /// It had no handler at all, so `generateStatement` recorded "Statement
+    /// type 'WhenStatement' is not supported in compiled mode" and the build
+    /// failed (GitLab #655). The spelling compiles under `aro run` and is
+    /// taught by the Language Guide, so this was a documented construct that
+    /// `aro build` rejected outright.
+    ///
+    /// The shape is the per-statement `when` guard from `generateAROStatement`,
+    /// with a body of statements instead of one: evaluate the condition, branch
+    /// to the body or past it, and merge. The body's statements keep the
+    /// feature set's own `errorBlock`, so a failure inside the block aborts the
+    /// feature set rather than falling out of the block — the same rule
+    /// GitLab #654 fixed for range loops.
+    private func generateWhenStatement(_ statement: WhenStatement, index: Int, errorBlock: BasicBlock) {
+        let prefix = "when\(index)"
+        let ip = ctx.insertionPoint
+
+        let bodyBlock = ctx.module.appendBlock(named: "\(prefix)_body", to: ctx.currentFunction!)
+        let mergeBlock = ctx.module.appendBlock(named: "\(prefix)_merge", to: ctx.currentFunction!)
+
+        let conditionJSON = ctx.stringConstant(serializer.serializeExpression(statement.condition))
+        let guardResult = ctx.module.insertCall(
+            externals.evaluateWhenGuard,
+            on: [ctx.currentContextVar!, conditionJSON],
+            at: ip
+        )
+        let guardPassed = ctx.module.insertIntegerComparison(
+            .ne, guardResult, ctx.i32Type.zero, at: ip
+        )
+        ctx.module.insertCondBr(if: guardPassed, then: bodyBlock, else: mergeBlock, at: ip)
+
+        ctx.setInsertionPoint(atEndOf: bodyBlock)
+        for (stmtIndex, stmt) in statement.body.enumerated() {
+            generateStatement(stmt, index: index * 100 + stmtIndex, errorBlock: errorBlock)
+        }
+        ctx.module.insertBr(to: mergeBlock, at: ctx.insertionPoint)
+
+        ctx.setInsertionPoint(atEndOf: mergeBlock)
+    }
+
     private func generateRequireStatement(_ statement: RequireStatement, index: Int, errorBlock: BasicBlock) {
         // Framework dependencies are auto-bound by the runtime (console, http-server, etc.)
         // and don't need extraction — matching interpreter behavior where .framework is a no-op.
@@ -1473,6 +1561,24 @@ public final class LLVMCodeGenerator {
         }
 
         let ip = ctx.insertionPoint
+
+        // `from the <environment>` reads the process environment, exactly as
+        // the interpreter's `executeRequireStatement` does (GitLab #854).
+        //
+        // It used to fall through to the `extract` below, whose object was the
+        // bare noun `environment` — a name no action understands. The
+        // statement failed with `Undefined variable: 'environment'` and the
+        // binary still exited `[OK]`, so a service reading its token from the
+        // environment started and then behaved as though it were unset.
+        if case .environment = statement.source {
+            let envName = ctx.stringConstant(statement.variableName)
+            _ = ctx.module.insertCall(
+                externals.contextRequireEnvironment,
+                on: [ctx.currentContextVar!, envName],
+                at: ip
+            )
+            return
+        }
 
         // Bind the required variable name
         let varNameStr = ctx.stringConstant("_require_variable_")
@@ -1749,9 +1855,10 @@ public final class LLVMCodeGenerator {
 
             // Create context for this Application-Start
             let contextName = ctx.stringConstant(isMain ? "Application-Start" : "Application-Start:\(activity)")
+            let activityStr = ctx.stringConstant(activity)
             let appCtx = ctx.module.insertCall(
                 externals.contextCreateNamed,
-                on: [runtime, contextName],
+                on: [runtime, contextName, activityStr],
                 at: ip
             )
 
@@ -1792,9 +1899,10 @@ public final class LLVMCodeGenerator {
             let endFuncName = applicationEndFunctionName(endHandler.featureSet.businessActivity)
             if let endFunc = ctx.module.function(named: endFuncName) {
                 let endContextName = ctx.stringConstant("Application-End")
+                let endActivity = ctx.stringConstant(endHandler.featureSet.businessActivity)
                 let endCtx = ctx.module.insertCall(
                     externals.contextCreateNamed,
-                    on: [runtime, endContextName],
+                    on: [runtime, endContextName, endActivity],
                     at: ip
                 )
                 _ = ctx.module.insertCall(endFunc, on: [endCtx], at: ip)
@@ -2245,6 +2353,13 @@ private final class StringConstantCollector {
 
         if let withClause = modifiers.withClause {
             collectFromExpression(withClause)
+        }
+
+        // The `against` operand's string constants have to be in the module
+        // too, or the binder emits a reference to one that was never created
+        // (GitLab #663).
+        if let againstClause = modifiers.againstClause {
+            collectFromExpression(againstClause)
         }
     }
 

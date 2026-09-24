@@ -2,6 +2,18 @@
 # Covers ARO-0081 §9: nested-frame recursion (Factorial), tail-call
 # recursion that reuses its frame (SumTo, 10 000 deep), and mutual
 # recursion (IsEven/IsOdd). Runs in both interpreted and compiled mode;
-# compiled mode nests every frame, which is why the depths here stay
-# modest enough to run quickly in CI.
+# compiled mode nests every frame, so the compiled run is the slow one.
 type: console
+
+# 180s, not the default 60 (GitLab #654's pipeline run, and main's own).
+#
+# `SumTo` is 10 000 deep, and compiled mode nests every frame even for a tail
+# call — so the compiled run is 10 000 live frames however the source is
+# written. That is the point of the example, and it is also genuinely slow:
+# ~2.6s on an idle laptop, ~45-60s on a shared CI runner with several
+# pipelines competing for it. It crossed the 60s default intermittently and
+# took `main` red, which blocks every merge.
+#
+# The depth is what ARO-0081 §9 is demonstrating, so the budget moves rather
+# than the example.
+timeout: 180

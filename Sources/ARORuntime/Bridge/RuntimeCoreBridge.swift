@@ -130,7 +130,10 @@ class AROCContextHandle: @unchecked Sendable {
         }
     }
 
-    init(runtime: AROCRuntimeHandle, featureSetName: String) {
+    /// - Parameter businessActivity: carried so a compiled binary's error
+    ///   reports the same frame the interpreter's does (GitLab #692).
+    ///   `RuntimeContext.businessActivity` is a `let`, so it has to arrive here.
+    init(runtime: AROCRuntimeHandle, featureSetName: String, businessActivity: String = "") {
         self.runtime = runtime
 
         // Phase 2: create a per-invocation channel and start the cooperative driver task.
@@ -142,6 +145,7 @@ class AROCContextHandle: @unchecked Sendable {
         // CRITICAL: Pass the eventBus from runtime to enable event emission in compiled binaries
         self.context = RuntimeContext(
             featureSetName: featureSetName,
+            businessActivity: businessActivity,
             eventBus: runtime.runtime.eventBus,
             isCompiled: true,
             driverChannel: channel

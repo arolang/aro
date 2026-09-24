@@ -212,11 +212,11 @@ Proposals/ARO-0083-terminal-ui.md:153
 Proposals/ARO-0083-terminal-ui.md:170
 Proposals/ARO-0083-terminal-ui.md:185
 Proposals/ARO-0083-terminal-ui.md:402
-Proposals/ARO-0083-terminal-ui.md:600
-Proposals/ARO-0083-terminal-ui.md:649
-Proposals/ARO-0083-terminal-ui.md:694
-Proposals/ARO-0083-terminal-ui.md:803
-Proposals/ARO-0083-terminal-ui.md:833
+Proposals/ARO-0083-terminal-ui.md:607
+Proposals/ARO-0083-terminal-ui.md:656
+Proposals/ARO-0083-terminal-ui.md:701
+Proposals/ARO-0083-terminal-ui.md:810
+Proposals/ARO-0083-terminal-ui.md:840
 Proposals/ARO-0085-terminal-shadow-buffer.md:456
 Proposals/ARO-0085-terminal-shadow-buffer.md:474
 Proposals/ARO-0085-terminal-shadow-buffer.md:492

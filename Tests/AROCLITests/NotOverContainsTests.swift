@@ -31,7 +31,7 @@ struct NotOverContainsTests {
     /// that quietly never fired — and it tests the guard position, which is
     /// where the issue reported it.
     private func run(_ statements: String...) async -> REPLSession {
-        let session = REPLSession(suppressLogPrefix: true)
+        let session = REPLSession()
         let engine = REPLCellEngine(session: session)
         for statement in statements {
             _ = await engine.executeCell(statement)

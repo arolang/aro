@@ -39,7 +39,7 @@ struct SessionActionCompositionTests {
 
     @Test("An action can call a previously defined action")
     func actionCallsSibling() async throws {
-        let session = REPLSession(suppressLogPrefix: true)
+        let session = REPLSession()
         let first = try await define(session, "Double", doubleBody)
         #expect(first.isSuccess)
 
@@ -57,7 +57,7 @@ struct SessionActionCompositionTests {
 
     @Test("Redefining the callee flows through the caller")
     func redefinitionFlowsThrough() async throws {
-        let session = REPLSession(suppressLogPrefix: true)
+        let session = REPLSession()
         _ = try await define(session, "Double", doubleBody)
         _ = try await define(session, "Quadruple", quadrupleBody)
 
@@ -76,7 +76,7 @@ struct SessionActionCompositionTests {
 
     @Test("A forward reference still errors clearly (define the callee first)")
     func forwardReferenceErrors() async throws {
-        let session = REPLSession(suppressLogPrefix: true)
+        let session = REPLSession()
         let result = try await define(session, "Quadruple", quadrupleBody)
         guard case .error(let message) = result else {
             Issue.record("expected an error, got \(result)")
@@ -87,7 +87,7 @@ struct SessionActionCompositionTests {
 
     @Test("Self-recursion keeps working")
     func selfRecursion() async throws {
-        let session = REPLSession(suppressLogPrefix: true)
+        let session = REPLSession()
         let result = try await define(session, "SumTo", [
             "Extract the <x> from the <input: n>.",
             "Return an <OK: status> with { sum: 0 } when <x> <= 0.",

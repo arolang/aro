@@ -23,7 +23,7 @@ struct ExpressionPrecedenceTests {
 
     /// Runs the shared setup bindings plus the given statements.
     private func run(_ statements: String...) async throws -> (REPLSession, [REPLResult]) {
-        let session = REPLSession(suppressLogPrefix: true)
+        let session = REPLSession()
         var results: [REPLResult] = []
         for statement in [
             "Create the <n> with 20.",

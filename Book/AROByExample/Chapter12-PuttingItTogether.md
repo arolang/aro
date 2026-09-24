@@ -112,19 +112,19 @@ Replace `https://example.com` with your target site. For testing, use a small si
 Running against a small site produces something like this — every line tagged with the feature set that wrote it:
 
 ```
-[Application-Start] Starting Web Crawler...
-[Application-Start] Starting URL: https://example.com
-[Application-Start] Output directory created
-[Trigger Crawl] Queued: https://example.com
-[Crawl Page] Crawling: https://example.com
-[Save Page] Saving: https://example.com to ./output/2733da75...642.md
-[Trigger Crawl] Queued: https://example.com/about
-[Trigger Crawl] Queued: https://example.com/docs
-[Crawl Page] Crawling: https://example.com/about
-[Crawl Page] Crawling: https://example.com/docs
+Starting Web Crawler...
+Starting URL: https://example.com
+Output directory created
+Queued: https://example.com
+Crawling: https://example.com
+Saving: https://example.com to ./output/2733da75...642.md
+Queued: https://example.com/about
+Queued: https://example.com/docs
+Crawling: https://example.com/about
+Crawling: https://example.com/docs
 ...
-[Application-End] Web Crawler completed!
-[Application-End] +-------------------+-------+---------+--------+---------+
+Web Crawler completed!
++-------------------+-------+---------+--------+---------+
                   | Feature Set       | Count | Success | Failed | Avg(ms) |
                   ...
 [OK] startup
@@ -178,7 +178,7 @@ Welcome to our documentation...
 Almost always a missing `CRAWL_URL`. An unset environment variable is not an error in ARO — `<start-url>` binds the empty string and the crawl chain fizzles out silently. Look for the giveaway in the second log line:
 
 ```
-[Application-Start] Starting URL:
+Starting URL:
 ```
 
 Nothing after the colon means nothing to crawl. Set the variable:

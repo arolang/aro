@@ -22,7 +22,7 @@ import Foundation
 struct CellRerunTests {
 
     private func engine() -> REPLCellEngine {
-        REPLCellEngine(session: REPLSession(suppressLogPrefix: true))
+        REPLCellEngine(session: REPLSession())
     }
 
     @Test("The same cell runs twice")

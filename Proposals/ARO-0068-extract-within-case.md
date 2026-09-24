@@ -66,8 +66,8 @@ match <value> {
 
 Output:
 ```
-[Application-Start] Status value: 200
-[Application-Start] Success: Success
+Status value: 200
+Success: Success
 ```
 
 ## Benefits

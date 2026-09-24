@@ -42,17 +42,23 @@ public func aro_context_create(_ runtimePtr: UnsafeMutableRawPointer?) -> Unsafe
 /// - Parameters:
 ///   - runtimePtr: Runtime handle
 ///   - name: Feature set name (C string)
+///   - activity: Business activity (C string, may be null) — carried so a
+///     compiled error reports the same frame as the interpreter (GitLab #692)
 /// - Returns: Opaque pointer to context handle
 @_cdecl("aro_context_create_named")
 public func aro_context_create_named(
     _ runtimePtr: UnsafeMutableRawPointer?,
-    _ name: UnsafePointer<CChar>?
+    _ name: UnsafePointer<CChar>?,
+    _ activity: UnsafePointer<CChar>?
 ) -> UnsafeMutableRawPointer? {
     guard let ptr = runtimePtr else { return nil }
     let featureSetName = name.map { String(cString: $0) } ?? "compiled"
+    let businessActivity = activity.map { String(cString: $0) } ?? ""
 
     let runtimeHandle = Unmanaged<AROCRuntimeHandle>.fromOpaque(ptr).takeUnretainedValue()
-    let contextHandle = AROCContextHandle(runtime: runtimeHandle, featureSetName: featureSetName)
+    let contextHandle = AROCContextHandle(runtime: runtimeHandle,
+                                          featureSetName: featureSetName,
+                                          businessActivity: businessActivity)
     let contextPtr = Unmanaged.passRetained(contextHandle).toOpaque()
 
     handleLock.lock()
@@ -60,6 +66,32 @@ public func aro_context_create_named(
     handleLock.unlock()
 
     return UnsafeMutableRawPointer(contextPtr)
+}
+
+/// `Require the <API_TOKEN> from the <environment>.` in a compiled binary
+/// (GitLab #854).
+///
+/// The code generator used to emit an `extract` whose object was the bare noun
+/// `environment`, which no action understands — so the statement failed with
+/// `Undefined variable: 'environment'` while `aro run` bound the value. Worse,
+/// the binary still exited `[OK]`: the failure was printed on a line of its
+/// own and the program carried on as though the variable were unset.
+///
+/// This does exactly what `FeatureSetExecutor` does for the interpreter: read
+/// the process environment, and bind only when the variable is set. An unset
+/// variable binds nothing, so the later read fails where the read is — which
+/// is the behaviour ARO-0006 asks for.
+@_cdecl("aro_context_require_environment")
+public func aro_context_require_environment(
+    _ contextPtr: UnsafeMutableRawPointer?,
+    _ namePtr: UnsafePointer<CChar>?
+) {
+    guard let ptr = contextPtr, let namePtr else { return }
+    let name = String(cString: namePtr)
+    let contextHandle = Unmanaged<AROCContextHandle>.fromOpaque(ptr).takeUnretainedValue()
+    if let value = ProcessInfo.processInfo.environment[name] {
+        contextHandle.context.bind(name, value: value)
+    }
 }
 
 /// Create a child execution context from a parent context
@@ -778,6 +810,24 @@ func evaluateExpressionJSON(_ expr: [String: Any], context: RuntimeContext) -> a
             // If neither works, just continue - the value stays as-is
         }
         return value
+    }
+
+    // Emptiness check: {"$empty":{"expr":{…},"negated":false}}
+    //
+    // GitLab #652, and the same story as `$unary` below: the node existed in
+    // the AST and nothing serialised or decoded it, so `when <list> is empty`
+    // reached the binary as `$unknown`, evaluated to "", and `asBool` read
+    // that as false. The guard never ran its test — and `is not empty` was
+    // false too, so both directions were wrong.
+    //
+    // `ExpressionEvaluator.isEmptyValue` is shared rather than reimplemented:
+    // two answers to "is this empty" is how the modes drift apart again.
+    if let emptiness = expr["$empty"] as? [String: Any],
+       let inner = emptiness["expr"] as? [String: Any] {
+        let value = evaluateExpressionJSON(inner, context: context)
+        let negated = (emptiness["negated"] as? Bool) ?? false
+        let empty = ExpressionEvaluator.isEmptyValue(value)
+        return negated ? !empty : empty
     }
 
     // Unary expression: {"$unary":{"op":"not","operand":{…}}}
@@ -2403,8 +2453,13 @@ public func aro_runtime_foreach_stream(
             for try await item in state.stream.stream {
                 let boxed = AROCValue(value: item)
                 let elementPtr = UnsafeMutableRawPointer(Unmanaged.passRetained(boxed).toOpaque())
-                _ = state.body(state.contextPtr, elementPtr, index)
+                // A NON-NULL return means "stop": the body hit a `Return` and
+                // the feature set is over (GitLab #665). The pointer is the
+                // body's own context parameter — a sentinel, never owned by
+                // this loop, so there is nothing to release.
+                let stop = state.body(state.contextPtr, elementPtr, index)
                 Unmanaged<AROCValue>.fromOpaque(elementPtr).release()
+                if stop != nil { break }
                 // Stop if an action in the body set an error on the context
                 if state.contextHandle.context.getExecutionError() != nil { break }
                 index += 1
@@ -2413,6 +2468,19 @@ public func aro_runtime_foreach_stream(
         semaphore.signal()
     }
     semaphore.wait()
+}
+
+/// Whether a `Return` has already set this context's response (GitLab #665).
+///
+/// The outer function needs this after a streamed `for each`: the body runs in
+/// its own function, so a `Return` inside it cannot branch to the enclosing
+/// feature set's early-return block. The body stops the stream, and the outer
+/// function asks here whether it stopped *because of a Return*.
+@_cdecl("aro_context_has_response")
+public func aro_context_has_response(_ contextPtr: UnsafeMutableRawPointer?) -> Int32 {
+    guard let ptr = contextPtr else { return 0 }
+    let contextHandle = Unmanaged<AROCContextHandle>.fromOpaque(ptr).takeUnretainedValue()
+    return contextHandle.context.getResponse() != nil ? 1 : 0
 }
 
 // MARK: - Mutable Scope (GitLab #131 While Loop)

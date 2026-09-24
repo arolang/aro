@@ -12,7 +12,7 @@ struct REPLCellEngineTests {
 
     @Test("Rebinding across cells errors cleanly instead of killing the process")
     func rebindAcrossCells() async {
-        let session = REPLSession(suppressLogPrefix: true)
+        let session = REPLSession()
         let engine = REPLCellEngine(session: session)
 
         let first = await engine.executeCell("Compute the <volume> from 5.")
@@ -32,7 +32,7 @@ struct REPLCellEngineTests {
 
     @Test("Loop-body bindings may shadow session names (loop isolation)")
     func loopShadowingAllowed() async {
-        let session = REPLSession(suppressLogPrefix: true)
+        let session = REPLSession()
         let engine = REPLCellEngine(session: session)
 
         _ = await engine.executeCell("Compute the <total> from 1 + 1.")
@@ -58,7 +58,7 @@ struct REPLCellEngineTests {
 
     @Test("Update-family verbs are exempt — Configure accumulates by contract")
     func updateVerbsExempt() async {
-        let session = REPLSession(suppressLogPrefix: true)
+        let session = REPLSession()
         let engine = REPLCellEngine(session: session)
 
         let first = await engine.executeCell("Configure the <http-client: timeout> with 30.")
@@ -75,7 +75,7 @@ struct REPLCellEngineTests {
 
     @Test("Test verbs are exempt — assertions read, they do not bind")
     func testVerbsExempt() async {
-        let session = REPLSession(suppressLogPrefix: true)
+        let session = REPLSession()
         let engine = REPLCellEngine(session: session)
 
         _ = await engine.executeCell("Compute the <total> from 40 + 2.")
@@ -94,7 +94,7 @@ struct REPLCellEngineTests {
 
     @Test("The guard leaves effect statements alone")
     func effectsAreNotFlagged() async {
-        let session = REPLSession(suppressLogPrefix: true)
+        let session = REPLSession()
         let engine = REPLCellEngine(session: session)
 
         _ = await engine.executeCell("Compute the <message> from \"hi\".")
@@ -106,7 +106,7 @@ struct REPLCellEngineTests {
 
     @Test("reset() clears the definitions and the session")
     func resetClears() async {
-        let session = REPLSession(suppressLogPrefix: true)
+        let session = REPLSession()
         let engine = REPLCellEngine(session: session)
         _ = await engine.executeCell("Compute the <n> from 1.")
         engine.reset()
@@ -122,7 +122,7 @@ struct REPLExpressionTests {
 
     @Test("Expressions evaluate repeatedly without rebinding anything")
     func repeatedEvaluation() async throws {
-        let session = REPLSession(suppressLogPrefix: true)
+        let session = REPLSession()
 
         let first = try await session.evaluateExpression("2 + 3")
         guard case .value(let a) = first else {
@@ -145,7 +145,7 @@ struct REPLExpressionTests {
 
     @Test("Expressions read the session's variables")
     func readsSessionVariables() async throws {
-        let session = REPLSession(suppressLogPrefix: true)
+        let session = REPLSession()
         _ = try await session.executeStatement("Compute the <base> from 10.")
         let result = try await session.evaluateExpression("<base> * 4")
         guard case .value(let value) = result else {

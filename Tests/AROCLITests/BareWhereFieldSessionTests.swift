@@ -26,7 +26,7 @@ struct BareWhereFieldSessionTests {
 
     @Test("ARO-0019 §2.1's example filters, it does not just parse")
     func bareFilterActuallyFilters() async {
-        let session = REPLSession(suppressLogPrefix: true)
+        let session = REPLSession()
         let engine = REPLCellEngine(session: session)
 
         _ = await engine.executeCell(Self.orders)
@@ -38,7 +38,7 @@ struct BareWhereFieldSessionTests {
 
     @Test("Bare and bracketed spellings select the same rows")
     func spellingsSelectTheSameRows() async {
-        let session = REPLSession(suppressLogPrefix: true)
+        let session = REPLSession()
         let engine = REPLCellEngine(session: session)
 
         _ = await engine.executeCell(Self.orders)
@@ -54,7 +54,7 @@ struct BareWhereFieldSessionTests {
 
     @Test("Bare fields chain with and/or and parentheses")
     func bareChaining() async {
-        let session = REPLSession(suppressLogPrefix: true)
+        let session = REPLSession()
         let engine = REPLCellEngine(session: session)
 
         _ = await engine.executeCell(Self.orders)
@@ -77,7 +77,7 @@ struct BareWhereFieldSessionTests {
 
     @Test("A bare field mixes with a bracketed one in the same condition")
     func mixedSpellings() async {
-        let session = REPLSession(suppressLogPrefix: true)
+        let session = REPLSession()
         let engine = REPLCellEngine(session: session)
 
         _ = await engine.executeCell(Self.orders)
@@ -89,7 +89,7 @@ struct BareWhereFieldSessionTests {
 
     @Test("between works from a bare field")
     func bareBetween() async {
-        let session = REPLSession(suppressLogPrefix: true)
+        let session = REPLSession()
         let engine = REPLCellEngine(session: session)
 
         _ = await engine.executeCell(Self.orders)
@@ -101,7 +101,7 @@ struct BareWhereFieldSessionTests {
 
     @Test("ARO-0003/ARO-0006: repository Retrieve where id = <id>")
     func bareRepositoryRetrieve() async {
-        let session = REPLSession(suppressLogPrefix: true)
+        let session = REPLSession()
         let engine = REPLCellEngine(session: session)
 
         _ = await engine.executeCell(#"Compute the <u1> from { id: 1, name: "Ada" }."#)
@@ -124,7 +124,7 @@ struct BareWhereFieldSessionTests {
         // rather than a filter. Bare, it reads as what it is — the *field*
         // `id` against the *binding* `<id>` — and the two must not be confused
         // for each other when they share a name.
-        let session = REPLSession(suppressLogPrefix: true)
+        let session = REPLSession()
         let engine = REPLCellEngine(session: session)
 
         _ = await engine.executeCell(#"Compute the <u1> from { id: 1, name: "Ada" }."#)
@@ -143,7 +143,7 @@ struct BareWhereFieldSessionTests {
 
     @Test("Delete's single-predicate guard takes a bare field")
     func bareDelete() async {
-        let session = REPLSession(suppressLogPrefix: true)
+        let session = REPLSession()
         let engine = REPLCellEngine(session: session)
 
         _ = await engine.executeCell(#"Compute the <d1> from { id: 1, status: "open" }."#)
