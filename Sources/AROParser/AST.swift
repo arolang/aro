@@ -222,57 +222,6 @@ public struct AROStatement: Statement {
         self.span = span
     }
 
-    // MARK: - Legacy Initializer (Backward Compatibility)
-
-    @available(*, deprecated, message: "Use the grouped initializer instead")
-    public init(
-        action: Action,
-        result: QualifiedNoun,
-        object: ObjectClause,
-        literalValue: LiteralValue? = nil,
-        expression: (any Expression)? = nil,
-        aggregation: AggregationClause? = nil,
-        whereClause: WhereClause? = nil,
-        byClause: ByClause? = nil,
-        toClause: (any Expression)? = nil,
-        withClause: (any Expression)? = nil,
-        whenCondition: (any Expression)? = nil,
-        resultExpression: (any Expression)? = nil,
-        span: SourceSpan
-    ) {
-        self.action = action
-        self.result = result
-        self.object = object
-        self.span = span
-
-        // Build ValueSource from legacy fields
-        if let resExpr = resultExpression {
-            self.valueSource = .sinkExpression(resExpr)
-        } else if let expr = expression {
-            self.valueSource = .expression(expr)
-        } else if let literal = literalValue {
-            self.valueSource = .literal(literal)
-        } else {
-            self.valueSource = .none
-        }
-
-        // Build QueryModifiers from legacy fields
-        self.queryModifiers = QueryModifiers(
-            whereClause: whereClause,
-            aggregation: aggregation,
-            byClause: byClause
-        )
-
-        // Build RangeModifiers from legacy fields
-        self.rangeModifiers = RangeModifiers(
-            toClause: toClause,
-            withClause: withClause
-        )
-
-        // Build StatementGuard from legacy field
-        self.statementGuard = StatementGuard(condition: whenCondition)
-    }
-
     // MARK: - Convenience Accessors
 
     /// Optional expression value (ARO-0002) - for computed values like `from <x> * <y>`

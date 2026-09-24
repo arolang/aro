@@ -3,7 +3,20 @@
 /node_modules
 /Website/node_modules
 /Website/dist
+# Compiled example binaries. `aro build ./Examples/X` writes `Examples/X/X`,
+# and gitignore cannot express "a file named after its own directory", so each
+# one is listed. The list goes stale silently — a 29 MB executable was tracked
+# for months because two entries were missing (GitLab #817, #850). Until
+# `aro build` emits into `.build/`, check with:
+#
+#   for d in Examples/*/; do n=$(basename "$d"); \
+#     git check-ignore -q "$d$n" || echo "missing: $n"; done
+#
 /Examples/HelloWorld/HelloWorld
+/Examples/EventReplay/EventReplay
+/Examples/FileUpload/FileUpload
+/Examples/ModulesExample/ModulesExample
+/Examples/RepoBackup/RepoBackup
 /Examples/DeleteResult/DeleteResult
 /Examples/PositionalArguments/PositionalArguments
 /Examples/CaptureGroups/CaptureGroups
@@ -233,3 +246,10 @@ Train/script/output/
 /Tests/IntegrationTestsRunner/bronze/
 /Tests/IntegrationTestsRunner/silver/
 /Tests/IntegrationTestsRunner/gold/
+
+# Artefacts examples leave in the repository root when run from it
+# (DirectoryReplicator writes foo/ and baz/, StreamingDemo writes
+# events.jsonl). GitLab #817.
+/foo/
+/baz/
+/events.jsonl

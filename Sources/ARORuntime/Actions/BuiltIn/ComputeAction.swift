@@ -443,6 +443,9 @@ public struct ComputeAction: SynchronousAction {
         let stringToHash: String
         if let str = input as? String {
             stringToHash = str
+        // `isValidJSONObject` has already said this serialises; the `try?` covers
+        // only the residual encoder failure, and falling through to the
+        // `String(describing:)` branch below hashes the same value either way.
         } else if JSONSerialization.isValidJSONObject(input),
                   let data = try? JSONSerialization.data(withJSONObject: input, options: [.sortedKeys]),
                   let json = String(data: data, encoding: .utf8) {
@@ -1330,6 +1333,8 @@ public struct ComputeAction: SynchronousAction {
             return date
         }
         if let str = input as? String {
+            // Asking whether this string is a date. Unparseable means "not a
+            // date", which the nil return says; the caller decides if that matters.
             return try? ARODate.parse(str)
         }
         return nil
@@ -2045,6 +2050,8 @@ public struct CreateAction: ActionImplementation {
             return date
         }
         if let str = input as? String {
+            // Asking whether this string is a date. Unparseable means "not a
+            // date", which the nil return says; the caller decides if that matters.
             return try? ARODate.parse(str)
         }
         return nil

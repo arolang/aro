@@ -318,6 +318,9 @@ enum WebSocketStreamRunner {
             @unknown default: continue
             }
 
+            // A server-sent-event stream carries keep-alives and comments that are
+            // not JSON. A line that does not parse is skipped by the `continue`
+            // below, which is what the protocol asks for.
             guard let data = text.data(using: .utf8),
                   let outer = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                   let eventType = outer["event"] as? String else {

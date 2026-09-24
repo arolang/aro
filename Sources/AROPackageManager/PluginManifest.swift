@@ -454,7 +454,6 @@ public enum ManifestError: Error, CustomStringConvertible {
     case missingRequiredField(String)
     case invalidPackageName(String)
     case invalidProvideEntry(String)
-    case incompatibleAroVersion(required: String, current: String)
 
     public var description: String {
         switch self {
@@ -468,8 +467,6 @@ public enum ManifestError: Error, CustomStringConvertible {
             return "Invalid package name '\(name)'. Must be lowercase alphanumeric with hyphens."
         case .invalidProvideEntry(let message):
             return "Invalid provides entry: \(message)"
-        case .incompatibleAroVersion(let required, let current):
-            return "Plugin requires ARO \(required), but current version is \(current)"
         }
     }
 }

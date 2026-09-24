@@ -340,70 +340,28 @@ struct CompilationStrategy: Sendable {
 
         // Platform-specific library names to search for
         // Swift uses .a for static libs on all platforms, but we also check .lib for Windows
-        #if os(Windows)
-        let runtimeLibNames = ["libARORuntime.a", "ARORuntime.lib", "libARORuntime.lib"]
-        #else
         let runtimeLibNames = ["libARORuntime.a"]
-        #endif
 
         // 0. Check ARO_BIN environment variable directory (used in CI)
         if let aroBinPath = ProcessInfo.processInfo.environment["ARO_BIN"] {
-            #if os(Windows)
-            // On Windows, avoid URL manipulation which has path format issues
-            // Just do simple string manipulation with backslashes
-            var aroBinDir: String
-            if let lastBackslash = aroBinPath.lastIndex(of: "\\") {
-                aroBinDir = String(aroBinPath[..<lastBackslash])
-            } else if let lastSlash = aroBinPath.lastIndex(of: "/") {
-                aroBinDir = String(aroBinPath[..<lastSlash])
-            } else {
-                aroBinDir = "."
-            }
-            for libName in runtimeLibNames {
-                searchPaths.append(aroBinDir + "\\" + libName)
-            }
-            #else
             let aroBinDir = URL(fileURLWithPath: aroBinPath).deletingLastPathComponent()
             for libName in runtimeLibNames {
                 searchPaths.append(aroBinDir.appendingPathComponent(libName).path)
             }
-            #endif
         }
 
         // 1. Same directory as executable (for distributed binaries/artifacts)
         // This is the primary location for CI/CD artifacts
-        #if os(Windows)
-        // On Windows, use string manipulation to avoid URL path issues
-        let execPathStr = executablePath.path
-        var execDirStr: String
-        if let lastBackslash = execPathStr.lastIndex(of: "\\") {
-            execDirStr = String(execPathStr[..<lastBackslash])
-        } else if let lastSlash = execPathStr.lastIndex(of: "/") {
-            execDirStr = String(execPathStr[..<lastSlash])
-        } else {
-            execDirStr = "."
-        }
-        // Remove leading slash if present (URL.path artifact on Windows)
-        if execDirStr.hasPrefix("/") && execDirStr.count > 2 && execDirStr.dropFirst().first?.isLetter == true {
-            execDirStr = String(execDirStr.dropFirst())
-        }
-        for libName in runtimeLibNames {
-            searchPaths.append(execDirStr + "\\" + libName)
-        }
-        #else
         for libName in runtimeLibNames {
             searchPaths.append(executableDir.appendingPathComponent(libName).path)
         }
-        #endif
 
         // 2. Sibling lib/ directory relative to executable (standard Unix layout)
         // e.g., /usr/local/bin/aro → /usr/local/lib/libARORuntime.a
-        #if !os(Windows)
         let siblingLibDir = executableDir.deletingLastPathComponent().appendingPathComponent("lib")
         for libName in runtimeLibNames {
             searchPaths.append(siblingLibDir.appendingPathComponent(libName).path)
         }
-        #endif
 
         // 3. Homebrew/system install locations (Unix only)
         #if os(macOS)
@@ -429,60 +387,11 @@ struct CompilationStrategy: Sendable {
         searchPaths.append(".build/aarch64-unknown-linux-gnu/debug/libARORuntime.a")
         searchPaths.append(".build/release/libARORuntime.a")
         searchPaths.append(".build/debug/libARORuntime.a")
-        #elseif os(Windows)
-        // Check multiple library name variants on Windows
-        for libName in runtimeLibNames {
-            searchPaths.append(".build/x86_64-unknown-windows-msvc/release/\(libName)")
-            searchPaths.append(".build/x86_64-unknown-windows-msvc/debug/\(libName)")
-            searchPaths.append(".build/release/\(libName)")
-            searchPaths.append(".build/debug/\(libName)")
-        }
         #endif
 
-        #if os(Windows)
-        // Debug output for Windows
-        var debugLog = "Searching for runtime library...\n"
-        debugLog += "ARO_BIN env: \(ProcessInfo.processInfo.environment["ARO_BIN"] ?? "not set")\n"
-        debugLog += "Executable path: \(executablePath.path)\n"
-        debugLog += "Executable dir: \(executableDir.path)\n"
-        debugLog += "Current working dir: \(fm.currentDirectoryPath)\n"
-        debugLog += "Search paths (\(searchPaths.count) total):\n"
-        for (index, path) in searchPaths.enumerated() {
-            let exists = fm.fileExists(atPath: path)
-            debugLog += "  \(index + 1). \(path) [\(exists ? "EXISTS" : "not found")]\n"
-        }
-        AROLogger.debug(debugLog, subsystem: "build")
-
-        // Also write to a debug file
-        let debugFilePath = fm.currentDirectoryPath + "\\aro-build-debug.log"
-        try? debugLog.write(toFile: debugFilePath, atomically: true, encoding: .utf8)
-        #endif
 
         for path in searchPaths {
             var fullPath: String
-            #if os(Windows)
-            // On Windows, use backslashes for path separators
-            // First, fix any URL.path artifacts (leading slash before drive letter)
-            var cleanPath = path
-            if cleanPath.hasPrefix("/") && cleanPath.count > 2 {
-                let afterSlash = cleanPath.dropFirst()
-                if afterSlash.first?.isLetter == true && afterSlash.dropFirst().first == ":" {
-                    // Path like "/D:/..." -> "D:/..."
-                    cleanPath = String(afterSlash)
-                }
-            }
-
-            if cleanPath.contains(":") {
-                // Absolute Windows path (e.g., "D:/path" or "D:\path")
-                fullPath = cleanPath.replacingOccurrences(of: "/", with: "\\")
-            } else if cleanPath.hasPrefix(".") {
-                // Relative to current directory
-                fullPath = fm.currentDirectoryPath + "\\" + cleanPath.replacingOccurrences(of: "/", with: "\\")
-            } else {
-                // Relative to current directory
-                fullPath = fm.currentDirectoryPath + "\\" + cleanPath.replacingOccurrences(of: "/", with: "\\")
-            }
-            #else
             if path.hasPrefix("/") {
                 // Absolute path
                 fullPath = path
@@ -493,52 +402,12 @@ struct CompilationStrategy: Sendable {
                 // Relative to current directory
                 fullPath = fm.currentDirectoryPath + "/" + path
             }
-            #endif
 
-            #if os(Windows)
-            let exists = fm.fileExists(atPath: fullPath)
-            AROLogger.debug("Checking: \(fullPath) -> \(exists ? "FOUND" : "not found")", subsystem: "build")
-            if exists {
-                return fullPath
-            }
-            #else
             if fm.fileExists(atPath: fullPath) {
                 return fullPath
             }
-            #endif
         }
 
-        #if os(Windows)
-        AROLogger.debug("Runtime library NOT FOUND in standard locations", subsystem: "build")
-        AROLogger.debug("Attempting filesystem search...", subsystem: "build")
-
-        // Try to find libARORuntime.a near the executable
-        if let aroBinPath = ProcessInfo.processInfo.environment["ARO_BIN"] {
-            // Get the directory containing aro.exe
-            let aroBinURL = URL(fileURLWithPath: aroBinPath)
-            let aroBinDir = aroBinURL.deletingLastPathComponent()
-
-            // Try listing the directory contents
-            do {
-                let contents = try fm.contentsOfDirectory(atPath: aroBinDir.path)
-                AROLogger.debug("Contents of \(aroBinDir.path): \(contents)", subsystem: "build")
-                for item in contents {
-                    if item.contains("ARORuntime") || item.hasSuffix(".a") || item.hasSuffix(".lib") {
-                        let itemPath = aroBinDir.appendingPathComponent(item).path
-                        AROLogger.debug("Found potential library: \(itemPath)", subsystem: "build")
-                        if fm.fileExists(atPath: itemPath) {
-                            AROLogger.debug("Returning: \(itemPath)", subsystem: "build")
-                            return itemPath
-                        }
-                    }
-                }
-            } catch {
-                AROLogger.error("Error listing directory: \(error)", subsystem: "build")
-            }
-        }
-
-        AROLogger.error("Runtime library NOT FOUND anywhere", subsystem: "build")
-        #endif
 
         return nil
     }

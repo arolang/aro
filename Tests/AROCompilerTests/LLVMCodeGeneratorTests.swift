@@ -26,8 +26,7 @@ final class LLVMCodeGeneratorTests: XCTestCase {
             .invalidExpression(description: "test", span: span),
             .moduleVerificationFailed(message: "test"),
             .llvmInternalError(message: "test"),
-            .noEntryPoint,
-            .multipleEntryPoints
+            .noEntryPoint
         ]
 
         for error in errors {
@@ -137,28 +136,6 @@ final class LLVMCodeGeneratorTests: XCTestCase {
         XCTAssertEqual(LLVMTypeMapper.prepositionValue(.on), 8)
         XCTAssertEqual(LLVMTypeMapper.prepositionValue(.by), 9)
         XCTAssertEqual(LLVMTypeMapper.prepositionValue(.at), 10)
-    }
-
-    func testV2ErrorReporter() throws {
-        let source = """
-        (Application-Start: Test) {
-            <Log> "Hello" to the <console>.
-        }
-        """
-
-        let reporter = LLVMErrorReporter(source: source, fileName: "test.aro")
-
-        let span = SourceSpan(
-            start: SourceLocation(line: 2, column: 5, offset: 30),
-            end: SourceLocation(line: 2, column: 10, offset: 35)
-        )
-
-        let error = LLVMCodeGenError.undefinedSymbol(name: "unknown", span: span)
-        let formatted = reporter.format(error)
-
-        XCTAssertTrue(formatted.contains("test.aro:2:5"))
-        XCTAssertTrue(formatted.contains("error:"))
-        XCTAssertTrue(formatted.contains("unknown"))
     }
 
     func testV2ExternalDeclEmitter() throws {

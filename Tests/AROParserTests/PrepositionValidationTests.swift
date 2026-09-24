@@ -197,35 +197,30 @@ struct PrepositionCatalogTests {
     @Test("Covers every implemented verb in ActionCatalog")
     func testCoversActionCatalog() {
         // `ActionCatalog` exists to declare LLVM external symbols, and it lists
-        // three verbs that no action actually implements:
-        //
-        //   route, watch  — targets of ActionRunner's canonicalisation
-        //                   (forward -> route, monitor/observe -> watch), but no
-        //                   RouteAction or WatchAction exists, so writing them
-        //                   fails with unknownAction at run time.
-        //   concat        — documented as a Merge verb in ARO-0004, but
-        //                   MergeAction.verbs is only ["merge", "combine"].
-        //
-        // Pinned here so the gap is visible and cannot widen silently. Remove a
-        // name from this set when its action lands.
-        let knownUnimplemented: Set<String> = ["route", "watch", "concat"]
-
+        // every verb the catalog lists. `route`, `watch` and `concat` used to be
+        // exempted here: the catalog listed them and `ActionBridge` exported
+        // `aro_action_*` shims for them, but no `ActionImplementation` claimed
+        // the verbs, so both modes failed identically at `executeAction`. They
+        // were deleted rather than exempted (GitLab #698), so there is nothing
+        // left to allow for.
         let missing = ActionCatalog.allActionVerbs
-            .filter { !knownUnimplemented.contains($0) }
             .filter { PrepositionCatalog.prepositions(forVerb: $0) == nil }
 
         #expect(missing.isEmpty, "no preposition entry for: \(missing.sorted())")
     }
 
-    @Test("The unimplemented-verb gap is exactly the three known names")
-    func testUnimplementedVerbGapIsStable() {
-        // Fails if a new orphan appears in ActionCatalog, or if one of the three
-        // gets implemented (in which case remove it from both sets).
+    @Test("No verb in the catalog is an orphan")
+    func testNoOrphanVerbs() {
+        // This asserted the gap was *exactly* `concat`, `route`, `watch` — the
+        // three phantoms. With them gone the assertion is simply that the gap is
+        // empty, which is the stronger guard: a new catalog entry with no
+        // implementation now fails here instead of being added to an allow-list
+        // (GitLab #698).
         let orphans = ActionCatalog.allActionVerbs
             .filter { PrepositionCatalog.prepositions(forVerb: $0) == nil }
             .sorted()
 
-        #expect(orphans == ["concat", "route", "watch"])
+        #expect(orphans.isEmpty, "catalog verbs with no implementation: \(orphans)")
     }
 
     @Test("Every entry has at least one preposition")

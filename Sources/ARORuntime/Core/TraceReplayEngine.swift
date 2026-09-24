@@ -56,6 +56,8 @@ public enum TraceReplayEngine {
         if let d = Double(t), t.rangeOfCharacter(from: CharacterSet(charactersIn: ".eE")) != nil {
             return d
         }
+        // Probing whether a recorded trace value was JSON. Failure means it was
+        // an ordinary string, returned unchanged below.
         if (t.hasPrefix("{") || t.hasPrefix("[")),
            let data = t.data(using: .utf8),
            let obj = try? JSONSerialization.jsonObject(with: data) {

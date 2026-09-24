@@ -374,27 +374,13 @@ public struct VersionCheckResult: Sendable {
 /// Errors that can occur during package management
 public enum PackageManagerError: Error, CustomStringConvertible {
     case hasDependent(String, dependent: String)
-    case invalidSourcesFile(String)
 
     public var description: String {
         switch self {
         case .hasDependent(let plugin, let dependent):
             return "Cannot remove '\(plugin)': required by '\(dependent)'"
-        case .invalidSourcesFile(let message):
-            return "Invalid .aro-sources file: \(message)"
         }
     }
 }
 
 // MARK: - Exports
-
-/// Public exports for the package
-public struct AROPackageManagerExports {
-    /// Re-export main types
-    public typealias Manifest = PluginManifest
-    public typealias Scanner = PluginScanner
-    public typealias Installer = PluginInstaller
-    public typealias Resolver = DependencyResolver
-    public typealias Git = GitClient
-    public typealias Manager = PackageManager
-}

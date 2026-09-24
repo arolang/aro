@@ -281,17 +281,11 @@ public struct DependencyConflict: Sendable {
 /// Errors that can occur during dependency resolution
 public enum ResolverError: Error, CustomStringConvertible {
     case circularDependency
-    case unsatisfiableDependency(String)
-    case versionConflict(DependencyConflict)
 
     public var description: String {
         switch self {
         case .circularDependency:
             return "Circular dependency detected"
-        case .unsatisfiableDependency(let name):
-            return "Cannot satisfy dependency: \(name)"
-        case .versionConflict(let conflict):
-            return "Version conflict for '\(conflict.dependency)': installed \(conflict.installedVersion), required \(conflict.requiredVersion) by \(conflict.requiredBy)"
         }
     }
 }
