@@ -142,6 +142,75 @@ python3 Train/script/revalidate_corpus.py CORPUS --annotate annotated.jsonl
 python3 Train/script/revalidate_corpus.py CORPUS --drop-failures clean.jsonl
 ```
 
+## Choosing a base model (GitLab #794)
+
+`aro ask` has three jobs, and until #794 the benchmark scored one of them:
+
+1. **answer a question about ARO** — the language, its actions, its proposals;
+2. **write a program** from a description;
+3. **fix a broken one**.
+
+`Train/eval/functional/tasks.json` now covers all three. Each task carries a
+`job` (`question` / `write` / `fix`), and `functional_eval.summarise` reports a
+pass rate per job as well as overall — a base that writes well and cannot debug
+is a different result from one that debugs well and cannot write, and a single
+number cannot tell them apart.
+
+A `question` task is graded by `grade_by: doc_qa` against a
+`must_include` / `must_not_include` rubric. No judge model: it is reproducible
+across runs, needs no second model loaded, and `must_not_include` is aimed at
+the failure that actually matters — the confident wrong answer. Every question
+also ships a reference answer, which is what proves the rubric is satisfiable;
+a typo in `must_include` would otherwise never pass and nobody would notice.
+
+Run the comparison:
+
+```bash
+# every candidate in config.BASE_MODEL_CANDIDATES
+python3 Train/script/base_model_ab.py
+
+# two of them, machine-readable
+python3 Train/script/base_model_ab.py --models qwen3-14b qwen2.5-coder-14b --out ab.json
+
+# the references themselves — 26/26 must pass, or the benchmark is broken
+ARO_BIN=.build/debug/aro python3 Train/script/functional_eval.py --reference
+```
+
+Each candidate generates in a subprocess so the model is unloaded before the
+next one loads; otherwise the second OOMs on any machine that could hold the
+first. A candidate that will not run is reported as **not scored**, never as
+zero — "would not load" and "answered everything wrong" are different facts.
+
+### Why the candidates are dense
+
+- A sparse model transfers *worse* to a new domain than a dense one, and worse
+  on reasoning tasks specifically (ST-MoE, arXiv 2202.08906). ARO is a new
+  domain and writing a correct program is reasoning.
+- Every failure recorded in these notebooks is a **training-time** MoE problem:
+  NaN at round 2, the router `stop_gradient` patch in
+  `Train/tools/patch_mlx_lm.py`, students that collapsed to `!`.
+- Qwen2.5-Coder-14B already scores higher on coding than the 30B-A3B we train
+  on today, at half the memory.
+- Qwen3.5/3.6 ship no dense models at 14B/32B, so the newest *dense* Qwen at a
+  trainable size is Qwen3.
+
+### The teacher stays, and stops being fine-tuned
+
+`config.TEACHER_IS_INFERENCE_ONLY = True`. Fine-tuning a model and sampling
+from it are different jobs: the failures above are all training-time, while
+inference on a sparse model is stable and cheap at 3B active. Keeping the
+teacher for data generation and training only a dense student drops ~60 GB of
+memory pressure and both failure modes without giving up distillation.
+
+One thing checked and **disproved** while investigating, recorded so nobody
+re-derives it: mlx-lm [#571](https://github.com/ml-explore/mlx-lm/issues/571)
+left only 0.022% of a Qwen3-30B-A3B trainable by attaching LoRA to attention
+and not to the experts. That would explain a lot — and it does not apply here.
+The pinned `mlx-lm==0.31.3` ships `LoRASwitchLinear`, `linear_to_lora_layers`
+handles `SwitchLinear`, and `qwen3_moe.py` builds its experts from `SwitchGLU`.
+Expert LoRA does attach.
+
+
 Four gates run per block, in the order they cost: the FIXTRAIN lint and the
 closed qualifier namespace, statement verbs against the generated action
 catalog, verb+preposition, and `aro check` itself. They are not redundant —

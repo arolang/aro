@@ -269,12 +269,15 @@ def grade(task, code, timeout=DEFAULT_TIMEOUT):
     grade_by = task.get('grade_by', 'execution_output')
     files = dict(task.get('files') or {})
     fixtures = task.get('fixtures') or {}
-    result = {'id': gid, 'grade_by': grade_by, 'passed': False,
-              'status': None, 'reason': '', 'output': ''}
+    result = {'id': gid, 'grade_by': grade_by, 'job': task.get('job', 'write'),
+              'passed': False, 'status': None, 'reason': '', 'output': ''}
 
     if not (code or '').strip():
         result['status'] = 'no_code'
-        result['reason'] = 'no ARO in the answer'
+        # A `doc_qa` answer is prose, so "no ARO in the answer" is the wrong
+        # complaint — but an empty answer still fails, for its own reason.
+        result['reason'] = ('said nothing' if grade_by == 'doc_qa'
+                            else 'no ARO in the answer')
         return result
 
     if grade_by == 'aro_test':
@@ -289,6 +292,30 @@ def grade(task, code, timeout=DEFAULT_TIMEOUT):
         else:
             result['passed'] = True
             result['reason'] = 'all Given/When/Then assertions passed'
+        return result
+
+    if grade_by == 'doc_qa':
+        # A question about ARO, answered in prose. There is nothing to run, so
+        # it is graded against a rubric: every phrase in `must_include` has to
+        # appear, and none in `must_not_include`. Crude, and deliberately so —
+        # it needs no judge model, it is reproducible across runs, and the
+        # failure it is built to catch is the confident wrong answer, which a
+        # `must_not_include` naming the plausible-but-wrong action catches
+        # exactly (GitLab #794).
+        answer = (code or '').lower()
+        missing = [p for p in task.get('must_include', [])
+                   if p.lower() not in answer]
+        forbidden = [p for p in task.get('must_not_include', [])
+                     if p.lower() in answer]
+        result['status'] = 'ok'
+        result['output'] = (code or '')[:2000]
+        result['passed'] = not missing and not forbidden
+        if missing:
+            result['reason'] = f'never said: {", ".join(missing)}'
+        elif forbidden:
+            result['reason'] = f'said what is wrong: {", ".join(forbidden)}'
+        else:
+            result['reason'] = 'covered every required point and none of the wrong ones'
         return result
 
     if grade_by == 'aro_check':
@@ -374,6 +401,16 @@ def summarise(rows, samples=1):
         sub = [r for r in judged if r['grade_by'] == gb]
         summary['by_grade'][gb] = eval_stats.proportion(
             sum(1 for r in sub if r['passed']), len(sub), label=gb)
+
+    # Per job, because `aro ask` has three and a single pass rate hides which
+    # one moved: answering questions about ARO, writing a program, and fixing
+    # a broken one. A base model that writes well and cannot debug is not the
+    # same result as one that debugs well and cannot write (GitLab #794).
+    summary['by_job'] = {}
+    for job in sorted({r.get('job', 'write') for r in judged}):
+        sub = [r for r in judged if r.get('job', 'write') == job]
+        summary['by_job'][job] = eval_stats.proportion(
+            sum(1 for r in sub if r['passed']), len(sub), label=job)
     if samples > 1:
         per_prompt = {}
         for r in judged:

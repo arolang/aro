@@ -442,6 +442,50 @@ PREFERRED_MODEL_ID = 'ARO-Lang/aro-coder-6bit'       # distilled 8B student (for
 TEACHER_MODEL_ID   = 'ARO-Lang/aro-teacher-30b-bf16'  # fine-tuned 30B teacher (for retraining)
 BASE_MODEL_ID      = 'mlx-community/Qwen3-Coder-30B-A3B-Instruct-bf16'
 
+# ── Base-model A/B (GitLab #794) ─────────────────────────────────────────────
+# The candidates `Scripts`-side tooling sweeps when choosing what to train on.
+# Nothing here changes a run on its own: `base_model_candidates()` is what the
+# A/B iterates, and the winner is promoted by editing STUDENT_MODEL_ID above.
+#
+# Why these, and why dense:
+#
+#   * A sparse model transfers *worse* to a new domain than a dense one of
+#     comparable size, and worse on reasoning tasks specifically (ST-MoE,
+#     arXiv 2202.08906). ARO is a new domain and the task — write a correct
+#     program — is reasoning. Every failure recorded in these notebooks is a
+#     training-time MoE problem: NaN at round 2, the router `stop_gradient`
+#     patch in Train/tools/patch_mlx_lm.py, students that collapsed to `!`.
+#   * Qwen2.5-Coder-14B scores higher on coding than the 30B-A3B we train on
+#     today, at half the memory and without any of that.
+#   * Qwen3.5/3.6 do not ship dense models at 14B/32B — the newer generations
+#     went MoE — so the newest *dense* Qwen at a trainable size is Qwen3.
+#
+# Seed-Coder-8B is here because it ships a true *base* model, which is the
+# right starting point when the adaptation is this heavy.
+BASE_MODEL_CANDIDATES = [
+    ('qwen3-14b',        'mlx-community/Qwen3-14B-bf16'),
+    ('qwen2.5-coder-14b', 'mlx-community/Qwen2.5-Coder-14B-Instruct-bf16'),
+    ('seed-coder-8b',    'mlx-community/Seed-Coder-8B-Base-bf16'),
+    ('qwen3-8b',         STUDENT_MODEL_ID),   # today's student, the control
+]
+
+# Whether the teacher is itself fine-tuned, or used only to generate data.
+#
+# Fine-tuning a model and sampling from it are different jobs. Every MoE
+# failure above is training-time; inference on a sparse model is stable and
+# cheap (3B active). Keeping the teacher but not training it drops ~60 GB of
+# memory pressure and both failure modes without giving up distillation.
+TEACHER_IS_INFERENCE_ONLY = True
+
+
+def base_model_candidates():
+    """(label, model id) for each base the A/B should score.
+
+    A list rather than a single BASE_MODEL_ID because the question this issue
+    asks — is a dense base as good? — cannot be answered by one run.
+    """
+    return list(BASE_MODEL_CANDIDATES)
+
 # Legacy alias — notebooks that reference FALLBACK_MODEL_ID still work.
 FALLBACK_MODEL_ID  = BASE_MODEL_ID
 
