@@ -152,9 +152,9 @@ Proposals/ARO-0041-datetime-ranges.md:339
 Proposals/ARO-0041-datetime-ranges.md:98
 Proposals/ARO-0042-set-operations.md:19
 Proposals/ARO-0043-sink-syntax.md:48
-Proposals/ARO-0045-package-manager.md:283
-Proposals/ARO-0045-package-manager.md:306
-Proposals/ARO-0045-package-manager.md:338
+Proposals/ARO-0045-package-manager.md:298
+Proposals/ARO-0045-package-manager.md:321
+Proposals/ARO-0045-package-manager.md:353
 Proposals/ARO-0048-websocket.md:110
 Proposals/ARO-0048-websocket.md:195
 Proposals/ARO-0048-websocket.md:297
