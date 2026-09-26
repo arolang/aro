@@ -132,6 +132,33 @@ struct CallerScopedStorageTests {
         #expect(RuntimeContext(featureSetName: "Application-Start").caller == .none)
     }
 
+    @Test("The scope failure explains itself, in both modes")
+    func scopeFailureCarriesItsReason() {
+        // `Cannot store the item into the cart-repository.` reads perfectly
+        // well and says nothing about sessions, so this is one of the few
+        // failures ARO-0006 lets carry a sentence of its own (§7.1).
+        //
+        // Asserted through `AROError.curatedHint` rather than through the
+        // interpreter, because that allowlist is the *shared* one: the
+        // compiled bridge only ever received the message as a `String` and
+        // could not classify it back, so `aro run` explained an unresolvable
+        // scope and `aro build` printed the bare statement.
+        let error = RepositoryScopeError.unresolvable(
+            repository: "cart-repository", scope: .session, caller: .none)
+        let hint = AROError.curatedHint(for: error)
+        #expect(hint == "cart-repository is session-scoped and this feature set has no session.")
+    }
+
+    @Test("A raw underlying error still gets no hint")
+    func uncuratedErrorsStaySilent() {
+        // The allowlist is the point. Appending whatever the underlying error
+        // said is how a compiled binary ends up printing an
+        // `NSCocoaErrorDomain` dump with a file URL in it (GitLab #692).
+        struct Noisy: Error {}
+        #expect(AROError.curatedHint(for: Noisy()) == nil)
+        #expect(AROError.curatedHint(for: ActionError.undefinedVariable("x")) == nil)
+    }
+
     @Test("The partition helper refuses rather than falling back")
     func partitionHelperThrows() throws {
         let registry = RepositoryScopeRegistry.shared

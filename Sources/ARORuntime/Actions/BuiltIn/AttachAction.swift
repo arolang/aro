@@ -50,6 +50,7 @@ public struct AttachAction: ActionImplementation {
         // record it retrieved from the sessions repository.
         let presented = context.resolveAny(result.base)
             ?? context.resolveAny("_with_")
+            ?? context.resolveAny("_expression_")
             ?? context.resolveAny("_literal_")
         guard let session = Self.firstRecord(in: presented) else {
             throw ActionError.invalidInput(

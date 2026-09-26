@@ -851,24 +851,11 @@ public final class FeatureSetExecutor: Sendable {
     /// Extra sentence appended to a statement-shaped error when the
     /// statement alone can't convey what went wrong (GitLab #486).
     private static func statementHint(for error: any Error) -> String? {
-        // A file-system failure is the second exception (GitLab #493): the
-        // statement `Delete the <gone> from "./f.txt"` reads fine, but only
-        // the underlying error says *why* it failed — the path is missing,
-        // not merely undeletable. Same for read/copy/move on missing paths.
-        if let fsError = error as? FileSystemError {
-            return fsError.description
-        }
-        // The third (ARO-0094 §7.1). `Cannot store the item into the
-        // cart-repository.` is a statement that reads fine and says nothing
-        // about scope; without the reason the author has no way to tell a
-        // missing session from a repository that does not exist.
-        if let scopeError = error as? RepositoryScopeError {
-            return scopeError.description + "."
-        }
-        guard let actionError = error as? ActionError,
-              case .unknownComputation = actionError
-        else { return nil }
-        return actionError.description
+        // The allowlist lives on `AROError` so the compiled bridge applies the
+        // same one — the two paths were separate, and only this one carried a
+        // hint, so `aro run` explained an unresolvable repository scope and
+        // `aro build` did not.
+        AROError.curatedHint(for: error)
     }
 
     /// Force everything still outstanding and rethrow the first failure.

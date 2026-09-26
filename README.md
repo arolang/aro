@@ -189,6 +189,8 @@ Most of ARO works everywhere. This table is the contract; please keep it current
 | Streaming request bodies | ✅ | ✅ | ❌ ² |
 | HTTP client, `Probe`, `Stream` | ✅ | ✅ | ❌ ³ |
 | WebSocket | ✅ | ✅ | ❌ ² |
+| Caller-scoped repositories (ARO-0094) | ✅ | ✅ | ✅ |
+| Session cookies, `Attach` | ✅ | ✅ | ✅ ¹² |
 | Socket server | ✅ | ✅ | ✅ ² |
 | Socket client (`Connect`) | ✅ | ✅ | ❌ ³ |
 | File operations | ✅ | ✅ | ✅ |
@@ -221,6 +223,9 @@ Most of ARO works everywhere. This table is the contract; please keep it current
 ¹⁰ not registered as subcommands — GitLab #701
 ¹¹ needs `ARO_STATIC_PYTHON` pointing at an embeddable CPython; otherwise the
    build refuses rather than depend on the build machine's interpreter — GitLab #856
+¹² HTTP sessions and socket promotion work — the Windows server goes through
+   the same request handler and publishes the same connection events — but a
+   session cannot reach a WebSocket there, because there is no WebSocket (²)
 
 `MISSING.md` is the fuller list of what is absent, and why.
 

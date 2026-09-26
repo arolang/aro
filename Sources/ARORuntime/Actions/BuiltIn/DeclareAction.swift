@@ -49,7 +49,22 @@ public struct DeclareAction: ActionImplementation {
                 received: repository)
         }
 
-        let properties = context.resolveAny("_with_") ?? context.resolveAny("_literal_")
+        // `_expression_` as well as `_with_`, because the two modes put the
+        // object-slot map in different places. `Declare the <x> with { … }`
+        // parses as `with the <_expression_>`: the interpreter binds the
+        // evaluated map to both names, compiled code binds only
+        // `_expression_`. Reading both is a two-word fix here; teaching
+        // codegen to bind `_with_` for this shape is not — it would set
+        // `_with_` for *every* statement of this shape, and `Store` uses the
+        // presence of `_with_` to mean "the payload is the value" (GitLab
+        // #515). Inside a `for each` body, where the compiled path does not
+        // emit the per-statement transient sweep, a preceding
+        // `Create the <r> with { … }` then leaks into the following
+        // `Store the <r> into the <repo>` — which is how MedallionPipeline
+        // went from six bronze rows to one.
+        let properties = context.resolveAny("_with_")
+            ?? context.resolveAny("_expression_")
+            ?? context.resolveAny("_literal_")
         guard let fields = properties as? [String: any Sendable] else {
             throw ActionError.missingRequiredField(
                 field: "with { scope: application | session | connection }",

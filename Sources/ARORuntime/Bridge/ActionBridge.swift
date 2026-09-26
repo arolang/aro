@@ -278,11 +278,14 @@ private func executeAction(
                 preposition: objectDesc.preposition.rawValue,
                 object: objectDesc.fullName,
                 featureSet: ctxHandle.context.featureSetName,
-                businessActivity: ctxHandle.context.businessActivity
-                // No `hint:`. The underlying message is whatever Foundation
-                // said — an `NSCocoaErrorDomain` dump with a file URL in it —
-                // and appending it is the leak this fix removes. The
-                // interpreter adds only its own curated hints.
+                businessActivity: ctxHandle.context.businessActivity,
+                // Only ARO's own curated hints (`AROError.curatedHint`), never
+                // the raw message — that is whatever Foundation said, an
+                // `NSCocoaErrorDomain` dump with a file URL in it, and
+                // appending it is the leak GitLab #692 removed. The
+                // interpreter applies the same allowlist, so an unresolvable
+                // repository scope now explains itself in both modes.
+                hint: actionResult.hint
             )))
         }
     }
