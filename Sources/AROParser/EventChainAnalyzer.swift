@@ -143,7 +143,32 @@ public final class EventChainAnalyzer: Sendable {
     /// - Parameter activity: The business activity string (e.g., "UserCreated Handler")
     /// - Returns: The event type if this is a domain handler, nil otherwise
     private func extractHandledEventType(from activity: String) -> String? {
-        EventAnalyzer.extractEventType(from: activity)
+        // A `dedupe:` handler is exempt, because dedupe is precisely what ends
+        // the chain: `Handler<dedupe:url>` runs once per distinct `url`, so a
+        // crawler that emits `CrawlPage` from its own `CrawlPage` handler
+        // terminates when the frontier does (ARO-0007 §3.6, and the crawler in
+        // its §3.6 example is the canonical shape).
+        //
+        // It used to be exempt by accident: `extractEventType` required the
+        // activity to *end* in " Handler", which `CrawlPage Handler<dedupe:url>`
+        // does not, so the handler was invisible to cycle detection — and to
+        // everything else that asked the same question. Unifying the
+        // classifiers (GitLab #724) made it visible and turned a documented,
+        // terminating pattern into "Circular event chain detected". Exempt it
+        // on purpose instead.
+        guard !declaresDedupe(activity) else { return nil }
+        return EventAnalyzer.extractEventType(from: activity)
+    }
+
+    /// Whether a business activity carries a `dedupe:` declaration in its
+    /// state-guard segment — `Handler<dedupe:url>`, or combined with a guard
+    /// as `Handler<status:new;dedupe:url>`.
+    private func declaresDedupe(_ activity: String) -> Bool {
+        guard let open = activity.firstIndex(of: "<"),
+              let close = activity.lastIndex(of: ">"), open < close else { return false }
+        return activity[activity.index(after: open)..<close]
+            .split(separator: ";")
+            .contains { $0.trimmingCharacters(in: .whitespaces).hasPrefix("dedupe:") }
     }
 
     /// Finds all event types emitted by the given statements

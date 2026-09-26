@@ -2028,16 +2028,19 @@ public final class LLVMCodeGenerator {
                     let eventType = String(activity[..<handlerRange.lowerBound])
                         .trimmingCharacters(in: .whitespaces)
 
-                    // Skip special handlers (Socket events handled separately; Application-End not an event handler)
-                    // Note: WebSocket Event MUST be checked before Socket Event because
-                    // "WebSocket Event Handler" contains "Socket Event" as a substring.
-                    guard !activity.contains("Application-End") else {
+                    // Which kind of handler this is comes from `ActivityKind`
+                    // (GitLab #724). The ordering hazard this block used to
+                    // carry in a comment — "WebSocket Event MUST be checked
+                    // before Socket Event, because one contains the other" —
+                    // is the parser's job now, and is pinned by its tests.
+                    // Which *event* of that kind, below, is still read from the
+                    // feature set's name.
+                    let kind = ActivityKind.parse(activity)
+                    guard kind != .applicationEnd else {
                         continue
                     }
 
-                    // WebSocket Event Handlers: determine event type from feature set name.
-                    // Must be checked before "Socket Event" guard since "WebSocket" contains "Socket".
-                    if activity.contains("WebSocket Event") {
+                    if kind == .webSocketEvent {
                         let featureName = analyzed.featureSet.name.lowercased()
                         let wsEventType: String
                         if featureName.contains("message") || featureName.contains("data") {
@@ -2061,9 +2064,10 @@ public final class LLVMCodeGenerator {
                         continue
                     }
 
-                    // TCP Socket Event Handlers: register by event type derived from feature set name.
-                    // DomainEvents are co-published by AROSocketClient's receive/connect/disconnect paths.
-                    if activity.contains("Socket Event") {
+                    // TCP Socket Event Handlers: which event, from the feature set name.
+                    // The DomainEvents are published by the socket client and,
+                    // since GitLab #881, by the native server too.
+                    if kind == .socketEvent {
                         let featureName = analyzed.featureSet.name.lowercased()
                         let socketEventType: String
                         if featureName.contains("data") || featureName.contains("message") || featureName.contains("received") {
@@ -2087,8 +2091,8 @@ public final class LLVMCodeGenerator {
                         continue
                     }
 
-                    // File Event Handlers: determine event type from feature set name
-                    if activity.contains("File Event") {
+                    // File Event Handlers: which event, from the feature set name.
+                    if kind == .fileEvent {
                         let featureName = analyzed.featureSet.name.lowercased()
                         let fileEventType: String
                         if featureName.contains("created") {

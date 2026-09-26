@@ -23,20 +23,12 @@ public struct EventAnalyzer {
     /// Returns the event type (e.g. "UserCreated" from "UserCreated Handler"),
     /// or nil if the activity is not a domain event handler.
     public static func extractEventType(from activity: String) -> String? {
-        guard activity.hasSuffix(" Handler") else { return nil }
-
-        // Exclude system handlers
-        if activity.contains("Socket Event Handler") ||
-           activity.contains("File Event Handler") ||
-           activity.contains("Application-End") {
-            return nil
-        }
-
-        let eventType = activity
-            .replacingOccurrences(of: " Handler", with: "")
-            .trimmingCharacters(in: .whitespaces)
-
-        return eventType.isEmpty ? nil : eventType
+        // One classifier, in `ActivityKind` (GitLab #724). The hand-written
+        // exclusion list here named Socket, File and Application-End but not
+        // WebSocket, KeyPress, StateTransition, StateObserver or
+        // NotificationSent — so a `WebSocket Event Handler` was reported as a
+        // domain event called "WebSocket Event", and four more like it.
+        return ActivityKind.parse(activity).handledDomainEvent
     }
 
     // MARK: - Circular Event Chain Detection
