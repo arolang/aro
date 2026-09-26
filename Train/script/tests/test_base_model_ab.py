@@ -11,6 +11,9 @@ if a model answering every task with that task's own reference does not score
 100%, the harness is broken and every comparison drawn from it is worthless.
 """
 
+import os
+import shutil
+import subprocess
 import sys
 import unittest
 from pathlib import Path
@@ -20,6 +23,30 @@ sys.path.insert(0, str(SCRIPT_DIR))
 
 import base_model_ab as ab  # noqa: E402
 import functional_eval as fe  # noqa: E402
+
+
+def _aro_available():
+    """Whether an `aro` binary is actually runnable here.
+
+    `train:unit` runs in `python:3.12-slim`, which has no Swift and no `aro`.
+    Every execution-graded row then comes back `passed=None` — correctly, since
+    an unreachable toolchain must never count as a pass — so `by_job` carries
+    only the `question` rows, and asserting on `write` raises KeyError. The
+    grading logic that needs no binary is still worth covering there.
+    """
+    exe = shutil.which(fe.aro_bin()) or (
+        fe.aro_bin() if os.path.exists(fe.aro_bin()) else None)
+    if not exe:
+        return False
+    try:
+        return subprocess.run([exe, '--version'], capture_output=True,
+                              timeout=20).returncode == 0
+    except Exception:
+        return False
+
+
+ARO = _aro_available()
+NEEDS_ARO = unittest.skipUnless(ARO, 'no aro binary: execution-graded jobs cannot run')
 
 
 def _answer_with(mapping):
@@ -63,6 +90,7 @@ class ScoringTest(unittest.TestCase):
     def tearDown(self):
         ab.generate_with = self._real_generate
 
+    @NEEDS_ARO
     def test_a_perfect_model_scores_100_on_every_job(self):
         # Answer each task with its own reference. Anything less than 100%
         # means the harness is wrong, not the model.
@@ -74,12 +102,14 @@ class ScoringTest(unittest.TestCase):
             self.assertEqual(summary['by_job'][job]['rate'], 1.0,
                              f'{job} should be perfect against its own references')
 
+    @NEEDS_ARO
     def test_a_model_that_says_nothing_scores_zero_on_every_job(self):
         ab.generate_with = _answer_with(lambda p: ('', ''))
         summary = ab.score('stub', self.tasks)
         for job in ('question', 'write', 'fix'):
             self.assertEqual(summary['by_job'][job]['rate'], 0.0)
 
+    @NEEDS_ARO
     def test_writing_well_and_debugging_badly_is_visible(self):
         # The reason the summary is per job: these two are different results
         # and a single pass rate cannot tell them apart.
@@ -94,6 +124,18 @@ class ScoringTest(unittest.TestCase):
         summary = ab.score('stub', self.tasks)
         self.assertEqual(summary['by_job']['write']['rate'], 1.0)
         self.assertEqual(summary['by_job']['fix']['rate'], 0.0)
+
+
+    def test_question_scoring_needs_no_toolchain(self):
+        # Runs everywhere, including the Linux `train:unit` image with no Swift
+        # in it: a prose answer is graded against a rubric, not by running
+        # anything. This is the coverage that survives when ARO is unavailable.
+        questions = [t for t in self.tasks if t.get('grade_by') == 'doc_qa']
+        self.assertTrue(questions, 'the benchmark must carry question tasks')
+        ab.generate_with = _answer_with(
+            lambda p: (self.by_prompt[p].get('reference', ''),) * 2)
+        summary = ab.score('stub', questions)
+        self.assertEqual(summary['by_job']['question']['rate'], 1.0)
 
     def test_a_model_that_cannot_be_run_is_not_scored_zero(self):
         # "Would not load" and "answered everything wrong" are different facts.
