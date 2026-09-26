@@ -34,7 +34,6 @@ Proposals/ARO-0001-language-fundamentals.md:2f5b6152ebc7  # line 983
 Proposals/ARO-0001-language-fundamentals.md:da33eec8325b  # line 1027
 Proposals/ARO-0001-language-fundamentals.md:85dbf6c7079d  # line 1093
 Proposals/ARO-0002-control-flow.md:9c5c51280df0  # line 44
-Proposals/ARO-0002-control-flow.md:d2d9da74c293  # line 87
 Proposals/ARO-0002-control-flow.md:e70a604e3ccf  # line 213
 Proposals/ARO-0002-control-flow.md:d380fa447b5f  # line 264
 Proposals/ARO-0002-control-flow.md:f63e9ef7c398  # line 280
