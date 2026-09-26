@@ -100,8 +100,18 @@ public enum LazyActionPolicy {
     /// before ARO-0088. Kept as an escape hatch: if a program misbehaves in a
     /// way that looks order-related, setting it is the one-step way to find out
     /// whether overlap is involved.
+    /// `ARO_NO_DEFER`, read once.
+    ///
+    /// `ProcessInfo.environment` builds a fresh `[String: String]` from
+    /// `environ` on every access, on both Darwin and Linux — so reading it per
+    /// statement copied the whole environment per statement (GitLab #705). The
+    /// variable is an escape hatch set before the process starts; nothing
+    /// changes it at run time.
+    private static let deferralDisabled: Bool =
+        ProcessInfo.processInfo.environment["ARO_NO_DEFER"] != nil
+
     public static func deferrable(_ canonicalVerb: String) -> Bool {
-        if ProcessInfo.processInfo.environment["ARO_NO_DEFER"] != nil { return false }
+        if deferralDisabled { return false }
         return !forceAtSiteVerbs.contains(canonicalVerb) && deferrableVerbs.contains(canonicalVerb)
     }
 }

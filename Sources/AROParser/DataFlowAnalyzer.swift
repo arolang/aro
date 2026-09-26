@@ -1287,14 +1287,15 @@ public struct DataFlowAnalyzer {
         name.hasPrefix("_")
     }
 
+    private static let rebindingVerbs: Set<String> = [
+        "accept", "update", "modify", "change", "set",
+        "merge", "combine", "join", "concat",
+        "then", "assert",
+        "clear", "show"
+    ]
+
     private func isRebindingAllowed(_ verb: String) -> Bool {
-        let rebindingVerbs: Set<String> = [
-            "accept", "update", "modify", "change", "set",
-            "merge", "combine", "join", "concat",
-            "then", "assert",
-            "clear", "show"
-        ]
-        return rebindingVerbs.contains(verb.lowercased())
+        return Self.rebindingVerbs.contains(verb.lowercased())
     }
 
     /// Whether `name` is a framework-provided object rather than a user variable.
@@ -1325,15 +1326,16 @@ public struct DataFlowAnalyzer {
         return from == "\(RequireSource.framework)" || from == "\(RequireSource.environment)"
     }
 
+    private static let serviceObjects: Set<String> = [
+        "http-server", "socket-server", "file-monitor", "websocket-server",
+        "connection", "server-connection", "client-connection",
+        "file", "directory", "path",
+        "application", "events", "shutdown-signal"
+    ]
+
     private func isServiceObject(_ name: String) -> Bool {
-        let serviceObjects: Set<String> = [
-            "http-server", "socket-server", "file-monitor", "websocket-server",
-            "connection", "server-connection", "client-connection",
-            "file", "directory", "path",
-            "application", "events", "shutdown-signal"
-        ]
         let lower = name.lowercased()
-        if serviceObjects.contains(lower) {
+        if Self.serviceObjects.contains(lower) {
             return true
         }
         if lower.hasSuffix("-server") || lower.hasSuffix("-connection") || lower.hasSuffix("-monitor") {
@@ -1342,16 +1344,17 @@ public struct DataFlowAnalyzer {
         return false
     }
 
+    private static let sideEffectPatterns: Set<String> = [
+        "http-server", "http-client", "server", "client",
+        "file-monitor", "file-watcher",
+        "database-connections", "database", "db-connection",
+        "socket-server", "socket-client",
+        "log-buffer", "cache",
+        "application"
+    ]
+
     private func isSideEffectBinding(_ name: String) -> Bool {
-        let sideEffectPatterns: Set<String> = [
-            "http-server", "http-client", "server", "client",
-            "file-monitor", "file-watcher",
-            "database-connections", "database", "db-connection",
-            "socket-server", "socket-client",
-            "log-buffer", "cache",
-            "application"
-        ]
-        return sideEffectPatterns.contains(name.lowercased())
+        return Self.sideEffectPatterns.contains(name.lowercased())
     }
 
     /// Flatten a statement tree (descending into `match` cases and
@@ -1387,27 +1390,28 @@ public struct DataFlowAnalyzer {
     /// Verbs whose "result" is really just a confirmation handle for a
     /// side-effecting action — the value rarely needs reading because
     /// the point of the statement is what it *did*, not what it returns.
+    private static let sideEffectVerbs: Set<String> = [
+        "make", "append", "write", "copy", "move", "delete",
+        "log", "emit", "send", "notify", "publish", "store",
+        "schedule", "start", "stop", "listen", "keepalive",
+        "render", "show", "repaint", "clear",
+        "broadcast", "close", "connect",
+        // ARO-0094. `Configure the <session: secure> with false.` and
+        // `Declare the <cart-repository> with { scope: "session" }.`
+        // settle framework state and produce nothing anyone reads, so
+        // "defined but never used" is noise on a statement that did
+        // exactly its job. Same reason these two are in
+        // `ActionRoleCatalog.mustRunForEffect`.
+        "configure", "declare"
+    ]
+
     private func isSideEffectVerb(_ verb: String) -> Bool {
         let v = verb.lowercased()
         // Plugin / user-defined action calls (`Application.X`,
         // `MyPlugin.DoThing`) — these are dispatched by name and almost
         // always called for their effect.
         if v.contains(".") { return true }
-        let sideEffectVerbs: Set<String> = [
-            "make", "append", "write", "copy", "move", "delete",
-            "log", "emit", "send", "notify", "publish", "store",
-            "schedule", "start", "stop", "listen", "keepalive",
-            "render", "show", "repaint", "clear",
-            "broadcast", "close", "connect",
-            // ARO-0094. `Configure the <session: secure> with false.` and
-            // `Declare the <cart-repository> with { scope: "session" }.`
-            // settle framework state and produce nothing anyone reads, so
-            // "defined but never used" is noise on a statement that did
-            // exactly its job. Same reason these two are in
-            // `ActionRoleCatalog.mustRunForEffect`.
-            "configure", "declare"
-        ]
-        return sideEffectVerbs.contains(v)
+        return Self.sideEffectVerbs.contains(v)
     }
 
     private func looksLikeVariable(_ name: String) -> Bool {

@@ -2006,7 +2006,7 @@ public struct CreateAction: ActionImplementation {
         // Get end date from _to_ (the 'to' clause)
         // Debug: Log _to_ resolution for ARO-0041 diagnostics (enable with ARO_DEBUG=1)
         let endValue = context.resolveAny("_to_")
-        if endValue == nil && ProcessInfo.processInfo.environment["ARO_DEBUG"] != nil {
+        if endValue == nil && RuntimeEnvironment.isDebug {
             FileHandle.standardError.write(Data("[CreateAction] DEBUG: _to_ is nil - date range 'to' clause not bound\n".utf8))
         }
         guard let endValue, let endDate = getARODate(from: endValue) else {

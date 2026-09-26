@@ -927,18 +927,35 @@ public final class FeatureSetExecutor: Sendable {
     /// Rebinding actions replace a value in place; REQUEST actions always
     /// produce fresh external data and must override a parent binding so an
     /// event handler doesn't read the value Application-Start left behind.
+    /// Verbs whose result may replace an existing binding.
+    ///
+    /// `static let`, not two literals in the function body: this is called for
+    /// every non-effect statement, and rebuilding two `Set<String>`s per call
+    /// allocated for nothing (GitLab #709).
+    ///
+    /// The issue also suggested deriving the second list from
+    /// `VerbSets.requestVerbs`. It is *not* the same set — `VerbSets` has
+    /// `call`, `invoke`, `listen` and `exists`, this one has `load`, `find`,
+    /// `extract`, `get`, `receive` and `read` — so sharing it would change
+    /// which statements may rebind, which is a language change wearing an
+    /// optimization's clothes. Kept separate and named for what it is.
+    private static let rebindingVerbs: Set<String> = [
+        "accept", "update", "modify", "change", "set", "configure",
+        "delete", "remove", "destroy", "clear", "show",
+        "merge", "combine", "join", "concat"
+    ]
+
+    /// Reading verbs whose result may replace an existing binding. Distinct
+    /// from `VerbSets.requestVerbs`; see above.
+    private static let rebindingRequestVerbs: Set<String> = [
+        "retrieve", "fetch", "load", "find", "extract", "parse", "get",
+        "request", "probe", "receive", "read"
+    ]
+
     private func allowsRebinding(_ verb: String) -> Bool {
-        let rebindingVerbs: Set<String> = [
-            "accept", "update", "modify", "change", "set", "configure",
-            "delete", "remove", "destroy", "clear", "show",
-            "merge", "combine", "join", "concat"
-        ]
-        let requestVerbs: Set<String> = [
-            "retrieve", "fetch", "load", "find", "extract", "parse", "get",
-            "request", "probe", "receive", "read"
-        ]
         let lowerVerb = verb.lowercased()
-        return rebindingVerbs.contains(lowerVerb) || requestVerbs.contains(lowerVerb)
+        return Self.rebindingVerbs.contains(lowerVerb)
+            || Self.rebindingRequestVerbs.contains(lowerVerb)
     }
 
     /// Start a deferred action and hand back the handle to bind (ARO-0088 §2).

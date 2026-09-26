@@ -309,7 +309,7 @@ extension ExecutionEngine {
         // Get all plugin feature sets
         let pluginFeatureSets = PluginFeatureSetRegistry.shared.getAll()
 
-        if ProcessInfo.processInfo.environment["ARO_DEBUG"] != nil {
+        if RuntimeEnvironment.isDebug {
             FileHandle.standardError.write(Data("[ExecutionEngine] Found \(pluginFeatureSets.count) plugin feature sets\n".utf8))
         }
 
@@ -324,7 +324,7 @@ extension ExecutionEngine {
             return hasHandler && !isSpecialHandler
         }
 
-        if ProcessInfo.processInfo.environment["ARO_DEBUG"] != nil {
+        if RuntimeEnvironment.isDebug {
             FileHandle.standardError.write(Data("[ExecutionEngine] Found \(domainHandlers.count) plugin domain handlers\n".utf8))
             for handler in domainHandlers {
                 FileHandle.standardError.write(Data("[ExecutionEngine] - \(handler.qualifiedName) (\(handler.analyzedFeatureSet.featureSet.businessActivity))\n".utf8))
@@ -352,7 +352,7 @@ extension ExecutionEngine {
 
             let capturedEventType = eventType
             eventBus.subscribe(to: DomainEvent.self) { event in
-                if ProcessInfo.processInfo.environment["ARO_DEBUG"] != nil {
+                if RuntimeEnvironment.isDebug {
                     FileHandle.standardError.write(Data("[ExecutionEngine] Plugin handler received event: \(event.domainEventType), expecting: \(capturedEventType)\n".utf8))
                 }
                 guard event.domainEventType == capturedEventType else { return }
@@ -361,7 +361,7 @@ extension ExecutionEngine {
                     guard guardSet.allMatch(payload: event.payload) else { return }
                 }
 
-                if ProcessInfo.processInfo.environment["ARO_DEBUG"] != nil {
+                if RuntimeEnvironment.isDebug {
                     FileHandle.standardError.write(Data("[ExecutionEngine] Executing plugin handler for: \(capturedEventType)\n".utf8))
                 }
 
