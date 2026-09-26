@@ -11,8 +11,8 @@
    existing one and rotates it, which is the session-fixation defence. *)
 (login: Shop API) {
     Extract the <name> from the <request: body> default "guest".
-    Create the <session> with { user: <name> }.
-    Attach the <session> to the <caller>.
+    Create the <new-session> with { user: <name> }.
+    Attach the <new-session> to the <caller>.
     Return an <OK: status> with { user: <name> }.
 }
 
