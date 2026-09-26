@@ -8,4 +8,4 @@ File created
 File modified
 File deleted
 File watcher stopped.
-startup
+[OK] startup

@@ -30,4 +30,4 @@ DATABASE_HOST: localhost
 DATABASE_NAME: myapp
 DATABASE_PORT: 5432
 === Format-Aware I/O demo complete! ===
-demo
+[OK] demo

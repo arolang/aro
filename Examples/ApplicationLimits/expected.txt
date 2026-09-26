@@ -5,4 +5,4 @@ fetched 4
 fetched 5
 fetched 6
 crawl finished
-startup
+[OK] startup

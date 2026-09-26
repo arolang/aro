@@ -5,4 +5,4 @@ Testing custom greeting plugin...
 Hello, ARO Developer!
 Goodbye, ARO Developer! See you next time.
 Custom plugin demo completed.
-startup
+[OK] startup

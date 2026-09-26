@@ -1,4 +1,17 @@
 # Test hints for CSVProcessor
 # Requires managed plugin: https://github.com/arolang/plugin-rust-csv
-mode: both
+#
+# Interpreter only. The expected output used to be the banner line alone, with
+# a note that the plugin might not load; that assertion held whether or not the
+# plugin worked. Pinning the real output (GitLab #820) showed it does not work
+# in compiled mode: `aro build --static` compiles the Rust staticlib and
+# renames its symbols, and the compiled binary still answers
+#   Cannot parsecsv the parsed from the csv-data.
+# so the plugin's actions are not resolvable at run time. SQLiteExample fails
+# the same way; HashPluginDemo's C plugin and QualifierPlugin's Swift
+# qualifiers work compiled. That is a bug to fix in the build/runtime
+# (GitLab #884), not an expectation to weaken, so this example asserts the
+# interpreter's full output until it is; restoring `mode: both` is that
+# issue's acceptance test.
+mode: interpreter
 occurrence-check: true

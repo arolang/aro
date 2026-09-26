@@ -84,4 +84,4 @@ aro_process_max_fds
 # HELP aro_process_start_time_seconds Process start time in Unix epoch seconds
 # TYPE aro_process_start_time_seconds gauge
 aro_process_start_time_seconds
-demo
+[OK] demo

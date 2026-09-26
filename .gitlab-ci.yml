@@ -224,6 +224,11 @@ proposals:
 # ARO-0004 §11 is the authoritative action spec. It had drifted to 48 of 70
 # actions with several wrong rows; it is now derived from the runtime and this
 # job fails if the committed table no longer matches.
+#
+# The same job verifies CLAUDE.md's Action Semantic Roles summary (GitLab
+# #846). That one stays hand-picked — it names a few representative actions per
+# role — so it is checked rather than generated: every name must resolve, in the
+# runtime, to the role its bullet claims.
 action-reference:
   stage: test
   image: python:3.12-slim
@@ -240,6 +245,21 @@ grammar-appendix:
   image: python:3.12-slim
   script:
     - python3 Book/TheConstructionStudies/generate-grammar-appendix.py --check
+
+# =============================================================================
+# The training pipeline's stage table is generated too (GitLab #802)
+# =============================================================================
+# `Train/README.md`, the init notebook and the book appendix each kept their own
+# copy of the notebook list, offset from the filenames by two in one place and
+# by one in another, and 21 of the 27 notebooks opened with a heading carrying
+# a number from before the 2026-07 renumber. The table is now derived from the
+# meta pipeline's own NOTEBOOKS list, and this job fails when a copy, a
+# heading, or the set of notebook files stops matching it.
+train-stages:
+  stage: test
+  image: python:3.12-slim
+  script:
+    - python3 Scripts/generate-train-stages.py --check
 
 # =============================================================================
 # Editor grammars are generated, not hand-maintained (GitLab #695)
@@ -1009,6 +1029,11 @@ train:catalogs:
     - python3 Train/script/extract_action_catalog.py --check
     - python3 Train/script/extract_action_verbs.py --check
     - python3 Train/script/extract_qualifier_catalog.py --check
+    # The FIXTRAIN rules' corrected examples are run through `aro check` here
+    # (GitLab #811). train:unit runs the same file on a slim image where those
+    # cases skip for want of a binary; this is where they execute.
+    - python3 -m pip install --quiet pytest
+    - python3 -m pytest Train/script/tests/test_fixtrain_examples.py -q
 
 # =============================================================================
 # The corpus is re-validated when the language changes (GitLab #783)
@@ -1095,6 +1120,14 @@ documentation:
     - cd Book/AROForDataEngineers
     - chmod +x build-pdf.sh
     - ./build-pdf.sh
+    - cd ../..
+    # Build the Short Studies. Its rendered HTML and PDF used to be checked
+    # into Book/TheShortStudies/output and built by no pipeline at all, so the
+    # copy in the repository was the only one that existed and it aged
+    # (GitLab #847). The script is named build.sh, not build-pdf.sh.
+    - cd Book/TheShortStudies
+    - chmod +x build.sh
+    - ./build.sh
   artifacts:
     name: aro-documentation
     paths:
@@ -1106,6 +1139,8 @@ documentation:
       - Book/AROByHallucination/output/ARO-by-Hallucination.pdf
       - Book/AROByHallucination/output/ARO-by-Hallucination.html
       - Book/AROForDataEngineers/output/ARO-For-Data-Engineers.pdf
+      - Book/TheShortStudies/output/ARO-Short-Studies.pdf
+      - Book/TheShortStudies/output/ARO-Short-Studies.html
     expire_in: 30 days
 
 # =============================================================================
@@ -1163,6 +1198,7 @@ release:
     - ls -la Book/TheEssentialPrimer/output/ARO-Essential-Primer.pdf || echo "Essential Primer PDF not found"
     - ls -la Book/AROByHallucination/output/ARO-by-Hallucination.pdf || echo "ARO by Hallucination PDF not found"
     - ls -la Book/AROForDataEngineers/output/ARO-For-Data-Engineers.pdf || echo "Data Engineers PDF not found"
+    - ls -la Book/TheShortStudies/output/ARO-Short-Studies.pdf || echo "Short Studies PDF not found"
 
     # Determine if prerelease
     - |
@@ -1183,6 +1219,7 @@ release:
       - Book/TheEssentialPrimer/output/ARO-Essential-Primer.pdf
       - Book/AROByHallucination/output/ARO-by-Hallucination.pdf
       - Book/AROForDataEngineers/output/ARO-For-Data-Engineers.pdf
+      - Book/TheShortStudies/output/ARO-Short-Studies.pdf
     expire_in: 1 year
   release:
     tag_name: $CI_COMMIT_TAG
@@ -1209,6 +1246,7 @@ release:
       | ARO Essential Primer | [ARO-Essential-Primer.pdf]($CI_PROJECT_URL/-/releases/$CI_COMMIT_TAG/downloads/ARO-Essential-Primer.pdf) |
       | ARO by Hallucination | [ARO-by-Hallucination.pdf]($CI_PROJECT_URL/-/releases/$CI_COMMIT_TAG/downloads/ARO-by-Hallucination.pdf) |
       | ARO for Data Engineers | [ARO-For-Data-Engineers.pdf]($CI_PROJECT_URL/-/releases/$CI_COMMIT_TAG/downloads/ARO-For-Data-Engineers.pdf) |
+      | ARO Short Studies | [ARO-Short-Studies.pdf]($CI_PROJECT_URL/-/releases/$CI_COMMIT_TAG/downloads/ARO-Short-Studies.pdf) |
 
       ### Installation
 
@@ -1286,6 +1324,14 @@ release:
         - name: 'ARO-by-Hallucination.pdf'
           url: '$CI_PROJECT_URL/-/jobs/artifacts/$CI_COMMIT_TAG/raw/Book/AROByHallucination/output/ARO-by-Hallucination.pdf?job=release'
           filepath: '/ARO-by-Hallucination.pdf'
+          link_type: 'other'
+        - name: 'ARO-For-Data-Engineers.pdf'
+          url: '$CI_PROJECT_URL/-/jobs/artifacts/$CI_COMMIT_TAG/raw/Book/AROForDataEngineers/output/ARO-For-Data-Engineers.pdf?job=release'
+          filepath: '/ARO-For-Data-Engineers.pdf'
+          link_type: 'other'
+        - name: 'ARO-Short-Studies.pdf'
+          url: '$CI_PROJECT_URL/-/jobs/artifacts/$CI_COMMIT_TAG/raw/Book/TheShortStudies/output/ARO-Short-Studies.pdf?job=release'
+          filepath: '/ARO-Short-Studies.pdf'
           link_type: 'other'
 
 # =============================================================================

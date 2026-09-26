@@ -21,3 +21,4 @@ Wire up plugin telemetry
 Petr
 
 Digest assembled.
+[OK] digest

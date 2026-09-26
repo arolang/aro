@@ -13,3 +13,4 @@ bronze/customers.jsonl — 4 rows
 silver/order_facts.jsonl — 4 rows
 == gold ==
 gold/revenue_by_region.csv — 2 rows
+[OK] pipeline

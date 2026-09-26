@@ -1,5 +1,15 @@
+# Generated: Sat Sep 26 09:05:04 2026
 # Type: console
 # Command: aro run ./Examples/ZipService
-# Note: occurrence-check — plugin may not load if dylib not built
+# NOTE: This example uses test-script for verification
+# This expected.txt is for reference only, not used in testing
+# Timeout: 300s
 ---
 Testing zip plugin...
+Zip result:
+filesCompressed: 2
+output: Examples/ZipService/content/archive.zip
+success: true
+Zip service demo completed.
+[OK] startup
+value: ["output": "Examples/ZipService/content/archive.zip", "filesCompressed": 2, "success": true]

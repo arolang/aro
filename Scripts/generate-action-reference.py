@@ -253,6 +253,70 @@ def render_role_summary(actions: list[dict]) -> str:
     return "\n".join(lines)
 
 
+# ---------------------------------------------------------------------------
+# CLAUDE.md's role summary (GitLab #846)
+# ---------------------------------------------------------------------------
+# CLAUDE.md is the file an agent reads first, and it kept a sixth hand-written
+# copy of the taxonomy: it put `Store`, `Log` and `Send` under EXPORT, where the
+# code puts them under RESPONSE, and left the `server` role out altogether.
+#
+# The summary stays hand-picked — it names a handful of representative actions
+# per role rather than all of them, which is the whole point of a summary — so
+# it is *verified* rather than generated: every name it prints must resolve, in
+# the runtime, to the role the bullet claims. A name may be a verb (`Extract`)
+# or an action type (`WaitForEvents`); both spellings appear in the file and
+# both are checkable.
+
+CLAUDE_MD = "CLAUDE.md"
+CLAUDE_SECTION = "### Action Semantic Roles"
+CLAUDE_BULLET = re.compile(r"^- \*\*([A-Z]+)\*\* \(([^)]*)\):", re.MULTILINE)
+
+
+def claude_md_section(document: str) -> str:
+    """The Action Semantic Roles section, up to the next heading."""
+    if CLAUDE_SECTION not in document:
+        raise SystemExit(f"error: {CLAUDE_MD} is missing the '{CLAUDE_SECTION}' section")
+    start = document.index(CLAUDE_SECTION) + len(CLAUDE_SECTION)
+    rest = document[start:]
+    end = rest.find("\n### ")
+    return rest if end == -1 else rest[:end]
+
+
+def check_claude_md(actions: list[dict]) -> list[str]:
+    """Problems with CLAUDE.md's role bullets, as human-readable lines."""
+    with open(CLAUDE_MD, encoding="utf-8") as handle:
+        section = claude_md_section(handle.read())
+
+    by_verb = {verb: action for action in actions for verb in action["verbs"]}
+    by_name = {action["name"].lower(): action for action in actions}
+
+    problems: list[str] = []
+    seen: set[str] = set()
+    for match in CLAUDE_BULLET.finditer(section):
+        role = match.group(1).lower()
+        seen.add(role)
+        if role not in ROLES:
+            problems.append(f"{role.upper()} is not a role; the five are {', '.join(r.upper() for r in ROLES)}")
+            continue
+        for raw in match.group(2).split(","):
+            name = raw.strip().strip("*`").strip()
+            if not name:
+                continue
+            action = by_verb.get(name.lower()) or by_name.get(name.lower())
+            if action is None:
+                problems.append(f"{role.upper()} names {name}, which is neither a registered verb nor an action")
+            elif action["role"] != role:
+                problems.append(
+                    f"{role.upper()} names {name}, but the runtime gives "
+                    f"{action['name']} the role {action['role']}"
+                )
+
+    for role in ROLES:
+        if role not in seen:
+            problems.append(f"the {role.upper()} role has no bullet")
+    return problems
+
+
 def splice(document: str, begin: str, end: str, replacement: str, path: str) -> str:
     if begin not in document or end not in document:
         raise SystemExit(f"error: {path} is missing the {begin} / {end} markers")
@@ -301,6 +365,11 @@ def main() -> int:
             handle.write(updated)
         print(f"Updated the generated tables in {path}.")
 
+    # CLAUDE.md's summary is verified in both modes: it is a hand-picked list,
+    # so there is nothing to rewrite, but a wrong role there is the same bug
+    # (GitLab #846).
+    problems = check_claude_md(actions)
+
     if args.check:
         if stale:
             print(
@@ -310,7 +379,16 @@ def main() -> int:
                 + "  Regenerate with: python3 Scripts/generate-action-reference.py"
             )
             return 1
-        print(f"Action reference is up to date: {len(actions)} actions.")
+        if not problems:
+            print(f"Action reference is up to date: {len(actions)} actions.")
+
+    if problems:
+        print(
+            f"error: {CLAUDE_MD}'s Action Semantic Roles disagree with the runtime:\n"
+            + "".join(f"    {problem}\n" for problem in problems)
+            + "  `aro actions` prints the live table; fix the bullets to match it."
+        )
+        return 1
     return 0
 
 

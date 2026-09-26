@@ -1,12 +1,17 @@
-# Generated: Sat Jan 10 15:57:53 2026
+# Generated: Sat Sep 26 08:41:15 2026
 # Type: console
 # Command: aro run ./Examples/EventExample
+# NOTE: the five handlers run concurrently, so their interleaving differs run
+# to run. test.hint sets occurrence-check, which ignores order; the handlers
+# are listed numerically here rather than in one run's observed order so the
+# file does not read as a claim about scheduling (GitLab #820).
 ---
 Starting Event Example...
 Handler #1 executed
 Handler #2 executed
 Handler #3 executed
-Handler #5 executed
 Handler #4 executed
+Handler #5 executed
 Event emitted. All handlers should have executed.
-startup
+Very Good!
+[OK] startup
