@@ -1,0 +1,9 @@
+# Generated: Sat Sep 26 17:00:32 2026
+# Type: http
+# Command: aro run ./Examples/SessionScopedCart
+---
+POST /login => {"user.data":"test"}
+GET /catalogue => {"data":[{"id":"hat","price":12},{"id":"boot","price":40}]}
+POST /cart => {"data":"test"}
+GET /cart => {"data":[{"data":"test","id":"__UUID__"}]}
+POST /logout => {"reason":"logout","status":"OK"}

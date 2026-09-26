@@ -729,6 +729,32 @@ public final class Application: @unchecked Sendable {
         // Bind cookie parameters (declared as in: cookie in the OpenAPI spec)
         context.bind("cookieParameters", value: cookieParams)
 
+        // The caller's session, as a record (ARO-0094 §9). This is what makes
+        // `Extract the <id> from the <session: id>.` work — the spelling the
+        // proposal's own logout example uses, and the only way an ARO program
+        // can name its own session without the runtime inventing a magic
+        // variable. `<session>` is already a declared system object, so this
+        // fills a name the language had rather than adding one.
+        //
+        // The record is the row from the sessions repository when there is
+        // one, so `<session: user>` reaches whatever the application put
+        // there. A request with no valid cookie binds an empty record rather
+        // than nothing, so reading a field is an absent value and not an
+        // undefined-variable error — the same call ARO makes for a `Retrieve`
+        // that matches nothing (GitLab #835).
+        if case .session(let sessionId, _) = caller {
+            let rows = await RuntimeContainer.default.repositoryStorage.retrieve(
+                from: SessionRepositories.sessions,
+                businessActivity: "session",
+                caller: "",
+                where: "id", equals: sessionId)
+            let record = rows.compactMap { $0 as? [String: any Sendable] }.first
+                ?? ["id": sessionId]
+            context.bind("session", value: record)
+        } else {
+            context.bind("session", value: [String: any Sendable]())
+        }
+
         // Also bind body directly for convenience
         if let parsedBody = bodyValue as? [String: any Sendable] {
             context.bind("body", value: parsedBody)

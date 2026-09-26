@@ -36,6 +36,16 @@ sub get_operation_order {
     $path //= '';
 
     # Order groups (0-9 = setup, 10-19 = read, 20-29 = create, 30-89 = updates, 90-99 = cleanup)
+    #
+    # Authentication is setup: a route behind a session cookie cannot be
+    # exercised before something issues one, and driving it first makes every
+    # protected route fail in a way that looks like the feature is broken
+    # (ARO-0094). Logging out is the mirror image — do it after everything
+    # that needs the session, and after `delete`, or the cleanup routes lose
+    # their caller.
+    return 5  if $operation_id =~ /^(login|signin|sign_in|authenticate)/i;
+    return 96 if $operation_id =~ /^(logout|signout|sign_out)/i;
+
     return 10 if $operation_id =~ /^list/i;              # List operations first
     return 15 if $operation_id =~ /^get/i && $path =~ /\{/;  # Get by ID after list
     return 20 if $operation_id =~ /^create/i;            # Create operations next
