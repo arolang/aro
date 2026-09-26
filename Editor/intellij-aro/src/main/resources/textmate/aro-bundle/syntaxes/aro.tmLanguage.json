@@ -144,8 +144,8 @@
         },
         {
           "name": "keyword.action.own.aro",
-          "match": "\\b(Accept|Aggregate|Arrange|Assert|Build|Calculate|Call|Change|Check|Checkout|Clear|Combine|Compare|Compute|Configure|Construct|Convert|Create|Delay|Delete|Derive|Destroy|Embed|Exec|Execute|Filter|Flip|Given|Group|Include|Insert|Invoke|Join|Map|Match|Merge|Modify|Order|ParseHtml|Parsehtml|Pause|Reduce|Remove|Reverse|Run|Set|Shell|Show|Sleep|Sort|Split|Stage|Then|Transform|Update|Validate|Verify|When)\\b",
-          "comment": "OWN actions - internal processing (58 verbs, generated)"
+          "match": "\\b(Accept|Aggregate|Arrange|Assert|Attach|Build|Calculate|Call|Change|Check|Checkout|Clear|Combine|Compare|Compute|Configure|Construct|Convert|Create|Declare|Delay|Delete|Derive|Destroy|Embed|Exec|Execute|Filter|Flip|Given|Group|Include|Insert|Invoke|Join|Map|Match|Merge|Modify|Order|ParseHtml|Parsehtml|Pause|Reduce|Remove|Reverse|Run|Set|Shell|Show|Sleep|Sort|Split|Stage|Then|Transform|Update|Validate|Verify|When)\\b",
+          "comment": "OWN actions - internal processing (60 verbs, generated)"
         },
         {
           "name": "keyword.action.response.aro",

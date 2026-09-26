@@ -88,6 +88,45 @@ public struct AROError: Error, Sendable {
     }
 }
 
+extension AROError {
+
+    /// The one sentence a reconstructed statement cannot supply for itself.
+    ///
+    /// ARO-0006 says the statement *is* the message, and for nearly every
+    /// failure it is. These are the exceptions — failures where the statement
+    /// reads perfectly well and gives no clue what went wrong:
+    ///
+    ///   * a filesystem error: `Delete the <gone> from "./f.txt"` is fine; the
+    ///     path being missing rather than undeletable is not in the statement
+    ///     (GitLab #493).
+    ///   * an unknown Compute qualifier: the name does not exist, and nothing
+    ///     in the line says so (GitLab #486).
+    ///   * a repository scope that cannot resolve: `Cannot store the item into
+    ///     the cart-repository.` reads fine and says nothing about sessions
+    ///     (ARO-0094 §7.1).
+    ///
+    /// Deliberately an allowlist of ARO's *own* curated errors. Appending
+    /// whatever the underlying error said is how a compiled binary ends up
+    /// printing an `NSCocoaErrorDomain` dump with a file URL in it, which is
+    /// the leak GitLab #692 removed.
+    ///
+    /// Shared so the interpreter and the compiled bridge give the same answer:
+    /// they had separate paths, and only the interpreter's carried a hint.
+    public static func curatedHint(for error: any Error) -> String? {
+        if let fsError = error as? FileSystemError {
+            return fsError.description
+        }
+        if let scopeError = error as? RepositoryScopeError {
+            return scopeError.description + "."
+        }
+        if let actionError = error as? ActionError,
+           case .unknownComputation = actionError {
+            return actionError.description
+        }
+        return nil
+    }
+}
+
 extension AROError: CustomStringConvertible {
     public var description: String {
         var desc = """

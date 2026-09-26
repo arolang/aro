@@ -2542,6 +2542,63 @@ struct SecurityEnforcerTests {
 
     // MARK: No Security
 
+    // MARK: - Cookie schemes (ARO-0094 §8.3)
+
+    private func cookieScheme(name: String = "aro_session") -> SecurityScheme {
+        SecurityScheme(type: "apiKey", description: nil, name: name, in: "cookie",
+                       scheme: nil, bearerFormat: nil)
+    }
+
+    @Test("A cookie scheme is not satisfied by a cookie that is merely present")
+    func cookiePresenceIsNotAuthentication() {
+        // This branch used to be `cookieHeader.contains("\(name)=")`, so an
+        // empty value passed and so did any value at all. That was a gate on
+        // routes; once the same cookie selects whose data a statement reads it
+        // is a complete authentication bypass (ARO-0094 §8.3).
+        let op = makeOperation(security: [["sessionAuth": []]])
+        for header in ["aro_session=anything-at-all", "aro_session="] {
+            let result = SecurityEnforcer.enforce(
+                operation: op,
+                globalSecurity: nil,
+                securitySchemes: ["sessionAuth": cookieScheme()],
+                headers: ["Cookie": header],
+                queryParameters: [:],
+                resolvedSession: nil
+            )
+            #expect(result?.statusCode == 401, "unvalidated cookie '\(header)' must not pass")
+        }
+    }
+
+    @Test("A cookie scheme is satisfied by a session the runtime validated")
+    func validatedSessionPasses() {
+        let op = makeOperation(security: [["sessionAuth": []]])
+        let result = SecurityEnforcer.enforce(
+            operation: op,
+            globalSecurity: nil,
+            securitySchemes: ["sessionAuth": cookieScheme()],
+            headers: ["Cookie": "aro_session=abc.def"],
+            queryParameters: [:],
+            resolvedSession: "abc"
+        )
+        #expect(result == nil)
+    }
+
+    @Test("A cookie of another name does not satisfy the scheme")
+    func cookieNameIsNotASubstring() {
+        // `contains("aro_session=")` also matched `not_aro_session=x`, because
+        // a substring test does not know where a cookie name begins.
+        let op = makeOperation(security: [["sessionAuth": []]])
+        let result = SecurityEnforcer.enforce(
+            operation: op,
+            globalSecurity: nil,
+            securitySchemes: ["sessionAuth": cookieScheme()],
+            headers: ["Cookie": "not_aro_session=x"],
+            queryParameters: [:],
+            resolvedSession: "abc"
+        )
+        #expect(result?.statusCode == 401)
+    }
+
     @Test("No security field on spec and operation — passes")
     func testNoSecurityPassesThrough() {
         let op = makeOperation(security: nil)
@@ -2719,15 +2776,20 @@ struct SecurityEnforcerTests {
 
     // MARK: apiKey — cookie
 
-    @Test("apiKey cookie present — passes")
+    @Test("apiKey cookie present and validated — passes")
     func testApiKeyCookiePresent() {
+        // This test used to pass the cookie alone, because presence was all the
+        // enforcer checked. ARO-0094 §8.3 makes a cookie scheme mean a session
+        // the runtime validated, so the cookie is now necessary and not
+        // sufficient — see `cookiePresenceIsNotAuthentication` for the other half.
         let op = makeOperation(security: [["cookieAuth": []]])
         let result = SecurityEnforcer.enforce(
             operation: op,
             globalSecurity: nil,
             securitySchemes: ["cookieAuth": apiKeyCookieScheme()],
             headers: ["Cookie": "session=abc123"],
-            queryParameters: [:]
+            queryParameters: [:],
+            resolvedSession: "abc123"
         )
         #expect(result == nil)
     }

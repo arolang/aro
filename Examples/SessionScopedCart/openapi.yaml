@@ -1,0 +1,62 @@
+openapi: 3.0.3
+info:
+  title: Session-Scoped Cart
+  version: 1.0.0
+  description: >
+    A shopping cart that belongs to whoever is shopping (ARO-0094). The
+    catalogue is application-scoped and shared; the cart is session-scoped and
+    is not.
+
+components:
+  securitySchemes:
+    # `in: cookie` is the OpenAPI keyword for a session cookie, and declaring
+    # it here is what makes the session part of the contract rather than a
+    # convention. Every tool that reads the contract can see it.
+    sessionAuth:
+      type: apiKey
+      in: cookie
+      name: aro_session
+
+paths:
+  /catalogue:
+    get:
+      operationId: listCatalogue
+      # No `security:` — the catalogue is public, and an application-scoped
+      # repository is reachable without a caller.
+      security: []
+      responses:
+        '200':
+          description: Everything for sale
+
+  /login:
+    post:
+      operationId: login
+      security: []
+      responses:
+        '200':
+          description: A session, delivered as a Set-Cookie header
+
+  /cart:
+    post:
+      operationId: addToCart
+      security:
+        - sessionAuth: []
+      responses:
+        '201':
+          description: Added to this caller's cart
+    get:
+      operationId: showCart
+      security:
+        - sessionAuth: []
+      responses:
+        '200':
+          description: This caller's cart, and nobody else's
+
+  /logout:
+    post:
+      operationId: logout
+      security:
+        - sessionAuth: []
+      responses:
+        '200':
+          description: Session revoked, cart gone with it

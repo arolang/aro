@@ -111,6 +111,25 @@ public final class AROWebSocketServer: WebSocketServerService, @unchecked Sendab
     /// WebSocket path (default: /ws)
     public let path: String
 
+    /// Whether an upgrade must carry a valid session cookie (ARO-0094 §8.1).
+    ///
+    /// Off unless the program says `Start the <websocket-server> with
+    /// { security: "sessionAuth" }`, because turning it on for every existing
+    /// WebSocket would break them all; on, it also makes `Origin` validation
+    /// mandatory, since `SameSite` does not reliably cover a WS handshake and
+    /// a cookie-authenticated socket without an origin check is open to
+    /// cross-site hijacking.
+    public private(set) var requiresSession: Bool = false
+
+    /// Origins accepted for an upgrade. Only consulted when `requiresSession`.
+    public private(set) var allowedOrigins: [String] = []
+
+    /// Declare the socket's security. Called from `Start`.
+    public func configureSecurity(requiresSession: Bool, allowedOrigins: [String]) {
+        self.requiresSession = requiresSession
+        self.allowedOrigins = allowedOrigins
+    }
+
     /// Number of active connections
     public var connectionCount: Int {
         withLock { connections.count }
@@ -202,9 +221,15 @@ public final class AROWebSocketServer: WebSocketServerService, @unchecked Sendab
     // MARK: - Connection Management (called by WebSocket handler)
 
     /// Add a new WebSocket connection
-    func addConnection(id: String, channel: Channel, path: String, remoteAddress: String) {
+    func addConnection(id: String, channel: Channel, path: String, remoteAddress: String,
+                       session: String? = nil) {
         let conn = WebSocketConnection(channel: channel, path: path, remoteAddress: remoteAddress)
         withLock { connections[id] = conn }
+
+        // The session resolved at upgrade (ARO-0094 §4.2) is held for the life
+        // of the connection: a frame carries no cookie, so this is the only
+        // moment the socket can be attributed.
+        Task { await SessionService.shared.connectionOpened(id: id, transport: "websocket", session: session) }
 
         eventBus.publish(WebSocketConnectedEvent(
             connectionId: id,
@@ -227,6 +252,12 @@ public final class AROWebSocketServer: WebSocketServerService, @unchecked Sendab
         let removed = withLock { connections.removeValue(forKey: id) != nil }
 
         if removed {
+            // ARO-0094 §6.2: drop this connection's connection-scoped
+            // repositories. Not an optimisation — without it a long-running
+            // server accumulates one set per connection for the life of the
+            // process.
+            Task { await SessionService.shared.connectionClosed(id: id) }
+
             eventBus.publish(WebSocketDisconnectedEvent(
                 connectionId: id,
                 reason: reason
@@ -392,34 +423,83 @@ public func createWebSocketUpgrader(
         shouldUpgrade: { channel, head in
             // Only upgrade if path matches
             let requestPath = head.uri.split(separator: "?").first.map(String.init) ?? head.uri
-            if requestPath == path {
-                // IMPORTANT: Remove HTTP handler BEFORE upgrade proceeds.
-                // This must happen before NIO adds WebSocket handlers,
-                // otherwise our HTTP handler ends up at the front of the pipeline
-                // and receives raw WebSocket bytes it can't decode.
-                return channel.pipeline.removeHandler(name: "AROHTTPHandler")
-                    .map { _ in [:] as HTTPHeaders }
-                    .flatMapError { _ in
-                        // Handler might not exist, that's OK
-                        channel.eventLoop.makeSucceededFuture([:] as HTTPHeaders)
-                    }
+            guard requestPath == path else {
+                return channel.eventLoop.makeSucceededFuture(nil)
             }
-            return channel.eventLoop.makeSucceededFuture(nil)
+
+            // ARO-0094 §8.2: a cookie-authenticated WebSocket validates its
+            // `Origin`. `SameSite` does not reliably cover a WS handshake, so
+            // without this any page the user visits can open an authenticated
+            // socket to this server with their cookie attached. Refusing the
+            // upgrade — rather than accepting it and closing it afterwards —
+            // is the difference between a rejected handshake and a moment of
+            // authenticated access.
+            //
+            // Only when the program asked for session-authenticated sockets:
+            // an unauthenticated WebSocket carries no identity to steal, and
+            // requiring an origin list of every existing program would break
+            // them all.
+            if server.requiresSession {
+                let origin = head.headers.first(name: "Origin")
+                guard let origin, server.allowedOrigins.contains(origin) else {
+                    return channel.eventLoop.makeSucceededFuture(nil)
+                }
+            }
+
+            // IMPORTANT: Remove HTTP handler BEFORE upgrade proceeds.
+            // This must happen before NIO adds WebSocket handlers,
+            // otherwise our HTTP handler ends up at the front of the pipeline
+            // and receives raw WebSocket bytes it can't decode.
+            return channel.pipeline.removeHandler(name: "AROHTTPHandler")
+                .map { _ in [:] as HTTPHeaders }
+                .flatMapError { _ in
+                    // Handler might not exist, that's OK
+                    channel.eventLoop.makeSucceededFuture([:] as HTTPHeaders)
+                }
         },
         upgradePipelineHandler: { channel, head in
             let connectionId = UUID().uuidString
             let remoteAddress = channel.remoteAddress?.description ?? "unknown"
             let requestPath = head.uri.split(separator: "?").first.map(String.init) ?? head.uri
 
-            let handler = server.createUpgradeHandler(
-                connectionId: connectionId,
-                path: requestPath,
-                remoteAddress: remoteAddress
-            )
+            // A WebSocket has exactly one HTTP request in its life, and this is
+            // it (ARO-0094 §4.2). The cookie is read here and the session held
+            // for the connection; no frame after this carries one.
+            //
+            // The promise gates the pipeline on that resolution: attributing
+            // the connection after the first frame could arrive would let a
+            // frame run as `.connection` when the socket is in fact a session,
+            // which is a session-scoped `Store` landing in the wrong partition.
+            let cookieHeader = head.headers.first(name: "Cookie") ?? ""
+            let gate = channel.eventLoop.makePromise(of: Void.self)
+            Task {
+                var session: String?
+                if !cookieHeader.isEmpty,
+                   case .success(let id) = await SessionService.shared.resolve(cookieHeader: cookieHeader) {
+                    session = id
+                }
+                if server.requiresSession && session == nil {
+                    // Declared as session-authenticated and the cookie did not
+                    // resolve: close rather than serve an anonymous socket on a
+                    // path whose handlers assume a caller.
+                    gate.fail(WebSocketError.connectionNotFound(connectionId))
+                    return
+                }
+                await SessionService.shared.connectionOpened(
+                    id: connectionId, transport: "websocket", session: session)
+                gate.succeed(())
+            }
 
-            // HTTP handler was already removed in shouldUpgrade.
-            // Just add the WebSocket handler.
-            return channel.pipeline.addHandler(handler)
+            return gate.futureResult.flatMap { _ in
+                let handler = server.createUpgradeHandler(
+                    connectionId: connectionId,
+                    path: requestPath,
+                    remoteAddress: remoteAddress
+                )
+                // HTTP handler was already removed in shouldUpgrade.
+                // Just add the WebSocket handler.
+                return channel.pipeline.addHandler(handler)
+            }
         }
     )
 }

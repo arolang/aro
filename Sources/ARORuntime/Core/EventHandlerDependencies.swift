@@ -36,13 +36,15 @@ struct HandlerDependencies: Sendable {
     /// business activity, parented to the context the application started in.
     func makeContext(
         for analyzedFS: AnalyzedFeatureSet,
-        parent: RuntimeContext
+        parent: RuntimeContext,
+        caller: CallerIdentity? = nil
     ) -> RuntimeContext {
         RuntimeContext(
             featureSetName: analyzedFS.featureSet.name,
             businessActivity: analyzedFS.featureSet.businessActivity,
             eventBus: eventBus,
-            parent: parent
+            parent: parent,
+            caller: caller
         )
     }
 

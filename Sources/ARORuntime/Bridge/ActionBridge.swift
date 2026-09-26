@@ -278,11 +278,14 @@ private func executeAction(
                 preposition: objectDesc.preposition.rawValue,
                 object: objectDesc.fullName,
                 featureSet: ctxHandle.context.featureSetName,
-                businessActivity: ctxHandle.context.businessActivity
-                // No `hint:`. The underlying message is whatever Foundation
-                // said — an `NSCocoaErrorDomain` dump with a file URL in it —
-                // and appending it is the leak this fix removes. The
-                // interpreter adds only its own curated hints.
+                businessActivity: ctxHandle.context.businessActivity,
+                // Only ARO's own curated hints (`AROError.curatedHint`), never
+                // the raw message — that is whatever Foundation said, an
+                // `NSCocoaErrorDomain` dump with a file URL in it, and
+                // appending it is the leak GitLab #692 removed. The
+                // interpreter applies the same allowlist, so an unresolvable
+                // repository scope now explains itself in both modes.
+                hint: actionResult.hint
             )))
         }
     }
@@ -511,6 +514,27 @@ public func aro_action_configure(
     _ objectPtr: UnsafeRawPointer?
 ) -> UnsafeMutableRawPointer? {
     return executeAction(verb: "configure", contextPtr: contextPtr, resultPtr: resultPtr, objectPtr: objectPtr)
+}
+
+/// `Declare the <cart-repository> with { scope: session }.` (ARO-0094).
+/// The catalog and the bridge move together: `LLVMExternalDeclEmitter` emits an
+/// extern per catalog verb, so a catalog entry without a shim does not link.
+@_cdecl("aro_action_declare")
+public func aro_action_declare(
+    _ contextPtr: UnsafeMutableRawPointer?,
+    _ resultPtr: UnsafeRawPointer?,
+    _ objectPtr: UnsafeRawPointer?
+) -> UnsafeMutableRawPointer? {
+    return executeAction(verb: "declare", contextPtr: contextPtr, resultPtr: resultPtr, objectPtr: objectPtr)
+}
+
+@_cdecl("aro_action_attach")
+public func aro_action_attach(
+    _ contextPtr: UnsafeMutableRawPointer?,
+    _ resultPtr: UnsafeRawPointer?,
+    _ objectPtr: UnsafeRawPointer?
+) -> UnsafeMutableRawPointer? {
+    return executeAction(verb: "attach", contextPtr: contextPtr, resultPtr: resultPtr, objectPtr: objectPtr)
 }
 
 @_cdecl("aro_action_accept")

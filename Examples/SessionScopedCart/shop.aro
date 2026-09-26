@@ -1,0 +1,36 @@
+(* Three transports would write these statements identically. What differs is
+   who "the caller" is, and the runtime answers that from the cookie. *)
+
+(listCatalogue: Shop API) {
+    Retrieve the <items> from the <catalogue-repository>.
+    Return an <OK: status> with <items>.
+}
+
+(* `Attach` is the one statement that says who a caller is. With no `id` on the
+   record it mints a session and sets the cookie; with an `id` it adopts an
+   existing one and rotates it, which is the session-fixation defence. *)
+(login: Shop API) {
+    Extract the <name> from the <request: body> default "guest".
+    Create the <session> with { user: <name> }.
+    Attach the <session> to the <caller>.
+    Return an <OK: status> with { user: <name> }.
+}
+
+(addToCart: Shop API) {
+    Extract the <item> from the <request: body>.
+    Store the <item> into the <cart-repository>.
+    Return a <Created: status> with <item>.
+}
+
+(showCart: Shop API) {
+    Retrieve the <items> from the <cart-repository>.
+    Return an <OK: status> with <items>.
+}
+
+(* The sessions repository is an ordinary repository, so logout is an ordinary
+   Delete — and revocation works by construction rather than by machinery. *)
+(logout: Shop API) {
+    Extract the <id> from the <session: id>.
+    Delete the <gone> from the <sessions-repository> where <id> is <id>.
+    Return an <OK: status> for the <logout>.
+}

@@ -103,7 +103,8 @@ public struct ExpressionEvaluator: Sendable {
                varRef.noun.specifiers == ["count"] {
                 return await context.container.repositoryStorage.count(
                     repository: varRef.noun.base,
-                    businessActivity: context.businessActivity
+                    businessActivity: context.businessActivity,
+                    caller: try context.repositoryPartition(of: varRef.noun.base)
                 )
             }
 

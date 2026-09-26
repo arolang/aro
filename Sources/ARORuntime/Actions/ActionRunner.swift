@@ -123,7 +123,8 @@ public final class ActionRunner: @unchecked Sendable {
             // Action has async paths that need Task dispatch — fall through
             return nil
         } catch {
-            return .failure(Self.failureMessage(for: error))
+            return .failure(Self.failureMessage(for: error),
+                            hint: AROError.curatedHint(for: error))
         }
     }
 
@@ -396,14 +397,20 @@ public struct ActionRunnerResult: @unchecked Sendable {
     public let value: (any Sendable)?
     public let error: String?
 
+    /// The curated sentence for this failure, when it is one of the few the
+    /// statement cannot explain by itself (`AROError.curatedHint`). Carried
+    /// alongside the message because the bridge only ever received a `String`,
+    /// and a string cannot be classified back into the error it came from.
+    public let hint: String?
+
     public var succeeded: Bool { error == nil }
 
     public static func success(_ value: any Sendable) -> ActionRunnerResult {
-        ActionRunnerResult(value: value, error: nil)
+        ActionRunnerResult(value: value, error: nil, hint: nil)
     }
 
-    public static func failure(_ error: String) -> ActionRunnerResult {
-        ActionRunnerResult(value: nil, error: error)
+    public static func failure(_ error: String, hint: String? = nil) -> ActionRunnerResult {
+        ActionRunnerResult(value: nil, error: error, hint: hint)
     }
 }
 
@@ -448,7 +455,8 @@ extension ActionRunner {
             do {
                 return .success(try syncHandler(result, object, context))
             } catch {
-                return .failure(Self.failureMessage(for: error))
+                return .failure(Self.failureMessage(for: error),
+                            hint: AROError.curatedHint(for: error))
             }
         }
 
@@ -463,7 +471,8 @@ extension ActionRunner {
             let value = try future.force()
             return .success(value)
         } catch {
-            return .failure(Self.failureMessage(for: error))
+            return .failure(Self.failureMessage(for: error),
+                            hint: AROError.curatedHint(for: error))
         }
     }
 

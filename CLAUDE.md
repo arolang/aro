@@ -256,6 +256,44 @@ statement does not fail for you (GitLab #835).
 
 Do not use it for production code, it is terribly insecure.
 
+### Caller-Scoped Repositories (ARO-0094)
+
+A repository is application-scoped unless it says otherwise, which is what every
+repository was and still is by default. `Declare` says otherwise:
+
+```aro
+Declare the <catalogue-repository> with { scope: "application" }.
+Declare the <cart-repository>      with { scope: "session" }.
+Declare the <partial-repository>   with { scope: "connection" }.
+```
+
+Handlers do not restate it: `Store the <item> into the <cart-repository>.` is
+the same statement over HTTP, WebSocket and TCP, and writes to the calling
+caller's partition. `session` is an identity (authenticated, survives
+reconnects, revocable); `connection` is a transport lifetime that identifies
+nobody — a TCP peer gets the second until `Attach the <session> to the
+<connection>.` promotes it. **Promotion is irreversible within a connection.**
+
+A caller-scoped repository that cannot resolve its caller **throws** — never the
+application-wide repository, never an empty one. `aro check` reports the
+statically visible cases (a session repository in `Application-Start` or a file
+handler, a connection repository on an HTTP route, conflicting declarations).
+
+The scope value is a **string**: `{ scope: session }` is a variable reference
+and fails. `Declare` and `Attach` are in `ActionRoleCatalog.mustRunForEffect`
+because their argument is an expression, and the executor's expression fast path
+would otherwise bind the value and never run the action.
+
+Sessions are the runtime's: minting (256-bit CSPRNG id, HMAC-signed cookie,
+`HttpOnly`/`Secure`/`SameSite`), validating on every request, refreshing
+`last-seen`, rotating on `Attach`, and evicting on disconnect and expiry.
+Everything after that is ordinary ARO against the application-scoped
+`sessions-repository` and `connections-repository`, so logout is a `Delete`.
+`Configure the <session: secure> with false.` is how a laptop opts out of the
+TLS requirement. The cookie is declared in `openapi.yaml` as
+`securitySchemes: { type: apiKey, in: cookie }`; a cookie scheme is satisfied by
+a *validated session*, not by the cookie's presence.
+
 ### Key Types
 
 **Parser:**
