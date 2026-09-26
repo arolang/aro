@@ -1029,6 +1029,11 @@ train:catalogs:
     - python3 Train/script/extract_action_catalog.py --check
     - python3 Train/script/extract_action_verbs.py --check
     - python3 Train/script/extract_qualifier_catalog.py --check
+    # The FIXTRAIN rules' corrected examples are run through `aro check` here
+    # (GitLab #811). train:unit runs the same file on a slim image where those
+    # cases skip for want of a binary; this is where they execute.
+    - python3 -m pip install --quiet pytest
+    - python3 -m pytest Train/script/tests/test_fixtrain_examples.py -q
 
 # =============================================================================
 # The corpus is re-validated when the language changes (GitLab #783)
