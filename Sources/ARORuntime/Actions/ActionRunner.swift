@@ -158,7 +158,15 @@ public final class ActionRunner: @unchecked Sendable {
     // MARK: - Verb Canonicalization
 
     /// Canonical verb mappings - maps synonym verbs to their primary verb
-    private static let verbMappings: [String: String] = [
+    /// Synonym → canonical verb.
+    ///
+    /// Internal rather than private so `VerbMappingParityTests` can assert
+    /// every canonical target is a verb some action actually implements. It
+    /// could not before, and the table drifted: `forward → route` and
+    /// `monitor`/`observe → watch` pointed at verbs no `ActionImplementation`
+    /// ever claimed, so the synonyms they promised failed at `executeAction`
+    /// exactly as the bare verb did (GitLab #722, and #698 for the phantoms).
+    static let verbMappings: [String: String] = [
         // compute synonyms
         "calculate": "compute",
         "derive": "compute",
@@ -215,16 +223,15 @@ public final class ActionRunner: @unchecked Sendable {
         "initialize": "start",
         "boot": "start",
 
-        // listen synonyms
+        // listen synonyms. `await` is ListenAction's own verb, so this is a
+        // no-op that documents the pair.
+        //
+        // `wait` is NOT here. It belongs to `WaitForEventsAction`
+        // (["wait", "keepalive", "block"]), so canonicalising it to `listen`
+        // dispatched `Wait the <application> for the <events>.` to
+        // `ListenAction` — the wrong action, and in compiled binaries
+        // especially, whose table is keyed by the canonical verb (GitLab #722).
         "await": "listen",
-        "wait": "listen",
-
-        // route synonyms
-        "forward": "route",
-
-        // watch synonyms
-        "monitor": "watch",
-        "observe": "watch",
 
         // sleep synonyms (ARO-0054)
         "delay": "sleep",

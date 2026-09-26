@@ -382,4 +382,58 @@ struct EventChainIntegrationTests {
         let cycleError = result.diagnostics.first { $0.message.contains("Circular event chain") }
         #expect(cycleError != nil)
     }
+
+    // MARK: - dedupe terminates a self-cycle (GitLab #724, ARO-0007 §3.6)
+
+    @Test("A dedupe handler that re-emits its own event is not a cycle")
+    func dedupeHandlerIsNotACycle() {
+        // The crawler from ARO-0007 §3.6: `CrawlPage` handled and re-emitted,
+        // which is a cycle in the graph and terminating in fact — `dedupe:url`
+        // runs the handler once per distinct URL, so it stops when the frontier
+        // does.
+        //
+        // This was exempt by accident until the classifiers were unified:
+        // `extractEventType` required the activity to *end* in " Handler", and
+        // `CrawlPage Handler<dedupe:url>` does not, so the handler was invisible
+        // to cycle detection. Making it visible turned a documented pattern into
+        // an error; it is exempt on purpose now.
+        let result = Compiler().compile("""
+        (Crawl Page: CrawlPage Handler<dedupe:url>) {
+            Extract the <url> from the <event: url>.
+            Emit a <CrawlPage: event> with { url: <url> }.
+            Return an <OK: status> for the <crawl>.
+        }
+        """)
+
+        #expect(!result.diagnostics.contains { $0.message.contains("Circular event chain") },
+                "dedupe is what ends the chain")
+    }
+
+    @Test("Without dedupe, the same shape is still a cycle")
+    func selfEmittingHandlerWithoutDedupeIsACycle() {
+        // The exemption must be the `dedupe:` declaration, not the shape.
+        let result = Compiler().compile("""
+        (Crawl Page: CrawlPage Handler) {
+            Extract the <url> from the <event: url>.
+            Emit a <CrawlPage: event> with { url: <url> }.
+            Return an <OK: status> for the <crawl>.
+        }
+        """)
+
+        #expect(result.diagnostics.contains { $0.message.contains("Circular event chain") })
+    }
+
+    @Test("A state guard alongside dedupe still exempts")
+    func dedupeCombinedWithAStateGuard() {
+        // ARO-0007 allows `Handler<status:new;dedupe:url>`.
+        let result = Compiler().compile("""
+        (Crawl Page: CrawlPage Handler<status:new;dedupe:url>) {
+            Extract the <url> from the <event: url>.
+            Emit a <CrawlPage: event> with { url: <url> }.
+            Return an <OK: status> for the <crawl>.
+        }
+        """)
+
+        #expect(!result.diagnostics.contains { $0.message.contains("Circular event chain") })
+    }
 }

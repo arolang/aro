@@ -195,25 +195,17 @@ public final class REPLSession: @unchecked Sendable {
     /// come from a server the session never starts (the REPL runs no
     /// Keepalive loop), so subscribing them would promise dispatch that
     /// can never arrive. `aro run` remains their home.
-    private static let serviceBoundHandlerActivities: [String] = [
-        "Socket Event Handler",
-        "WebSocket Event Handler",
-        "File Event Handler",
-        "KeyPress Handler",
-    ]
-
     /// Whether `businessActivity` names a domain event handler this
     /// session will dispatch to (`{EventName} Handler`, optionally with
     /// state guards). Exposed for the front-ends, so they can tell the
     /// user a definition went live rather than merely registered.
     public static func domainHandlerEventType(for businessActivity: String) -> String? {
-        guard let range = businessActivity.range(of: " Handler") else { return nil }
-        guard !serviceBoundHandlerActivities.contains(where: businessActivity.contains) else {
-            return nil
-        }
-        let eventType = String(businessActivity[..<range.lowerBound])
-            .trimmingCharacters(in: .whitespaces)
-        return eventType.isEmpty ? nil : eventType
+        // One classifier, in AROParser (GitLab #724). `handledDomainEvent` is
+        // nil for every service-bound kind, which is the list this used to keep
+        // for itself — and it covers the three it never named
+        // (StateTransition, StateObserver, NotificationSent, repository
+        // observers) as well as the four it did.
+        return ActivityKind.parse(businessActivity).handledDomainEvent
     }
 
     /// Subscribe a `{EventName} Handler` feature set to this session's
