@@ -21,4 +21,3 @@ Reversed string:
 dlroW olleH
 Using qualifier in expression:
 [OK] demo
-value: Hello World

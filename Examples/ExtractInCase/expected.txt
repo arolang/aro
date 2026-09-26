@@ -1,9 +1,9 @@
-# Example: ExtractInCase
+# Generated: Sat Sep 26 18:02:59 2026
 # Type: console
+# Command: aro run ./Examples/ExtractInCase
 ---
 Status value:
 200
 Success:
 Success
 [OK] test
-  value: Success

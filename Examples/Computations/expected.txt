@@ -1,4 +1,4 @@
-# Generated: Wed Sep 23 00:46:52 2026
+# Generated: Sat Sep 26 18:02:58 2026
 # Type: console
 # Command: aro run ./Examples/Computations
 ---
@@ -41,4 +41,3 @@ SHA-256 of abc:
 ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad
 === Demo Complete ===
 [OK] demo
-value: Hello, World!
