@@ -34,6 +34,18 @@
   ],
   "source": "Sources/ARORuntime/Actions/BuiltIn/TestActions.swift"
  },
+ "attach": {
+  "role": "own",
+  "role_label": "OWN (Internal → Internal)",
+  "prepositions": [
+   "to",
+   "with"
+  ],
+  "aliases": [
+   "attach"
+  ],
+  "source": "Sources/ARORuntime/Actions/BuiltIn/AttachAction.swift"
+ },
  "broadcast": {
   "role": "response",
   "role_label": "RESPONSE (Internal → External)",
@@ -207,6 +219,18 @@
    "create"
   ],
   "source": "Sources/ARORuntime/Actions/BuiltIn/ComputeAction.swift"
+ },
+ "declare": {
+  "role": "own",
+  "role_label": "OWN (Internal → Internal)",
+  "prepositions": [
+   "for",
+   "with"
+  ],
+  "aliases": [
+   "declare"
+  ],
+  "source": "Sources/ARORuntime/Actions/BuiltIn/DeclareAction.swift"
  },
  "delete": {
   "role": "own",
