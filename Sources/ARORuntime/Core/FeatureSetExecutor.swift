@@ -1412,9 +1412,17 @@ public final class FeatureSetExecutor: Sendable {
         for i in fromInt..<toInt {
             let iterationContext = context.createChild(featureSetName: context.featureSetName)
             iterationContext.bind(loop.variable, value: i)
-            for stmt in loop.body {
-                try await executeStatement(stmt, context: iterationContext)
-                if iterationContext.getResponse() != nil { return }
+            // `Break.` leaves the innermost loop, which CLAUDE.md says of
+            // every loop and only `while` implemented — a `Break` in a range
+            // or for-each body escaped as an uncaught `BreakSignal` and killed
+            // the feature set with `Error: BreakSignal()` (GitLab #664).
+            do {
+                for stmt in loop.body {
+                    try await executeStatement(stmt, context: iterationContext)
+                    if iterationContext.getResponse() != nil { return }
+                }
+            } catch is BreakSignal {
+                break
             }
         }
     }
@@ -1564,15 +1572,20 @@ public final class FeatureSetExecutor: Sendable {
                 }
 
                 // Execute loop body in iteration context
-                for bodyStatement in loop.body {
-                    try await executeStatement(bodyStatement, context: iterationContext)
-                    if let response = iterationContext.getResponse() {
-                        // See `executeForEachLazy`: ending the loop is not
-                        // ending the feature set unless the response travels
-                        // with it (GitLab #665).
-                        context.setResponse(response)
-                        return
+                // `Break.` leaves the innermost loop (GitLab #664).
+                do {
+                    for bodyStatement in loop.body {
+                        try await executeStatement(bodyStatement, context: iterationContext)
+                        if let response = iterationContext.getResponse() {
+                            // See `executeForEachLazy`: ending the loop is not
+                            // ending the feature set unless the response travels
+                            // with it (GitLab #665).
+                            context.setResponse(response)
+                            return
+                        }
                     }
+                } catch is BreakSignal {
+                    break
                 }
             }
         }
@@ -1603,17 +1616,23 @@ public final class FeatureSetExecutor: Sendable {
                 }
             }
 
-            for bodyStatement in loop.body {
-                try await executeStatement(bodyStatement, context: iterationContext)
-                if let response = iterationContext.getResponse() {
-                    // The response has to reach the FEATURE SET, not just end
-                    // the loop (GitLab #665). An iteration context is a plain
-                    // child, not a statement scope, so `setResponse` stored it
-                    // on the child and `getResponse` never propagated it — the
-                    // loop stopped and the statements after it ran anyway.
-                    context.setResponse(response)
-                    return
+            // `Break.` leaves the innermost loop (GitLab #664).
+            do {
+                for bodyStatement in loop.body {
+                    try await executeStatement(bodyStatement, context: iterationContext)
+                    if let response = iterationContext.getResponse() {
+                        // The response has to reach the FEATURE SET, not just
+                        // end the loop (GitLab #665). An iteration context is a
+                        // plain child, not a statement scope, so `setResponse`
+                        // stored it on the child and `getResponse` never
+                        // propagated it — the loop stopped and the statements
+                        // after it ran anyway.
+                        context.setResponse(response)
+                        return
+                    }
                 }
+            } catch is BreakSignal {
+                break
             }
             index += 1
         }

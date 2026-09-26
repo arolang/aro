@@ -46,7 +46,14 @@ public struct DataFlowAnalyzer {
     /// Analyzes a single feature set, returning symbol table, data flows, dependencies, and exports
     public func analyzeFeatureSet(_ featureSet: FeatureSet) -> AnalyzedFeatureSet {
         let builder = SymbolTableBuilder(
-            scopeId: "fs-\(featureSet.name.hashValue)",
+            // The name, not its `hashValue` (GitLab #667). Swift seeds
+            // `hashValue` per process, so the same feature set got a different
+            // scope id on every run — and anything that compares or persists
+            // one across runs (debug recordings, LSP snapshots, `aro diff`
+            // output) saw two unrelated scopes where there was one. A feature
+            // set's name is already unique within an application, which is
+            // what the id needs to be.
+            scopeId: "fs-\(featureSet.name)",
             scopeName: featureSet.name
         )
 
@@ -275,9 +282,39 @@ public struct DataFlowAnalyzer {
             )
         }
 
+        /// A pipeline is its stages (GitLab #666).
+        ///
+        /// This returned an empty result, so every `|>` stage was invisible:
+        /// the results they bind were never defined in the symbol table, and a
+        /// later `Compute … from <stage-result>` warned "used before
+        /// definition" about a variable the pipeline had just produced. The
+        /// variables a pipeline *reads* were equally invisible, so a genuinely
+        /// undefined name inside one went unreported.
+        ///
+        /// Each stage is an ordinary `AROStatement`, analysed in order exactly
+        /// as it would be outside a pipeline — the stages run in sequence and
+        /// each sees what the previous one bound.
+        func visit(_ node: PipelineStatement) -> Result {
+            var inputs: Set<String> = []
+            var outputs: Set<String> = []
+            var sideEffects: [String] = []
+            var dependencies: Set<String> = []
+            for stage in node.stages {
+                let (stageInfo, stageDependencies) = analyzer.analyzeAROStatement(
+                    stage, builder: builder,
+                    definedSymbols: &definedSymbols, inMutableScope: inMutableScope
+                )
+                inputs.formUnion(stageInfo.inputs)
+                outputs.formUnion(stageInfo.outputs)
+                sideEffects.append(contentsOf: stageInfo.sideEffects)
+                dependencies.formUnion(stageDependencies)
+            }
+            return (DataFlowInfo(inputs: inputs, outputs: outputs, sideEffects: sideEffects),
+                    dependencies)
+        }
+
         // Fallback nodes — the old `as?`-chain matched none of these and so
         // returned the empty default. Keep that behaviour explicit.
-        func visit(_ node: PipelineStatement) -> Result { (DataFlowInfo(), []) }
         func visit(_ node: ErrorStatement) -> Result { (DataFlowInfo(), []) }
     }
 
