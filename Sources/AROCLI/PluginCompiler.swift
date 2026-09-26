@@ -796,16 +796,22 @@ struct PluginCompiler: Sendable {
 
     // MARK: - Manifest language detection
 
-    // These mirror the plugin-language branch selection in `compile()`. They are
-    // pure string inspection of the `plugin.yaml` manifest — no filesystem or
-    // toolchain access — so the pipeline's Python-vs-native routing can be
-    // unit-tested without a real build (#435, follow-up to !351).
+    // These mirror the plugin-language branch selection in `compile()`. They read
+    // the `plugin.yaml` manifest — no filesystem or toolchain access — so the
+    // pipeline's Python-vs-native routing can be unit-tested without a real
+    // build (#435, follow-up to !351).
+    //
+    // GitLab #734: they used to ask whether the manifest *text* contained
+    // "rust-plugin" and friends, so a comment or a description mentioning a
+    // plugin type decided how the plugin was compiled. They go through
+    // `PluginManifest` now — the same reader `aro add`, `aro plugins list` and
+    // the scanner use — and look at the decoded `provides:` entries.
 
     /// Whether a managed plugin's `plugin.yaml` declares a Python plugin
     /// (routed to the embedded-interpreter / base64 path rather than static
     /// linking).
     static func manifestDeclaresPythonPlugin(_ yaml: String) -> Bool {
-        yaml.contains("python-plugin")
+        parseManifest(yaml)?.declaresPythonPlugin ?? false
     }
 
     /// Whether a managed plugin's `plugin.yaml` declares native code
@@ -813,10 +819,27 @@ struct PluginCompiler: Sendable {
     /// host binary. A manifest with none of these ships only feature sets and
     /// is skipped by the static-link path.
     static func manifestDeclaresNativePlugin(_ yaml: String) -> Bool {
-        yaml.contains("swift-plugin")
-            || yaml.contains("c-plugin")
-            || yaml.contains("cpp-plugin")
-            || yaml.contains("rust-plugin")
+        parseManifest(yaml)?.declaresNativePlugin ?? false
+    }
+
+    /// Decode a manifest for language routing, or `nil` if it cannot be read.
+    ///
+    /// The `try?` is deliberate and is the reason for the warning: a manifest
+    /// this can't decode declares nothing we can act on, and the plugin is
+    /// skipped. Failing the whole build over it would be worse — but so would
+    /// skipping it in silence, which is what the substring checks effectively
+    /// did for a manifest whose `provides:` block was malformed.
+    private static func parseManifest(_ yaml: String) -> PluginManifest? {
+        guard !yaml.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+        do {
+            // `decode`, not `parse`: routing asks what language the plugin is,
+            // not whether its name obeys the package-name rule (GitLab #734).
+            return try PluginManifest.decode(yaml: yaml)
+        } catch {
+            FileHandle.standardError.write(Data(
+                "[PluginCompiler] Warning: plugin.yaml could not be read (\(error)); treating the plugin as declaring no code to link.\n".utf8))
+            return nil
+        }
     }
 
     /// Locate a Rust staticlib (lib*.a) inside cargo's target/release directory.

@@ -6,6 +6,7 @@
 
 import Testing
 import Foundation
+import AROPackageManager
 @testable import AROCLI
 
 /// Everything `aro plugins docs --html` renders comes from a third party: the
@@ -53,13 +54,13 @@ struct PluginDocsHTMLEscapingTests {
     /// A manifest and plugin info in which *every* string a plugin controls
     /// carries the hostile payload.
     private func hostilePage() -> String {
-        let metadata = DocsPlugins.BasicManifest(
+        let metadata = PluginManifest(
             name: "plugin\(Self.hostile)",
             version: "1.0.0\(Self.hostile)",
+            handle: "Handle\(Self.hostile)",
             description: "desc \(Self.hostile)",
             author: "author \(Self.hostile)",
-            license: "MIT \(Self.hostile)",
-            handle: "Handle\(Self.hostile)"
+            license: "MIT \(Self.hostile)"
         )
 
         var info = DocsPlugins.PluginDocInfo()
@@ -133,11 +134,11 @@ struct PluginDocsHTMLEscapingTests {
 
     @Test("A benign plugin still renders readable documentation")
     func benignPluginRendersNormally() {
-        let metadata = DocsPlugins.BasicManifest(
+        let metadata = PluginManifest(
             name: "plugin-collection",
             version: "1.2.0",
-            description: "Collection helpers",
-            handle: "Collections"
+            handle: "Collections",
+            description: "Collection helpers"
         )
         var info = DocsPlugins.PluginDocInfo()
         info.qualifiers = [

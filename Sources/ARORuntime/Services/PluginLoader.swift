@@ -1665,14 +1665,25 @@ public final class PluginLoader: @unchecked Sendable {
         let errorPipe = Pipe()
         process.standardError = errorPipe
 
+        // `firstRun: false` — a C plugin is one clang invocation with no
+        // dependency resolution, so it takes about a second and reaches no
+        // network. It is announced anyway: silence during *any* compile is
+        // what made the SQLite case read as a hang (GitLab #826).
+        let progress = PluginBuildProgress.started(
+            plugin: output.deletingPathExtension().lastPathComponent,
+            command: "cc -shared",
+            firstRun: false)
+
         try process.run()
         process.waitUntilExit()
 
         if process.terminationStatus != 0 {
+            PluginBuildProgress.failed(progress)
             let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
             let errorMessage = String(data: errorData, encoding: .utf8) ?? "Unknown error"
             throw PluginError.compilationFailed("cc", message: errorMessage)
         }
+        PluginBuildProgress.finished(progress)
     }
 
     /// Compile a Rust plugin using cargo build --release
@@ -1706,14 +1717,19 @@ public final class PluginLoader: @unchecked Sendable {
         process.standardOutput = outputPipe
         process.standardError = errorPipe
 
+        // GitLab #826: say that a compile is happening. Otherwise a first run
+        // is minutes of silence that reads as a hang.
+        let progress = PluginBuildProgress.started(plugin: pluginName, command: "cargo build --release")
         try process.run()
         process.waitUntilExit()
 
         if process.terminationStatus != 0 {
+            PluginBuildProgress.failed(progress)
             let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
             let errorMessage = String(data: errorData, encoding: .utf8) ?? "Unknown error"
             throw PluginError.compilationFailed(pluginName, message: "cargo build failed: \(errorMessage)")
         }
+        PluginBuildProgress.finished(progress)
 
         // Locate the compiled library in target/release
         let targetReleaseDir = projectDir.appendingPathComponent("target/release")
@@ -2110,14 +2126,23 @@ public final class PluginLoader: @unchecked Sendable {
         process.standardError = pipe
         process.standardOutput = pipe
 
+        // A single file through swiftc takes about a second, so this is
+        // announced without the one-time-cost note (GitLab #826).
+        let progress = PluginBuildProgress.started(
+            plugin: source.deletingPathExtension().lastPathComponent,
+            command: "swiftc -emit-library",
+            firstRun: false
+        )
         try process.run()
         process.waitUntilExit()
 
         if process.terminationStatus != 0 {
+            PluginBuildProgress.failed(progress)
             let errorData = pipe.fileHandleForReading.readDataToEndOfFile()
             let errorMessage = String(data: errorData, encoding: .utf8) ?? "Unknown error"
             throw PluginError.compilationFailed(source.lastPathComponent, message: errorMessage)
         }
+        PluginBuildProgress.finished(progress)
     }
 
     /// Load a Swift package plugin
@@ -2147,18 +2172,21 @@ public final class PluginLoader: @unchecked Sendable {
         process.standardOutput = outPipe
         process.standardError = errorPipe
 
+        let progress = PluginBuildProgress.started(plugin: pluginName, command: "swift build -c release")
         try process.run()
         process.waitUntilExit()
         let outData = outPipe.fileHandleForReading.readDataToEndOfFile()
         let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
 
         if process.terminationStatus != 0 {
+            PluginBuildProgress.failed(progress)
             let stderrStr = String(data: errorData, encoding: .utf8) ?? ""
             let stdoutStr = String(data: outData, encoding: .utf8) ?? ""
             let combined = [stderrStr, stdoutStr].filter { !$0.isEmpty }.joined(separator: "\n")
             let errorMessage = combined.isEmpty ? "exit code \(process.terminationStatus)" : combined
             throw PluginError.compilationFailed(pluginName, message: errorMessage)
         }
+        PluginBuildProgress.finished(progress)
 
         // Find the built dynamic library
         // Swift now uses arch-specific paths like .build/arm64-apple-macosx/release/
@@ -2226,18 +2254,23 @@ public final class PluginLoader: @unchecked Sendable {
         process.standardOutput = outPipe
         process.standardError = errorPipe
 
+        // This is the path `aro run Examples/SQLiteExample` takes, and the one
+        // that used to sit silent for over two minutes (GitLab #826).
+        let progress = PluginBuildProgress.started(plugin: pluginName, command: "swift build -c release")
         try process.run()
         process.waitUntilExit()
         let outData = outPipe.fileHandleForReading.readDataToEndOfFile()
         let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
 
         if process.terminationStatus != 0 {
+            PluginBuildProgress.failed(progress)
             let stderrStr = String(data: errorData, encoding: .utf8) ?? ""
             let stdoutStr = String(data: outData, encoding: .utf8) ?? ""
             let combined = [stderrStr, stdoutStr].filter { !$0.isEmpty }.joined(separator: "\n")
             let errorMessage = combined.isEmpty ? "exit code \(process.terminationStatus)" : combined
             throw PluginError.compilationFailed(pluginName, message: errorMessage)
         }
+        PluginBuildProgress.finished(progress)
 
         #if os(Windows)
         let libraryExtension = "dll"
@@ -2492,7 +2525,23 @@ public final class PluginLoader: @unchecked Sendable {
     /// Plugin metadata for listing
     private var pluginMetadata: [String: LocalPluginInfo] = [:]
 
-    /// Get list of all local plugins with their metadata
+    /// Get list of all local plugins with their metadata.
+    ///
+    /// **This never compiles anything** (GitLab #850). It used to go through
+    /// `loadPluginMetadata` / `loadPackagePluginMetadata`, which compile a
+    /// plugin on demand — so `aro plugins list` could spend minutes in
+    /// `swift build`, or block forever on a SwiftPM lock held by another
+    /// process, for a command whose entire job is to print a table. `list` is
+    /// what you reach for when something is already wrong, and it is the one
+    /// plugin subcommand a script might poll.
+    ///
+    /// A plugin that has not been built yet is reported as such
+    /// (`isBuilt == false`): that is a fact worth printing, and a more useful
+    /// answer than a wait. Where a library is already on disk it is loaded to
+    /// read its metadata — a `dlopen` and one call, no toolchain.
+    ///
+    /// Use `aro plugins rebuild` to build them.
+    ///
     /// - Parameter directory: Application directory containing `plugins/` folder
     /// - Returns: Array of LocalPluginInfo
     public func listLocalPlugins(from directory: URL) throws -> [LocalPluginInfo] {
@@ -2510,141 +2559,98 @@ public final class PluginLoader: @unchecked Sendable {
             options: [.skipsHiddenFiles]
         )
 
-        // Single-file Swift plugins
+        #if os(Windows)
+        let libraryExtension = "dll"
+        #elseif os(Linux)
+        let libraryExtension = "so"
+        #else
+        let libraryExtension = "dylib"
+        #endif
+
+        /// Describe one plugin from whatever is already built, without building.
+        func describe(
+            name: String,
+            relativePath: String,
+            type: LocalPluginType,
+            library: URL?
+        ) -> LocalPluginInfo {
+            guard let library else {
+                return LocalPluginInfo(
+                    name: name, source: relativePath, type: type,
+                    services: [], error: nil, isBuilt: false
+                )
+            }
+            do {
+                return try getPluginInfo(
+                    from: library, name: name, relativePath: relativePath, type: type
+                )
+            } catch {
+                // The library exists but will not load — a real fault worth
+                // reporting, and distinct from "not built yet".
+                return LocalPluginInfo(
+                    name: name, source: relativePath, type: type,
+                    services: [], error: error.localizedDescription, isBuilt: true
+                )
+            }
+        }
+
+        // Single-file Swift plugins: the compiled artefact lives in the cache.
         let swiftFiles = contents.filter { $0.pathExtension == "swift" }
         for swiftFile in swiftFiles {
             let pluginName = swiftFile.deletingPathExtension().lastPathComponent
             let relativePath = "plugins/\(swiftFile.lastPathComponent)"
 
-            // Check if we have cached metadata
             if let cached = pluginMetadata[pluginName] {
                 plugins.append(cached)
                 continue
             }
 
-            // Try to compile and get metadata
-            do {
-                let info = try loadPluginMetadata(from: swiftFile, name: pluginName, relativePath: relativePath)
-                pluginMetadata[pluginName] = info
-                plugins.append(info)
-            } catch {
-                // Plugin exists but failed to load - show without methods
-                plugins.append(LocalPluginInfo(
-                    name: pluginName,
-                    source: relativePath,
-                    type: .swiftFile,
-                    services: [],
-                    error: error.localizedDescription
-                ))
-            }
+            let cached = cacheDir.appendingPathComponent("\(pluginName).\(libraryExtension)")
+            let info = describe(
+                name: pluginName, relativePath: relativePath, type: .swiftFile,
+                library: FileManager.default.fileExists(atPath: cached.path) ? cached : nil
+            )
+            if info.isBuilt && info.error == nil { pluginMetadata[pluginName] = info }
+            plugins.append(info)
         }
 
-        // Swift package plugins
+        // Swift package plugins: look wherever a build would have put the library.
         for item in contents {
             var isDirectory: ObjCBool = false
-            if FileManager.default.fileExists(atPath: item.path, isDirectory: &isDirectory),
-               isDirectory.boolValue {
-                let packageSwift = item.appendingPathComponent("Package.swift")
-                if FileManager.default.fileExists(atPath: packageSwift.path) {
-                    let pluginName = item.lastPathComponent
-                    let relativePath = "plugins/\(pluginName)"
+            guard FileManager.default.fileExists(atPath: item.path, isDirectory: &isDirectory),
+                  isDirectory.boolValue,
+                  FileManager.default.fileExists(atPath: item.appendingPathComponent("Package.swift").path)
+            else { continue }
 
-                    // Check if we have cached metadata
-                    if let cached = pluginMetadata[pluginName] {
-                        plugins.append(cached)
-                        continue
-                    }
+            let pluginName = item.lastPathComponent
+            let relativePath = "plugins/\(pluginName)"
 
-                    // Try to build and get metadata
-                    do {
-                        let info = try loadPackagePluginMetadata(from: item, name: pluginName, relativePath: relativePath)
-                        pluginMetadata[pluginName] = info
-                        plugins.append(info)
-                    } catch {
-                        plugins.append(LocalPluginInfo(
-                            name: pluginName,
-                            source: relativePath,
-                            type: .swiftPackage,
-                            services: [],
-                            error: error.localizedDescription
-                        ))
-                    }
-                }
+            if let cached = pluginMetadata[pluginName] {
+                plugins.append(cached)
+                continue
             }
+
+            // `.build` is SwiftPM's own scratch path; `.build-aro` is the one
+            // the loader passes `--scratch-path` when it builds a package
+            // itself; the cache holds the copy `compilePackagePlugin` stages.
+            let library = findBuiltLibrary(
+                in: item.appendingPathComponent(".build"),
+                name: pluginName, extension: libraryExtension
+            ) ?? findBuiltLibrary(
+                in: item.appendingPathComponent(".build-aro"),
+                name: pluginName, extension: libraryExtension
+            ) ?? [cacheDir.appendingPathComponent("\(pluginName).\(libraryExtension)")]
+                .first(where: { FileManager.default.fileExists(atPath: $0.path) })
+
+            let info = describe(
+                name: pluginName, relativePath: relativePath, type: .swiftPackage,
+                library: library
+            )
+            if info.isBuilt && info.error == nil { pluginMetadata[pluginName] = info }
+            plugins.append(info)
         }
 
         return plugins
-    }
-
-    /// Load plugin metadata from a single Swift file
-    private func loadPluginMetadata(from sourceFile: URL, name: String, relativePath: String) throws -> LocalPluginInfo {
-        #if os(Windows)
-        let libraryExtension = "dll"
-        #elseif os(Linux)
-        let libraryExtension = "so"
-        #else
-        let libraryExtension = "dylib"
-        #endif
-        let dylibPath = cacheDir.appendingPathComponent("\(name).\(libraryExtension)")
-
-        // Compile if needed
-        if shouldRecompile(source: sourceFile, dylib: dylibPath) {
-            try FileManager.default.createDirectory(at: cacheDir, withIntermediateDirectories: true)
-            try compilePlugin(source: sourceFile, output: dylibPath)
-        }
-
-        // Load and get metadata
-        return try getPluginInfo(from: dylibPath, name: name, relativePath: relativePath, type: .swiftFile)
-    }
-
-    /// Load plugin metadata from a Swift package
-    private func loadPackagePluginMetadata(from packageDir: URL, name: String, relativePath: String) throws -> LocalPluginInfo {
-        #if os(Windows)
-        let libraryExtension = "dll"
-        #elseif os(Linux)
-        let libraryExtension = "so"
-        #else
-        let libraryExtension = "dylib"
-        #endif
-
-        // Check for existing build
-        if let existingLib = findBuiltLibrary(
-            in: packageDir.appendingPathComponent(".build"),
-            name: name,
-            extension: libraryExtension
-        ) {
-            return try getPluginInfo(from: existingLib, name: name, relativePath: relativePath, type: .swiftPackage)
-        }
-
-        // Build the package
-        let process = Process()
-        let swiftPath = findSwiftExecutable() ?? "/usr/bin/swift"
-        process.executableURL = URL(fileURLWithPath: swiftPath)
-        process.currentDirectoryURL = packageDir
-        process.arguments = ["build", "-c", "release"]
-
-        let pipe = Pipe()
-        process.standardError = pipe
-        process.standardOutput = pipe
-
-        try process.run()
-        process.waitUntilExit()
-
-        if process.terminationStatus != 0 {
-            let errorData = pipe.fileHandleForReading.readDataToEndOfFile()
-            let errorMessage = String(data: errorData, encoding: .utf8) ?? "Unknown error"
-            throw PluginError.compilationFailed(name, message: errorMessage)
-        }
-
-        guard let dylibPath = findBuiltLibrary(
-            in: packageDir.appendingPathComponent(".build"),
-            name: name,
-            extension: libraryExtension
-        ) else {
-            throw PluginError.loadFailed(name, message: "Built library not found")
-        }
-
-        return try getPluginInfo(from: dylibPath, name: name, relativePath: relativePath, type: .swiftPackage)
     }
 
     /// Get plugin info by loading its metadata
@@ -2717,7 +2723,8 @@ public final class PluginLoader: @unchecked Sendable {
             source: relativePath,
             type: type,
             services: services,
-            error: nil
+            error: nil,
+            isBuilt: true
         )
     }
 }
@@ -2740,6 +2747,13 @@ public struct LocalPluginInfo: Sendable {
 
     /// Error message if plugin failed to load
     public let error: String?
+
+    /// Whether a compiled library for this plugin already exists.
+    ///
+    /// Listing never builds one (GitLab #850), so an unbuilt plugin is reported
+    /// rather than compiled — `services` is then empty because there was
+    /// nothing to ask, not because the plugin exports nothing.
+    public let isBuilt: Bool
 }
 
 /// Type of local plugin
