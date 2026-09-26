@@ -488,10 +488,29 @@ public final class GitClient: @unchecked Sendable {
 
     /// Set up fetch options with credential callbacks
     private func setupFetchOptions(_ opts: inout git_fetch_options) {
-        // Certificate check callback - accept all certificates
-        // This is needed because libgit2's certificate verification can have issues on macOS
-        opts.callbacks.certificate_check = { (cert, valid, host, payload) -> Int32 in
-            return 0  // Accept certificate
+        // Certificate check callback.
+        //
+        // This used to `return 0` unconditionally — accept any certificate,
+        // from anyone — with a comment saying libgit2's verification "can have
+        // issues on macOS". The consequence was that `aro add https://…`
+        // trusted whatever was on the wire, and an attacker in the path could
+        // serve plugin source that `aro run` compiles and loads and that
+        // `aro build` links into the user's binary (GitLab #662).
+        //
+        // Now it answers libgit2's own verdict. `valid` is non-zero when the
+        // certificate checked out against the trust store; anything else is
+        // `GIT_ECERTIFICATE` (-17), which aborts the transfer.
+        //
+        // If the macOS trust-store problem the old comment referred to is
+        // real, the answer is to point libgit2 at a CA bundle with
+        // `GIT_OPT_SET_SSL_CERT_LOCATIONS`, not to stop checking. That is not
+        // wired up here: `git_libgit2_opts` is variadic, so Swift cannot call
+        // it without a small C shim. Nobody has reported the failure this
+        // exemption was protecting against, so the shim can wait until someone
+        // does — and until then the transfer fails loudly instead of silently
+        // trusting anyone.
+        opts.callbacks.certificate_check = { (_, valid, _, _) -> Int32 in
+            return valid != 0 ? 0 : GIT_ECERTIFICATE.rawValue
         }
 
         // Set up callbacks for SSH authentication
