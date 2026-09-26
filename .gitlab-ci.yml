@@ -247,6 +247,21 @@ grammar-appendix:
     - python3 Book/TheConstructionStudies/generate-grammar-appendix.py --check
 
 # =============================================================================
+# The training pipeline's stage table is generated too (GitLab #802)
+# =============================================================================
+# `Train/README.md`, the init notebook and the book appendix each kept their own
+# copy of the notebook list, offset from the filenames by two in one place and
+# by one in another, and 21 of the 27 notebooks opened with a heading carrying
+# a number from before the 2026-07 renumber. The table is now derived from the
+# meta pipeline's own NOTEBOOKS list, and this job fails when a copy, a
+# heading, or the set of notebook files stops matching it.
+train-stages:
+  stage: test
+  image: python:3.12-slim
+  script:
+    - python3 Scripts/generate-train-stages.py --check
+
+# =============================================================================
 # Editor grammars are generated, not hand-maintained (GitLab #695)
 # =============================================================================
 # The VS Code and IntelliJ TextMate grammars listed 67 of 130 runtime verbs and
