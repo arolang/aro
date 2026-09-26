@@ -84,12 +84,16 @@ public enum CallerIdentity: Sendable, Equatable {
         }
     }
 
-    /// How to describe this caller in an error.
-    public var describedForError: String {
+    /// How to describe this caller in an error about `scope`.
+    ///
+    /// Named for what is missing rather than for what the caller is: "this
+    /// feature set has no session" tells the author what to go and arrange,
+    /// where "no caller" leaves them guessing which of the two kinds is meant.
+    public func describedForError(scope: RepositoryScope) -> String {
         switch self {
-        case .none:                  return "this feature set has no caller"
-        case .connection:            return "this connection has no session"
-        case .session:               return "this caller has no connection"
+        case .none:       return "this feature set has no \(scope.rawValue)"
+        case .connection: return "this connection has no session"
+        case .session:    return "this caller has no connection"
         }
     }
 }
@@ -186,12 +190,44 @@ public enum RepositoryScopeError: Error, Equatable, CustomStringConvertible {
     public var description: String {
         switch self {
         case .unresolvable(let repository, let scope, let caller):
-            return "\(repository) is \(scope.rawValue)-scoped and \(caller.describedForError)"
+            return "\(repository) is \(scope.rawValue)-scoped and "
+                 + caller.describedForError(scope: scope)
         case .conflictingDeclaration(let repository, let existing, let attempted):
             return "\(repository) is already declared \(existing.rawValue)-scoped; "
                  + "cannot redeclare it as \(attempted.rawValue)"
         case .unknownScope(let repository, let raw):
             return "'\(raw)' is not a scope for \(repository) (\(RepositoryScope.allNames))"
+        }
+    }
+}
+
+// MARK: - Reaching the partition from a statement
+
+public extension ExecutionContext {
+
+    /// Which partition of `repository` this execution may touch (ARO-0094).
+    ///
+    /// Every repository statement goes through here, so the scope rule is
+    /// applied in one place rather than restated at each of them. An
+    /// application-scoped repository answers `""` — the key it has always
+    /// had — so a program that never writes `Declare` is unaffected.
+    ///
+    /// It **throws** when a caller-scoped repository has no caller. Returning
+    /// the application partition instead would hand one user another's rows,
+    /// and returning an empty partition would let `Store` write where nothing
+    /// reads; both are silent, and the second is the kind of bug that surfaces
+    /// weeks later as missing data.
+    func repositoryPartition(of repository: String) throws -> String {
+        switch RepositoryScopeRegistry.shared.resolve(repository: repository, caller: caller) {
+        case .success(let partition):
+            return partition
+        case .failure(let error):
+            // Thrown as itself rather than wrapped: `FeatureSetExecutor`
+            // reconstructs the failed statement, and "Cannot store the item
+            // into the cart-repository." reads perfectly well while saying
+            // nothing about why. The scope error is the sentence that does
+            // (ARO-0006, ARO-0094 §7.1).
+            throw error
         }
     }
 }

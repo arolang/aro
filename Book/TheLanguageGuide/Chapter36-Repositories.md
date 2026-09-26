@@ -934,33 +934,73 @@ Two customers adding to their carts add to *the same cart*. That is right for a
 catalogue, a rate-limit table or a cache, and wrong for anything belonging to a
 person.
 
-Until ARO has caller scope, a multi-user application carries the caller's
-identity in the data and filters on it:
+### Saying Who It Belongs To
+
+So say so. `Declare` gives a repository a scope, once, where the repository is
+declared:
+
+```aro
+(Application-Start: Shop) {
+    Declare the <catalogue-repository> with { scope: "application" }.
+    Declare the <cart-repository>      with { scope: "session" }.
+    Declare the <sessions-repository>  with { scope: "application" }.
+
+    Start the <http-server> with <contract>.
+    Keepalive the <application> for the <events>.
+    Return an <OK: status> for the <startup>.
+}
+```
+
+The handler does not change at all:
 
 ```aro
 (addToCart: Shop API) {
     Extract the <item> from the <request: body>.
-    Extract the <customer> from the <request: headers.X-Customer>.
-    Store the { customer: <customer>, item: <item> } into the <cart-repository>.
+    Store the <item> into the <cart-repository>.
     Return a <Created: status> with <item>.
-}
-
-(viewCart: Shop API) {
-    Extract the <customer> from the <request: headers.X-Customer>.
-    Retrieve the <mine> from the <cart-repository> where <customer> is <customer>.
-    Return an <OK: status> with <mine>.
 }
 ```
 
-This works, and it has the weakness you would expect: the filter is on every
-statement, so forgetting it once shows one customer another's cart, and nothing
-in the language notices.
+Two customers now add to two carts. The statement is the same one it was before
+the scope existed, which is the point: a safety property you have to retype
+correctly on every line is not one. Forgetting a filter is possible; forgetting
+something you never write is not.
 
-**ARO-0094** proposes declaring the scope on the repository instead —
-`Declare the <cart-repository> with { scope: "session" }.` — so that no statement
-restates it and none can forget it. The `Declare` statement exists today and
-records the scope; resolving it per caller over HTTP, WebSocket and TCP is
-in progress. Until it lands, filter in the data as above.
+There are three scopes:
+
+| Scope | Belongs to | Lives until |
+|-------|-----------|-------------|
+| `"application"` | the whole program — the default, and what every repository was | the process ends |
+| `"session"` | one authenticated caller, across requests and reconnects | the session expires or is revoked |
+| `"connection"` | one transport connection, identifying nobody | the socket closes |
+
+`session` and `connection` are two words rather than one because the difference
+is a security property. A session is an *identity*: it survives reconnects, it
+can be revoked, and something authenticated it. A connection is a *transport
+lifetime*: anyone who can open a socket has one, and it identifies nobody.
+Treating a TCP peer's connection id as an identity would let an unauthenticated
+peer read a logged-in user's cart.
+
+**A caller-scoped repository that cannot find its caller fails.** It does not
+quietly fall back to the application-wide one, and it does not come back empty:
+
+```
+Cannot store the item into the cart-repository. cart-repository is
+session-scoped and this feature set has no session.
+```
+
+Both of the alternatives are silent, and one of them is a data leak. `aro check`
+catches the cases it can see before the program runs — a session-scoped
+repository touched from `Application-Start` or a file watcher, which can never
+have a caller, or a connection-scoped one touched from an HTTP route, which has
+no connection the program can see.
+
+Where the caller comes from depends on the transport: an HTTP request brings a
+session cookie, a WebSocket resolves one at the upgrade and holds it for the
+connection, and a TCP peer starts as a bare connection until `Attach` promotes
+it. See **ARO-0094** for the cookie's requirements, the sessions repository, and
+what happens when a session expires; `Examples/SessionScopedCart` is the whole
+thing running.
 
 ### Persistence Is Opt-In
 

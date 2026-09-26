@@ -56,7 +56,8 @@ public final class Compiler {
         _ source: String,
         externallyHandledEvents: Set<String> = [],
         declaredUserActions: UserActionRegistry? = nil,
-        preboundSymbols: Set<String> = []
+        preboundSymbols: Set<String> = [],
+        declaredRepositoryScopes: [String: String] = [:]
     ) -> CompilationResult {
         // Clear diagnostics from previous compilations
         diagnostics.clear()
@@ -76,6 +77,17 @@ public final class Compiler {
                 externallyHandledEvents: externallyHandledEvents,
                 declaredUserActions: declaredUserActions,
                 preboundSymbols: preboundSymbols)
+
+            // ARO-0094 §7.2. The scopes come from the whole application
+            // because `Declare` lives in Application-Start while the
+            // statements it governs are elsewhere; a caller that has not
+            // collected them passes none and this is a no-op.
+            RepositoryScopeAnalyzer.checkDeclarations(program,
+                                                      applicationScopes: declaredRepositoryScopes,
+                                                      diagnostics: diagnostics)
+            RepositoryScopeAnalyzer.check(program,
+                                          scopes: declaredRepositoryScopes,
+                                          diagnostics: diagnostics)
             
             return CompilationResult(
                 program: program,

@@ -1,0 +1,23 @@
+(* A cart belongs to whoever is shopping; a catalogue belongs to the shop.
+   ARO-0094 — the scope is declared once, here, and no statement below
+   restates it. *)
+
+(Application-Start: Shop) {
+    Declare the <catalogue-repository> with { scope: "application" }.
+    Declare the <cart-repository>      with { scope: "session" }.
+    Declare the <sessions-repository>  with { scope: "application" }.
+
+    (* Local development only. A session cookie is not issued over plain HTTP
+       at all, so turning that off is something you write down rather than
+       something you fall into. Idle expiry (30 minutes) and absolute expiry
+       (12 hours) keep their defaults; they are separate because the second is
+       the one a stolen cookie cannot refresh away. *)
+    Configure the <session: secure> with false.
+
+    Store the <hat> into the <catalogue-repository> with { id: "hat", price: 12 }.
+    Store the <boot> into the <catalogue-repository> with { id: "boot", price: 40 }.
+
+    Start the <http-server> with <contract>.
+    Keepalive the <application> for the <events>.
+    Return an <OK: status> for the <startup>.
+}

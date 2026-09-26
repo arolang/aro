@@ -56,9 +56,9 @@ Proposals/ARO-0002-control-flow.md:819
 Proposals/ARO-0002-control-flow.md:87
 Proposals/ARO-0002-control-flow.md:987
 Proposals/ARO-0003-type-system.md:321
-Proposals/ARO-0004-actions.md:1018
-Proposals/ARO-0004-actions.md:522
-Proposals/ARO-0004-actions.md:900
+Proposals/ARO-0004-actions.md:1022
+Proposals/ARO-0004-actions.md:524
+Proposals/ARO-0004-actions.md:904
 Proposals/ARO-0005-application-architecture.md:150
 Proposals/ARO-0005-application-architecture.md:229
 Proposals/ARO-0005-application-architecture.md:264

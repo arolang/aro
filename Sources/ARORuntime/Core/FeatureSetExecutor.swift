@@ -858,6 +858,13 @@ public final class FeatureSetExecutor: Sendable {
         if let fsError = error as? FileSystemError {
             return fsError.description
         }
+        // The third (ARO-0094 §7.1). `Cannot store the item into the
+        // cart-repository.` is a statement that reads fine and says nothing
+        // about scope; without the reason the author has no way to tell a
+        // missing session from a repository that does not exist.
+        if let scopeError = error as? RepositoryScopeError {
+            return scopeError.description + "."
+        }
         guard let actionError = error as? ActionError,
               case .unknownComputation = actionError
         else { return nil }

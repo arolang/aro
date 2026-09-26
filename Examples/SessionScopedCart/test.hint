@@ -1,0 +1,11 @@
+# Test hints for SessionScopedCart
+mode: interpreter
+# Driving this example means being the same caller twice: log in, add to the
+# cart, then read the cart back and see the item. The integration harness uses
+# HTTP::Tiny, which only keeps cookies when HTTP::CookieJar is installed — and
+# without them every request is a fresh caller, so an empty cart and a broken
+# feature look identical. The executor picks the jar up automatically when the
+# module is present (AROTest::Executor::HTTP); until it is, the scoping itself
+# is covered by CallerScopedStorageTests and SessionServiceTests.
+skip: needs HTTP::CookieJar to be the same caller across two requests
+skip-on-windows: HTTP server tests not supported on Windows CI

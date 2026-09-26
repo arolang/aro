@@ -1,6 +1,6 @@
 // ============================================================
 // DeclareAction.swift
-// ARO Runtime — Declare the <x-repository> with { scope: session }.
+// ARO Runtime — Declare the <x-repository> with { scope: "session" }.
 // ARO-0094, GitLab #885
 // ============================================================
 //
@@ -24,7 +24,7 @@
 import Foundation
 import AROParser
 
-/// `Declare the <cart-repository> with { scope: session }.`
+/// `Declare the <cart-repository> with { scope: "session" }.`
 public struct DeclareAction: ActionImplementation {
 
     public static let role: ActionRole = .own

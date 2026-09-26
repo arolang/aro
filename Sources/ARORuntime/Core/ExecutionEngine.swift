@@ -135,6 +135,11 @@ public actor ExecutionEngine {
         // event handler (ExecutionEngine+EventHandlers.swift).
         registerEventHandlers(for: program, baseContext: context)
 
+        // ARO-0094 §6.2: a closed connection's connection-scoped repositories
+        // go with it. Independent of whether the program has a socket handler,
+        // because the leak does not depend on that either.
+        SessionLifecycle.install(on: eventBus)
+
         // Execute entry point
         let executor = FeatureSetExecutor(
             actionRegistry: actionRegistry,

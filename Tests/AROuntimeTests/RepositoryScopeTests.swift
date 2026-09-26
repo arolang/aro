@@ -139,7 +139,7 @@ struct RepositoryScopeTests {
         let text = error.description
         #expect(text.contains("cart-repository"))
         #expect(text.contains("session"))
-        #expect(text.contains("no caller"))
+        #expect(text.contains("no session"), "§7.1 names what is missing, not what the caller is")
     }
 }
 

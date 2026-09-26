@@ -67,7 +67,7 @@ public protocol RepositoryStorageService: Sendable {
     ///   - businessActivity: The business activity scope
     /// - Returns: The stored value (with auto-generated id if applicable)
     @discardableResult
-    func store(value: any Sendable, in repository: String, businessActivity: String) async -> any Sendable
+    func store(value: any Sendable, in repository: String, businessActivity: String, caller: String) async -> any Sendable
 
     /// Store a value with change tracking information
     /// - Parameters:
@@ -75,14 +75,14 @@ public protocol RepositoryStorageService: Sendable {
     ///   - repository: Repository name (must end with -repository)
     ///   - businessActivity: The business activity scope
     /// - Returns: RepositoryStoreResult containing stored value, old value (if update), and change type
-    func storeWithChangeInfo(value: any Sendable, in repository: String, businessActivity: String) async -> RepositoryStoreResult
+    func storeWithChangeInfo(value: any Sendable, in repository: String, businessActivity: String, caller: String) async -> RepositoryStoreResult
 
     /// Retrieve all values from a repository
     /// - Parameters:
     ///   - repository: Repository name
     ///   - businessActivity: The business activity scope
     /// - Returns: All stored values as a list
-    func retrieve(from repository: String, businessActivity: String) async -> [any Sendable]
+    func retrieve(from repository: String, businessActivity: String, caller: String) async -> [any Sendable]
 
     /// Retrieve values matching a predicate
     /// - Parameters:
@@ -94,6 +94,7 @@ public protocol RepositoryStorageService: Sendable {
     func retrieve(
         from repository: String,
         businessActivity: String,
+        caller: String,
         where field: String,
         equals value: any Sendable
     ) async -> [any Sendable]
@@ -110,13 +111,13 @@ public protocol RepositoryStorageService: Sendable {
     ///   - repository: Repository name
     ///   - businessActivity: The business activity scope
     /// - Returns: true if the repository exists and has data
-    func exists(repository: String, businessActivity: String) async -> Bool
+    func exists(repository: String, businessActivity: String, caller: String) async -> Bool
 
     /// Clear all data from a repository
     /// - Parameters:
     ///   - repository: Repository name
     ///   - businessActivity: The business activity scope
-    func clear(repository: String, businessActivity: String) async
+    func clear(repository: String, businessActivity: String, caller: String) async
 
     /// Delete items from a repository matching a condition
     /// - Parameters:
@@ -128,6 +129,7 @@ public protocol RepositoryStorageService: Sendable {
     func delete(
         from repository: String,
         businessActivity: String,
+        caller: String,
         where field: String,
         equals value: any Sendable
     ) async -> RepositoryDeleteResult
@@ -138,14 +140,14 @@ public protocol RepositoryStorageService: Sendable {
     ///   - businessActivity: The business activity scope
     ///   - id: The ID to search for
     /// - Returns: The item if found, nil otherwise
-    func findById(in repository: String, businessActivity: String, id: String) async -> (any Sendable)?
+    func findById(in repository: String, businessActivity: String, caller: String, id: String) async -> (any Sendable)?
 
     /// Get the count of items in a repository
     /// - Parameters:
     ///   - repository: Repository name
     ///   - businessActivity: The business activity scope
     /// - Returns: Number of items in the repository
-    func count(repository: String, businessActivity: String) async -> Int
+    func count(repository: String, businessActivity: String, caller: String) async -> Int
 
     /// Configure TTL and/or maxSize for a repository
     /// - Parameters:
@@ -153,6 +155,13 @@ public protocol RepositoryStorageService: Sendable {
     ///   - ttl: Time-to-live in seconds (nil = no expiry)
     ///   - maxSize: Maximum item count; oldest item evicted when exceeded (nil = unlimited)
     func configure(repository: String, ttl: TimeInterval?, maxSize: Int?) async
+
+    /// Drop every repository belonging to one caller partition (ARO-0094 §6.2),
+    /// returning the repository names that were dropped.
+    ///
+    /// Called when a connection closes or a session is revoked or expires.
+    /// The application partition (`""`) is never dropped.
+    func dropPartition(caller: String) async -> [String]
 
     /// Names of every repository the storage currently knows about,
     /// regardless of which business activity owns them. Used by the
@@ -165,11 +174,73 @@ public protocol RepositoryStorageService: Sendable {
 
 public extension RepositoryStorageService {
     func knownRepositoryNames() async -> [String] { [] }
+
+    /// Default: a storage that does not partition by caller has nothing to drop.
+    func dropPartition(caller: String) async -> [String] { [] }
+
+    // MARK: - Application partition (ARO-0094)
+    //
+    // Swift will not let a protocol requirement carry a default argument, so
+    // the caller-less spelling survives here. It asks for the application
+    // partition, which is the one every repository had before ARO-0094 — so a
+    // call site with no caller to offer behaves exactly as it did, and only
+    // the sites that *do* know their caller need changing.
+
+    @discardableResult
+    func store(value: any Sendable, in repository: String, businessActivity: String) async -> any Sendable {
+        await store(value: value, in: repository, businessActivity: businessActivity, caller: "")
+    }
+
+    func storeWithChangeInfo(value: any Sendable, in repository: String, businessActivity: String) async -> RepositoryStoreResult {
+        await storeWithChangeInfo(value: value, in: repository, businessActivity: businessActivity, caller: "")
+    }
+
+    func retrieve(from repository: String, businessActivity: String) async -> [any Sendable] {
+        await retrieve(from: repository, businessActivity: businessActivity, caller: "")
+    }
+
+    func retrieve(from repository: String,
+                  businessActivity: String,
+                  where field: String,
+                  equals value: any Sendable) async -> [any Sendable] {
+        await retrieve(from: repository, businessActivity: businessActivity,
+                       caller: "", where: field, equals: value)
+    }
+
+    func exists(repository: String, businessActivity: String) async -> Bool {
+        await exists(repository: repository, businessActivity: businessActivity, caller: "")
+    }
+
+    func clear(repository: String, businessActivity: String) async {
+        await clear(repository: repository, businessActivity: businessActivity, caller: "")
+    }
+
+    func delete(from repository: String,
+                businessActivity: String,
+                where field: String,
+                equals value: any Sendable) async -> RepositoryDeleteResult {
+        await delete(from: repository, businessActivity: businessActivity,
+                     caller: "", where: field, equals: value)
+    }
+
+    func findById(in repository: String, businessActivity: String, id: String) async -> (any Sendable)? {
+        await findById(in: repository, businessActivity: businessActivity, caller: "", id: id)
+    }
+
+    func count(repository: String, businessActivity: String) async -> Int {
+        await count(repository: repository, businessActivity: businessActivity, caller: "")
+    }
 }
 
 /// Storage key for repository name only (repositories are application-scoped)
 private struct StorageKey: Hashable, Sendable {
     let repository: String
+
+    /// Which caller's partition this is (ARO-0094). Empty for an
+    /// application-scoped repository, which is what every repository was
+    /// before — so an application repository keys exactly as it did and no
+    /// existing row moves.
+    var caller: String = ""
 }
 
 /// Actor-based storage backend with O(1) indexed access
@@ -283,9 +354,9 @@ private actor RepositoryStorageActor {
     //
     // ATOMIC: do not split resolveKey + operation across two actor awaits.
 
-    func store(value: any Sendable, repository: String, businessActivity: String) -> RepositoryStoreResult {
+    func store(value: any Sendable, repository: String, businessActivity: String, caller: String = "") -> RepositoryStoreResult {
         // ATOMIC: key resolution and mutation in one actor turn
-        let key = resolveKey(repository: repository, businessActivity: businessActivity)
+        let key = resolveKey(repository: repository, businessActivity: businessActivity, caller: caller)
         ensureKey(key)
 
         var valueToStore = value
@@ -399,9 +470,9 @@ private actor RepositoryStorageActor {
         return oldestValue
     }
 
-    func retrieve(repository: String, businessActivity: String) -> [any Sendable] {
+    func retrieve(repository: String, businessActivity: String, caller: String = "") -> [any Sendable] {
         // ATOMIC: key resolution and read in one actor turn
-        let key = resolveKey(repository: repository, businessActivity: businessActivity)
+        let key = resolveKey(repository: repository, businessActivity: businessActivity, caller: caller)
         guard let rowOrder = order[key], let rowMap = rows[key] else { return [] }
         let ttl = configs[key]?.ttl
         return rowOrder.compactMap { rowId -> (any Sendable)? in
@@ -411,9 +482,9 @@ private actor RepositoryStorageActor {
         }
     }
 
-    func retrieveFiltered(repository: String, businessActivity: String, field: String, matchValue: any Sendable) -> [any Sendable] {
+    func retrieveFiltered(repository: String, businessActivity: String, caller: String = "", field: String, matchValue: any Sendable) -> [any Sendable] {
         // ATOMIC: key resolution and read in one actor turn
-        let key = resolveKey(repository: repository, businessActivity: businessActivity)
+        let key = resolveKey(repository: repository, businessActivity: businessActivity, caller: caller)
         guard let rowOrder = order[key], let rowMap = rows[key] else { return [] }
         let ttl = configs[key]?.ttl
 
@@ -431,15 +502,15 @@ private actor RepositoryStorageActor {
         applicationScope[name] = key
     }
 
-    func exists(repository: String, businessActivity: String) -> Bool {
+    func exists(repository: String, businessActivity: String, caller: String = "") -> Bool {
         // ATOMIC: key resolution and read in one actor turn
-        let key = resolveKey(repository: repository, businessActivity: businessActivity)
+        let key = resolveKey(repository: repository, businessActivity: businessActivity, caller: caller)
         return !(order[key]?.isEmpty ?? true)
     }
 
-    func count(repository: String, businessActivity: String) -> Int {
+    func count(repository: String, businessActivity: String, caller: String = "") -> Int {
         // ATOMIC: key resolution and read in one actor turn
-        let key = resolveKey(repository: repository, businessActivity: businessActivity)
+        let key = resolveKey(repository: repository, businessActivity: businessActivity, caller: caller)
         return order[key]?.count ?? 0
     }
 
@@ -447,9 +518,9 @@ private actor RepositoryStorageActor {
         configs[key] = RepositoryConfig(maxSize: maxSize, ttl: ttl)
     }
 
-    func clear(repository: String, businessActivity: String) {
+    func clear(repository: String, businessActivity: String, caller: String = "") {
         // ATOMIC: key resolution and mutation in one actor turn
-        let key = resolveKey(repository: repository, businessActivity: businessActivity)
+        let key = resolveKey(repository: repository, businessActivity: businessActivity, caller: caller)
         rows[key]       = nil
         order[key]      = nil
         nextRowId[key]  = nil
@@ -458,9 +529,9 @@ private actor RepositoryStorageActor {
         timestamps[key] = nil
     }
 
-    func delete(repository: String, businessActivity: String, field: String, matchValue: any Sendable) -> RepositoryDeleteResult {
+    func delete(repository: String, businessActivity: String, caller: String = "", field: String, matchValue: any Sendable) -> RepositoryDeleteResult {
         // ATOMIC: key resolution and mutation in one actor turn
-        let key = resolveKey(repository: repository, businessActivity: businessActivity)
+        let key = resolveKey(repository: repository, businessActivity: businessActivity, caller: caller)
         let ik = indexKey(for: matchValue)
         // Capture set before any mutations
         guard let rowIdsToDelete = fieldIndex[key]?[field]?[ik], !rowIdsToDelete.isEmpty else {
@@ -482,24 +553,50 @@ private actor RepositoryStorageActor {
         return RepositoryDeleteResult(deletedItems: deletedItems)
     }
 
-    func findById(repository: String, businessActivity: String, id: String) -> (any Sendable)? {
+    func findById(repository: String, businessActivity: String, caller: String = "", id: String) -> (any Sendable)? {
         // ATOMIC: key resolution and read in one actor turn
-        let key = resolveKey(repository: repository, businessActivity: businessActivity)
+        let key = resolveKey(repository: repository, businessActivity: businessActivity, caller: caller)
         guard let rowId = idIndex[key]?[id] else { return nil }
         return rows[key]?[rowId]
     }
 
-    private func resolveKey(repository: String, businessActivity: String) -> StorageKey {
+    private func resolveKey(repository: String,
+                           businessActivity: String,
+                           caller: String = "") -> StorageKey {
+        // An exported repository is application-wide by construction — that is
+        // what exporting it means — so a caller partition does not apply.
         if let exportedKey = applicationScope[repository] {
             return exportedKey
         }
-        return StorageKey(repository: repository)
+        return StorageKey(repository: repository, caller: caller)
     }
 
     func allRepositories() -> [(repository: String, count: Int)] {
         return order.map { (key, rowIds) in
             (repository: key.repository, count: rowIds.count)
         }
+    }
+
+    /// Drop every repository belonging to one caller (ARO-0094 §6.2).
+    ///
+    /// Not an optimisation: without it a long-running server accumulates one
+    /// set of repositories per connection for the life of the process, and a
+    /// revoked session's rows stay readable by anyone who can forge its id.
+    /// Returns the repositories that were dropped, so the caller can say what
+    /// it freed.
+    func dropPartition(caller: String) -> [String] {
+        guard !caller.isEmpty else { return [] }   // never the application partition
+        let doomed = rows.keys.filter { $0.caller == caller }
+        for key in doomed {
+            rows[key] = nil
+            order[key] = nil
+            nextRowId[key] = nil
+            idIndex[key] = nil
+            fieldIndex[key] = nil
+            timestamps[key] = nil
+            configs[key] = nil
+        }
+        return doomed.map(\.repository)
     }
 
     func clearAll() {
@@ -560,8 +657,8 @@ public final class InMemoryRepositoryStorage: RepositoryStorageService, Sendable
     // MARK: - RepositoryStorageService
 
     @discardableResult
-    public func store(value: any Sendable, in repository: String, businessActivity: String) async -> any Sendable {
-        let result = await actor.store(value: value, repository: repository, businessActivity: businessActivity)
+    public func store(value: any Sendable, in repository: String, businessActivity: String, caller: String) async -> any Sendable {
+        let result = await actor.store(value: value, repository: repository, businessActivity: businessActivity, caller: caller)
         // #331: even the void-return convenience must publish the
         // eviction event. Previously this path silently dropped the
         // evicted row — observers (`<repo> Evicted Handler`) only saw
@@ -572,8 +669,8 @@ public final class InMemoryRepositoryStorage: RepositoryStorageService, Sendable
         return result.storedValue
     }
 
-    public func storeWithChangeInfo(value: any Sendable, in repository: String, businessActivity: String) async -> RepositoryStoreResult {
-        let result = await actor.store(value: value, repository: repository, businessActivity: businessActivity)
+    public func storeWithChangeInfo(value: any Sendable, in repository: String, businessActivity: String, caller: String) async -> RepositoryStoreResult {
+        let result = await actor.store(value: value, repository: repository, businessActivity: businessActivity, caller: caller)
         emitEvictionIfNeeded(result: result, repository: repository)
         return result
     }
@@ -601,17 +698,18 @@ public final class InMemoryRepositoryStorage: RepositoryStorageService, Sendable
         await actor.configure(key: key, ttl: ttl, maxSize: maxSize)
     }
 
-    public func retrieve(from repository: String, businessActivity: String) async -> [any Sendable] {
-        return await actor.retrieve(repository: repository, businessActivity: businessActivity)
+    public func retrieve(from repository: String, businessActivity: String, caller: String) async -> [any Sendable] {
+        return await actor.retrieve(repository: repository, businessActivity: businessActivity, caller: caller)
     }
 
     public func retrieve(
         from repository: String,
         businessActivity: String,
+        caller: String,
         where field: String,
         equals matchValue: any Sendable
     ) async -> [any Sendable] {
-        return await actor.retrieveFiltered(repository: repository, businessActivity: businessActivity, field: field, matchValue: matchValue)
+        return await actor.retrieveFiltered(repository: repository, businessActivity: businessActivity, caller: caller, field: field, matchValue: matchValue)
     }
 
     public func export(repository: String, from businessActivity: String, as name: String) async {
@@ -619,41 +717,42 @@ public final class InMemoryRepositoryStorage: RepositoryStorageService, Sendable
         await actor.export(key: key, as: name)
     }
 
-    public func exists(repository: String, businessActivity: String) async -> Bool {
-        return await actor.exists(repository: repository, businessActivity: businessActivity)
+    public func exists(repository: String, businessActivity: String, caller: String) async -> Bool {
+        return await actor.exists(repository: repository, businessActivity: businessActivity, caller: caller)
     }
 
-    public func clear(repository: String, businessActivity: String) async {
-        await actor.clear(repository: repository, businessActivity: businessActivity)
+    public func clear(repository: String, businessActivity: String, caller: String) async {
+        await actor.clear(repository: repository, businessActivity: businessActivity, caller: caller)
     }
 
     public func delete(
         from repository: String,
         businessActivity: String,
+        caller: String,
         where field: String,
         equals value: any Sendable
     ) async -> RepositoryDeleteResult {
-        return await actor.delete(repository: repository, businessActivity: businessActivity, field: field, matchValue: value)
+        return await actor.delete(repository: repository, businessActivity: businessActivity, caller: caller, field: field, matchValue: value)
     }
 
-    public func findById(in repository: String, businessActivity: String, id: String) async -> (any Sendable)? {
-        return await actor.findById(repository: repository, businessActivity: businessActivity, id: id)
+    public func findById(in repository: String, businessActivity: String, caller: String, id: String) async -> (any Sendable)? {
+        return await actor.findById(repository: repository, businessActivity: businessActivity, caller: caller, id: id)
     }
 
-    public func count(repository: String, businessActivity: String) async -> Int {
-        return await actor.count(repository: repository, businessActivity: businessActivity)
+    public func count(repository: String, businessActivity: String, caller: String) async -> Int {
+        return await actor.count(repository: repository, businessActivity: businessActivity, caller: caller)
     }
 
     /// Get count synchronously (for compiled binary when guards)
     /// Uses a semaphore to block until the async operation completes
-    public func countSync(repository: String, businessActivity: String) -> Int {
+    public func countSync(repository: String, businessActivity: String, caller: String = "") -> Int {
         final class Box: @unchecked Sendable { var value: Int = 0 }
         let result = Box()
         let semaphore = DispatchSemaphore(value: 0)
 
         DispatchQueue.global(qos: .userInitiated).async {
             Task {
-                result.value = await self.count(repository: repository, businessActivity: businessActivity)
+                result.value = await self.count(repository: repository, businessActivity: businessActivity, caller: caller)
                 semaphore.signal()
             }
         }
@@ -671,6 +770,10 @@ public final class InMemoryRepositoryStorage: RepositoryStorageService, Sendable
 
     public func knownRepositoryNames() async -> [String] {
         await actor.allRepositories().map { $0.repository }
+    }
+
+    public func dropPartition(caller: String) async -> [String] {
+        await actor.dropPartition(caller: caller)
     }
 
     /// Clear all repositories (for testing)

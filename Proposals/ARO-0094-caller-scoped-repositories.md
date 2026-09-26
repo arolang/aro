@@ -1,6 +1,6 @@
 # ARO-0094: Caller-Scoped Repositories
 
-- **Status:** Draft ([Issue #885](https://git.ausdertechnik.de/arolang/aro/-/issues/885))
+- **Status:** Implemented ([Issue #885](https://git.ausdertechnik.de/arolang/aro/-/issues/885))
 - **Author:** ARO Language Team
 - **Created:** 2026-09-26
 - **Related:** ARO-0007 (Events & Reactive), ARO-0008 (I/O Services), ARO-0048 (WebSocket), ARO-0073 (Store Files), ARO-0003 (Type System / OpenAPI), ARO-0006 (Error Philosophy), ARO-0005 (Application Architecture)
@@ -97,7 +97,7 @@ The object is the repository; `with` carries its properties. `scope` is the only
 required one. An undeclared repository is `application`-scoped, which is exactly
 today's behaviour — every existing program keeps working, unchanged.
 
-### 3.1.1 Two things implementing this settled
+### 3.1.1 Three things implementing this settled
 
 **The scope value is quoted.** A bare word in an ARO object literal is a
 *variable reference*, so `{ scope: session }` looks up a variable called
@@ -105,15 +105,29 @@ today's behaviour — every existing program keeps working, unchanged.
 is the spelling, and it matches `Configure the <stores: write-back> with
 "manual"`.
 
-**The repository goes in the result position, and inherits `Configure`'s
-wart.** `Declare the <cart-repository> with { … }` binds `cart-repository` as
-the statement's result, exactly as `Configure the <application: concurrency>`
-binds `application`. Declaring the same repository twice in one feature set is
-therefore an immutable-rebinding error rather than a scope error, with a
-diagnostic about variables. That is the existing `Configure` behaviour — CLAUDE.md
-already warns that "two statements naming the same category rebind an immutable
-binding" — so this proposal inherits it rather than inventing it. It is one more
-argument that these are the same verb ([#886](https://git.ausdertechnik.de/arolang/aro/-/issues/886)).
+**The repository goes in the result position, and is not a variable.**
+`Declare the <cart-repository> with { … }` names the repository in the result
+slot, exactly as `Configure the <application: concurrency>` names its category.
+A repository is not a binding, though — it is global state the statement
+configures — so `Declare` records a side effect and defines nothing. Without
+that, every declaration is "defined but never used" (three warnings in a
+three-line `Application-Start`) and a second declaration is an
+immutable-rebinding error *about variables* rather than the scope conflict it
+actually is. `Configure` still reports the rebind, deliberately and with a hint
+pointing at its object form; the difference is that `Declare` has a better
+diagnostic of its own to give. It remains one more argument that these are the
+same verb ([#886](https://git.ausdertechnik.de/arolang/aro/-/issues/886)).
+
+**`Declare` has to run for its effect.** `Declare the <x-repository> with
+{ … }` takes its argument as an *expression*, and `FeatureSetExecutor` has a
+fast path for that shape: when the verb is in none of its categories, it binds
+the expression to the result and never calls the action. So the statement
+appeared to work — `<cart-repository>` bound to `{ scope: "session" }`, nothing
+failed — while the scope was never registered and every statement governed by
+it read the application-wide repository. `Declare` and `Attach` are therefore in
+`ActionRoleCatalog.mustRunForEffect` alongside `Store` and `Emit`. The value
+these statements produce is beside the point; the registration *is* the
+statement.
 
 ### 3.2 Why not a qualifier at the use site
 
@@ -246,7 +260,6 @@ Three transports, one spelling of `Store`.
 
 A socket peer that authenticates in-band becomes a session:
 
-<!-- aro-check: skip — `Attach` is proposed, not yet implemented; this block specifies the promotion step -->
 ```aro
 (Handle Data Received: Socket Event Handler) {
     Extract the <token> from the <packet: message>.

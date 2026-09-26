@@ -65,6 +65,8 @@ extension ExecutionEngine {
                     await self.executeSocketHandler(
                         analyzedFS,
                         baseContext: baseContext,
+                        connectionId: event.connectionId,
+                        transport: "socket",
                         eventData: [
                             "event": SocketDisconnectInfo(
                                 connectionId: event.connectionId,
@@ -81,6 +83,8 @@ extension ExecutionEngine {
                     await self.executeSocketHandler(
                         analyzedFS,
                         baseContext: baseContext,
+                        connectionId: event.connectionId,
+                        transport: "socket",
                         eventData: [
                             "connection": SocketConnection(
                                 id: event.connectionId,
@@ -97,6 +101,8 @@ extension ExecutionEngine {
                     await self.executeSocketHandler(
                         analyzedFS,
                         baseContext: baseContext,
+                        connectionId: event.connectionId,
+                        transport: "socket",
                         eventData: [
                             "packet": SocketPacket(
                                 connectionId: event.connectionId,
@@ -123,10 +129,11 @@ extension ExecutionEngine {
     private func executeInChildContext(
         _ analyzedFS: AnalyzedFeatureSet,
         baseContext: RuntimeContext,
+        caller: CallerIdentity? = nil,
         prepare: (RuntimeContext) async -> Bool
     ) async {
         let deps = handlerDependencies
-        let handlerContext = deps.makeContext(for: analyzedFS, parent: baseContext)
+        let handlerContext = deps.makeContext(for: analyzedFS, parent: baseContext, caller: caller)
 
         guard await prepare(handlerContext) else { return }
 
@@ -142,9 +149,26 @@ extension ExecutionEngine {
     private func executeSocketHandler(
         _ analyzedFS: AnalyzedFeatureSet,
         baseContext: RuntimeContext,
+        connectionId: String? = nil,
+        transport: String = "socket",
         eventData: [String: any Sendable]
     ) async {
-        await executeInChildContext(analyzedFS, baseContext: baseContext) { handlerContext in
+        // ARO-0094 §4.2/§4.3: the handler runs as whoever the connection is.
+        // A WebSocket that presented a valid cookie at upgrade, or a socket
+        // promoted by `Attach`, is a session; anything else is a bare
+        // connection, which identifies nobody and must not reach a
+        // session-scoped repository.
+        var caller: CallerIdentity?
+        if let connectionId {
+            caller = await SessionService.shared.caller(forConnection: connectionId)
+        }
+
+        await executeInChildContext(analyzedFS, baseContext: baseContext, caller: caller) { handlerContext in
+            if let connectionId {
+                // So `Attach … to the <connection>` knows which connection it
+                // is promoting, rather than taking an id as an argument.
+                handlerContext.register(ConnectionIdentity(id: connectionId, transport: transport))
+            }
             for (key, value) in eventData {
                 handlerContext.bind(key, value: value)
             }
@@ -168,6 +192,8 @@ extension ExecutionEngine {
                     await self.executeSocketHandler(
                         analyzedFS,
                         baseContext: baseContext,
+                        connectionId: event.connectionId,
+                        transport: "websocket",
                         eventData: [
                             "event": [
                                 "connectionId": event.connectionId,
@@ -183,6 +209,8 @@ extension ExecutionEngine {
                     await self.executeSocketHandler(
                         analyzedFS,
                         baseContext: baseContext,
+                        connectionId: event.connectionId,
+                        transport: "websocket",
                         eventData: [
                             "event": [
                                 "connectionId": event.connectionId,
@@ -199,6 +227,8 @@ extension ExecutionEngine {
                     await self.executeSocketHandler(
                         analyzedFS,
                         baseContext: baseContext,
+                        connectionId: event.connectionId,
+                        transport: "websocket",
                         eventData: [
                             "event": [
                                 "connectionId": event.connectionId,

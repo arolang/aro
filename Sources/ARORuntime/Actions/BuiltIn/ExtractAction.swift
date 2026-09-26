@@ -873,38 +873,26 @@ public struct RetrieveAction: ActionImplementation {
             let compoundCondition = condition
 
             // Retrieve from repository storage service
+            let storage = context.service(RepositoryStorageService.self)
+                ?? context.container.repositoryStorage
+            let partition = try context.repositoryPartition(of: repoName)
             var values: [any Sendable]
-            if let storage = context.service(RepositoryStorageService.self) {
-                if compoundCondition == nil, let field = whereField, let matchValue = whereValue {
-                    // Filtered retrieval with where clause
-                    values = await storage.retrieve(
-                        from: repoName,
-                        businessActivity: context.businessActivity,
-                        where: field,
-                        equals: matchValue
-                    )
-                } else {
-                    // Retrieve all
-                    values = await storage.retrieve(
-                        from: repoName,
-                        businessActivity: context.businessActivity
-                    )
-                }
+            if compoundCondition == nil, let field = whereField, let matchValue = whereValue {
+                // Filtered retrieval with where clause
+                values = await storage.retrieve(
+                    from: repoName,
+                    businessActivity: context.businessActivity,
+                    caller: partition,
+                    where: field,
+                    equals: matchValue
+                )
             } else {
-                // Fallback to container storage if service not registered
-                if compoundCondition == nil, let field = whereField, let matchValue = whereValue {
-                    values = await context.container.repositoryStorage.retrieve(
-                        from: repoName,
-                        businessActivity: context.businessActivity,
-                        where: field,
-                        equals: matchValue
-                    )
-                } else {
-                    values = await context.container.repositoryStorage.retrieve(
-                        from: repoName,
-                        businessActivity: context.businessActivity
-                    )
-                }
+                // Retrieve all
+                values = await storage.retrieve(
+                    from: repoName,
+                    businessActivity: context.businessActivity,
+                    caller: partition
+                )
             }
 
             if let condition = compoundCondition {

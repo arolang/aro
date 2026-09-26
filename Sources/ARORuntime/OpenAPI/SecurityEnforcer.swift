@@ -23,7 +23,8 @@ public struct SecurityEnforcer {
         globalSecurity: [[String: [String]]]?,
         securitySchemes: [String: SecurityScheme]?,
         headers: [String: String],
-        queryParameters: [String: String]
+        queryParameters: [String: String],
+        resolvedSession: String? = nil
     ) -> HTTPResponse? {
         // operation.security == [] means explicitly public — no enforcement.
         let requirements: [[String: [String]]]
@@ -38,7 +39,8 @@ public struct SecurityEnforcer {
 
         // Requirements are OR'd — any one fully satisfied = OK.
         for requirement in requirements {
-            if isSatisfied(requirement, schemes: securitySchemes, headers: headers, queryParameters: queryParameters) {
+            if isSatisfied(requirement, schemes: securitySchemes, headers: headers,
+                           queryParameters: queryParameters, resolvedSession: resolvedSession) {
                 return nil
             }
         }
@@ -56,12 +58,14 @@ public struct SecurityEnforcer {
         _ requirement: [String: [String]],
         schemes: [String: SecurityScheme]?,
         headers: [String: String],
-        queryParameters: [String: String]
+        queryParameters: [String: String],
+        resolvedSession: String?
     ) -> Bool {
         // All entries in a single requirement object are AND'd.
         for (schemeName, _) in requirement {
             guard let scheme = schemes?[schemeName] else { return false }
-            if !schemePresent(scheme, headers: headers, queryParameters: queryParameters) {
+            if !schemePresent(scheme, headers: headers, queryParameters: queryParameters,
+                              resolvedSession: resolvedSession) {
                 return false
             }
         }
@@ -71,7 +75,8 @@ public struct SecurityEnforcer {
     private static func schemePresent(
         _ scheme: SecurityScheme,
         headers: [String: String],
-        queryParameters: [String: String]
+        queryParameters: [String: String],
+        resolvedSession: String?
     ) -> Bool {
         switch scheme.type {
         case "apiKey":
@@ -82,8 +87,21 @@ public struct SecurityEnforcer {
             case "query":
                 return queryParameters[name] != nil
             case "cookie":
+                // A cookie scheme is the session scheme (ARO-0094 §8.1), so
+                // what satisfies it is a session the runtime has actually
+                // validated — not a cookie of that name being present.
+                //
+                // This branch used to be `cookieHeader.contains("\(name)=")`,
+                // which passed on `Cookie: aro_session=` and on any value at
+                // all, and even on `Cookie: not_aro_session=x`, since a
+                // substring test does not know where a cookie name begins.
+                // That was a gate on routes; once the same cookie selects
+                // *whose data* a statement reads, it is a complete
+                // authentication bypass (§8.3).
                 let cookieHeader = headers.first(where: { $0.key.lowercased() == "cookie" })?.value ?? ""
-                return cookieHeader.contains("\(name)=")
+                let cookies = SessionService.parseCookies(cookieHeader)
+                guard let presented = cookies[name], !presented.isEmpty else { return false }
+                return resolvedSession != nil
             default:
                 return false
             }

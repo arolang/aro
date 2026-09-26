@@ -454,6 +454,30 @@ public struct DataFlowAnalyzer {
             definedSymbols.insert(resultName)
 
         case .own:
+            // A system object in the result slot is not a variable.
+            //
+            // `Declare the <cart-repository> with { scope: "session" }.` and
+            // `Configure the <session: secure> with false.` (ARO-0094) both
+            // name framework state that the statement configures — there is
+            // nothing to bind and nothing a later statement could read. Bound
+            // anyway, each one is "defined but never used": three warnings in
+            // a three-line Application-Start, and a second statement naming
+            // the same object becomes an immutable-rebinding error about
+            // variables rather than the conflict it actually is.
+            //
+            // `Declare` only, not `Configure`. Two `Configure` statements
+            // naming one repository *is* reported, deliberately and with a
+            // hint pointing at the object form (`ConfigureRebindHintTests`);
+            // suppressing it here would take that with it. `Declare` has its
+            // own conflict diagnostic, which says more than the rebind one.
+            if statement.action.verb.lowercased() == "declare",
+               SystemObjectCatalog.isSystemObject(resultName) {
+                sideEffects.append("\(statement.action.verb):\(resultName)")
+                return (
+                    DataFlowInfo(inputs: inputs, outputs: outputs, sideEffects: sideEffects),
+                    dependencies
+                )
+            }
             if !isKnownExternal(objectName) && !definedSymbols.contains(objectName)
                 && !dependencies.contains(objectName) && !objectIsTimeUnit {
                 diagnostics.warning(
@@ -579,8 +603,13 @@ public struct DataFlowAnalyzer {
     /// `Append the <line> to the <file>.` — the slot names what to write. The
     /// first five have always been handled; `append` was missing, which made
     /// its own documented primary form a rebinding error (GitLab #580).
+    ///
+    /// `Attach the <session> to the <connection>.` (ARO-0094 §6.1) is the same
+    /// shape: the session is retrieved from the sessions repository on the line
+    /// above, and the slot names *which* session to attach. Binding there would
+    /// make the proposal's own promotion example a rebinding error.
     static let resultIsContentVerbs: Set<String> = [
-        "store", "write", "emit", "save", "persist", "send", "append",
+        "store", "write", "emit", "save", "persist", "send", "append", "attach",
     ]
 
     // MARK: - Immutability Check
@@ -1369,7 +1398,14 @@ public struct DataFlowAnalyzer {
             "log", "emit", "send", "notify", "publish", "store",
             "schedule", "start", "stop", "listen", "keepalive",
             "render", "show", "repaint", "clear",
-            "broadcast", "close", "connect"
+            "broadcast", "close", "connect",
+            // ARO-0094. `Configure the <session: secure> with false.` and
+            // `Declare the <cart-repository> with { scope: "session" }.`
+            // settle framework state and produce nothing anyone reads, so
+            // "defined but never used" is noise on a statement that did
+            // exactly its job. Same reason these two are in
+            // `ActionRoleCatalog.mustRunForEffect`.
+            "configure", "declare"
         ]
         return sideEffectVerbs.contains(v)
     }

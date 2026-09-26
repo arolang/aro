@@ -497,6 +497,21 @@ public final class Application: @unchecked Sendable {
                 }
             }
 
+            // Who is calling (ARO-0094 §4.1). The cookie is validated against
+            // the sessions repository on every request — signature, membership
+            // and both expiries — before a single statement runs, so a
+            // session-scoped repository cannot be reached with a forged or
+            // stale cookie. A request without a valid one simply has no
+            // session, and touching a session-scoped repository then fails
+            // rather than falling back to the application-wide one.
+            let caller: CallerIdentity
+            if case .success(let sessionId) = await SessionService.shared.resolve(cookieHeader: rawCookieHeader) {
+                caller = .session(id: sessionId, connection: nil)
+            } else {
+                caller = .none
+            }
+            let pendingCookie = PendingSessionCookie()
+
             // Execute the feature set. Re-establish the debugger
             // TaskLocals captured at handler-setup time so the
             // statement boundary checkpoint in FeatureSetExecutor
@@ -504,10 +519,20 @@ public final class Application: @unchecked Sendable {
             do {
                 let response = try await Debug.$controller.withValue(capturedDebugController) {
                     try await Debug.$currentSourceFile.withValue(capturedSourceFile) {
-                        try await self.executeFeatureSet(featureSet, request: request, pathParams: match.pathParameters, headerParams: headerParams, cookieParams: cookieParams, effectiveParameters: match.effectiveParameters)
+                        try await self.executeFeatureSet(featureSet, request: request, pathParams: match.pathParameters, headerParams: headerParams, cookieParams: cookieParams, effectiveParameters: match.effectiveParameters, caller: caller, pendingCookie: pendingCookie)
                     }
                 }
                 var httpResponse = self.convertToHTTPResponse(response, requestPath: request.path)
+
+                // An `Attach … to the <caller>` inside the feature set minted
+                // or rotated a session; this is where it reaches the browser.
+                if let setCookie = pendingCookie.value {
+                    var headers = httpResponse.headers
+                    headers["Set-Cookie"] = setCookie
+                    httpResponse = HTTPResponse(statusCode: httpResponse.statusCode,
+                                                headers: headers,
+                                                body: httpResponse.body)
+                }
 
                 // Validate response body against OpenAPI response schema (GitLab #180)
                 if let body = httpResponse.body,
@@ -568,15 +593,25 @@ public final class Application: @unchecked Sendable {
         pathParams: [String: String],
         headerParams: [String: String] = [:],
         cookieParams: [String: String] = [:],
-        effectiveParameters: [Parameter] = []
+        effectiveParameters: [Parameter] = [],
+        caller: CallerIdentity = .none,
+        pendingCookie: PendingSessionCookie? = nil
     ) async throws -> Response {
         // Create execution context for this request
         let context = RuntimeContext(
             featureSetName: analyzedFeatureSet.featureSet.name,
             businessActivity: analyzedFeatureSet.featureSet.businessActivity,
             eventBus: RuntimeContainer.default.eventBus,
-            container: RuntimeContainer.default
+            container: RuntimeContainer.default,
+            caller: caller
         )
+
+        // Where `Attach … to the <caller>` leaves the cookie it minted
+        // (ARO-0094 §6.1). Per-request, so two logins at once cannot hand each
+        // other's session to the wrong browser.
+        if let pendingCookie {
+            context.register(pendingCookie)
+        }
 
         // Register repository storage service for persistent in-memory storage
         context.register(RuntimeContainer.default.repositoryStorage as RepositoryStorageService)

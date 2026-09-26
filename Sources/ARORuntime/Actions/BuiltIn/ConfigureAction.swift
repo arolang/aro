@@ -267,6 +267,79 @@ public enum ConfigurableSettings {
         return try applyLimit(category: category, key: key, raw: value)
     }
 
+    /// `Configure the <session> with { idle: "30m", absolute: "12h",
+    ///  cookie: "aro_session", same-site: "Strict", secure: false }.`
+    /// (ARO-0094 §8.2)
+    ///
+    /// Every field is optional and anything omitted keeps its default, which
+    /// is the conservative one: a 30-minute idle window, a 12-hour ceiling,
+    /// `SameSite=Lax`, and TLS required. `secure: false` is the one that has
+    /// to be written out, because it is the one that is only ever right on a
+    /// developer's machine.
+    static func applySessionSetting(key: String?,
+                                    object: ObjectDescriptor,
+                                    context: ExecutionContext) async throws -> any Sendable {
+        let raw = context.resolveAny("_with_")
+            ?? context.resolveAny("_literal_")
+            ?? context.resolveAny(object.base)
+
+        // One setting at a time, the way every other Configure reads
+        // (`Configure the <application: concurrency> with 4.`), or the whole
+        // policy in one object when that is less to write.
+        let fields: [String: any Sendable]
+        if let key {
+            fields = [key: raw]
+        } else if let object = raw as? [String: any Sendable] {
+            fields = object
+        } else {
+            throw ActionError.missingRequiredField(
+                field: "with { idle, absolute, cookie, same-site, secure, origins }",
+                action: "Configure the <session>")
+        }
+
+        let known = ["idle", "absolute", "cookie", "same-site", "sameSite", "secure", "origins"]
+        for name in fields.keys where !known.contains(name) {
+            throw ActionError.invalidInput(
+                "Configure the <session>: '\(name)' is not a session setting "
+                + "(idle, absolute, cookie, same-site, secure, origins)",
+                received: name)
+        }
+
+        var policy = await SessionService.shared.currentPolicy()
+        if let name = fields["cookie"] as? String, !name.isEmpty { policy.cookieName = name }
+        if let idle = duration(from: fields["idle"]) { policy.idleTimeout = idle }
+        if let absolute = duration(from: fields["absolute"]) { policy.absoluteTimeout = absolute }
+        if let sameSite = fields["same-site"] as? String ?? fields["sameSite"] as? String {
+            policy.sameSite = sameSite
+        }
+        if let secure = fields["secure"] as? Bool { policy.requiresSecureTransport = secure }
+        if let origins = fields["origins"] as? [any Sendable] {
+            policy.allowedOrigins = origins.compactMap { $0 as? String }
+        }
+        await SessionService.shared.configure(policy)
+
+        return ["cookie": policy.cookieName,
+                "idle": policy.idleTimeout,
+                "absolute": policy.absoluteTimeout,
+                "same-site": policy.sameSite,
+                "secure": policy.requiresSecureTransport] as [String: any Sendable]
+    }
+
+    /// Seconds from a number, or from `"30m"` / `"12h"` / `"7d"`.
+    private static func duration(from raw: (any Sendable)?) -> TimeInterval? {
+        if let seconds = raw as? Int { return TimeInterval(seconds) }
+        if let seconds = raw as? Double { return seconds }
+        guard let text = (raw as? String)?.trimmingCharacters(in: .whitespaces), !text.isEmpty else {
+            return nil
+        }
+        let units: [Character: TimeInterval] = ["s": 1, "m": 60, "h": 3600, "d": 86400]
+        if let unit = text.last, let multiplier = units[unit],
+           let value = Double(text.dropLast()) {
+            return value * multiplier
+        }
+        return Double(text)
+    }
+
     /// Apply one limit. `nil` when `key` names no setting in `category`.
     private static func applyLimit(
         category: ConfigurableSetting.Category,
@@ -484,6 +557,11 @@ public struct ConfigureAction: SynchronousAction {
             try validatePreposition(object.preposition)
             return try await ConfigurableSettings.applyStoreSetting(
                 result: result, object: object, context: context)
+        }
+        if result.base == "session" {
+            try validatePreposition(object.preposition)
+            return try await ConfigurableSettings.applySessionSetting(
+                key: result.specifiers.first, object: object, context: context)
         }
         return try executeSynchronously(result: result, object: object, context: context)
     }

@@ -328,6 +328,16 @@ public protocol ContextMetadata: AnyObject, Sendable {
     /// The business activity this feature set belongs to
     var businessActivity: String { get }
 
+    /// Who this execution is on behalf of (ARO-0094).
+    ///
+    /// Set by whichever transport accepted the work — an HTTP request from its
+    /// session cookie, a WebSocket frame from the session resolved at upgrade,
+    /// a socket event from the connection — and inherited by every child
+    /// context, so a statement nested three loops deep still knows whose
+    /// repository it is touching. `.none` in `Application-Start`, in a file
+    /// watcher, and anywhere else no caller exists.
+    var caller: CallerIdentity { get }
+
     /// Unique identifier for this execution
     var executionId: String { get }
 
@@ -464,6 +474,13 @@ public extension VariableBinding {
     func typeOf(_ name: String) -> DataType? {
         resolveTyped(name)?.type
     }
+}
+
+public extension ContextMetadata {
+    /// Default: no caller. A context nobody attributed to a caller belongs to
+    /// none — which is the honest answer, and the one that makes a
+    /// caller-scoped repository fail loudly rather than read the wrong rows.
+    var caller: CallerIdentity { .none }
 }
 
 public extension ServiceRegistryAccess {

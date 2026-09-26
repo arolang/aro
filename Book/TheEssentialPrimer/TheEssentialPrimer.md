@@ -233,7 +233,7 @@ This classification is not merely documentation. The `FeatureSetExecutor` uses i
 
 Repositories are in-memory, event-sourced key-value stores managed by the runtime. They are not databases, though they can be backed by persistent storage via plugins.
 
-A repository is **application-scoped**: one per application, shared by every caller. That is right for a catalogue and wrong for a shopping cart, so a multi-user server carries the caller's identity in the data and filters on it. ARO-0094 proposes declaring the scope on the repository instead — `Declare the <cart-repository> with { scope: "session" }.` — so no statement has to restate it; the declaration exists today and per-caller resolution is in progress.
+A repository is **application-scoped** by default: one per application, shared by every caller. That is right for a catalogue and wrong for a shopping cart, so say which — once, where the repository is declared: `Declare the <cart-repository> with { scope: "session" }.` The handlers do not change at all; `Store the <item> into the <cart-repository>.` now writes to the cart of whoever is calling. The scopes are `"application"`, `"session"` (one authenticated caller) and `"connection"` (one socket, identifying nobody), and a caller-scoped repository that cannot find its caller fails loudly rather than reading somebody else's rows (ARO-0094).
 
 ```aro
 Store the <user> into the <user-repository>.

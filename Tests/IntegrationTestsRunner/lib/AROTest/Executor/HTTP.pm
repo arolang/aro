@@ -17,6 +17,11 @@ use Exporter 'import';
 
 use AROTest::Utils qw($has_yaml $has_http_tiny $has_net_emptyport is_executable get_binary_path);
 use AROTest::Config qw(%options $examples_dir @cleanup_handlers);
+
+# HTTP::CookieJar is in HTTP::Tiny's recommended set but is not core, and an
+# integration runner that dies on a missing optional module takes every HTTP
+# example down with it. Sessions are the only thing that needs it.
+my $HAVE_COOKIE_JAR = eval { require HTTP::CookieJar; 1 } ? 1 : 0;
 use AROTest::Binary qw(find_aro_binary);
 use AROTest::Ports qw(http_port socket_port);
 
@@ -268,7 +273,17 @@ sub run_http_example_internal {
     # Disable keep-alive to avoid stale-connection issues between sequential
     # requests (HTTP::Tiny reuses sockets by default; if the server drops an
     # idle connection, the next request surfaces as "599 Internal Exception").
-    my $http = HTTP::Tiny->new(timeout => 5, keep_alive => 0);
+    #
+    # The jar is what makes a session testable at all (ARO-0094). Without it
+    # every request is a fresh caller, so a route that mints a session and a
+    # route that reads it can never be shown to be the same caller — a cart
+    # that persists across two requests and a cart that does not look
+    # identical from here.
+    my $http = HTTP::Tiny->new(
+        timeout    => 5,
+        keep_alive => 0,
+        ($HAVE_COOKIE_JAR ? (cookie_jar => HTTP::CookieJar->new) : ()),
+    );
     my @output;
     my %captured_ids;  # Store IDs from responses for use in subsequent requests
     my $latest_created_id;  # Track the most recently created resource ID

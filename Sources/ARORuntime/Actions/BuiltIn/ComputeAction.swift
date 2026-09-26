@@ -2609,9 +2609,13 @@ public struct DeleteAction: ActionImplementation {
             // Counted before the clear, because afterwards there is nothing to
             // count and "cleared 0" would be indistinguishable from "cleared
             // everything" — which is the distinction GitLab #866 is about.
+            let partition = try context.repositoryPartition(of: repositoryName)
             let cleared = await storage.retrieve(
-                from: repositoryName, businessActivity: context.businessActivity).count
-            await storage.clear(repository: repositoryName, businessActivity: context.businessActivity)
+                from: repositoryName, businessActivity: context.businessActivity,
+                caller: partition).count
+            await storage.clear(repository: repositoryName,
+                                businessActivity: context.businessActivity,
+                                caller: partition)
             // Emit repository cleared event
             context.emit(RepositoryChangedEvent(
                 repositoryName: repositoryName,
@@ -2635,6 +2639,7 @@ public struct DeleteAction: ActionImplementation {
             deleteResult = await storage.delete(
                 from: repositoryName,
                 businessActivity: context.businessActivity,
+                caller: try context.repositoryPartition(of: repositoryName),
                 where: field,
                 equals: matchValue
             )

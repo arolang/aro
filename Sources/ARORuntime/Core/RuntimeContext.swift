@@ -255,6 +255,12 @@ public actor RuntimeContext: ExecutionContext {
     public nonisolated let executionId: String
     public nonisolated let parent: ExecutionContext?
 
+    /// Who this execution is on behalf of (ARO-0094). Inherited from the
+    /// parent unless the transport that built this context said otherwise —
+    /// so a `for each` body, a template render and a user-defined action call
+    /// all stay with the caller the request arrived as.
+    public nonisolated let caller: CallerIdentity
+
     // MARK: - Initialization
 
     /// Initialize a new runtime context
@@ -276,7 +282,8 @@ public actor RuntimeContext: ExecutionContext {
         parent: ExecutionContext? = nil,
         isCompiled: Bool = false,
         isTemplateContext: Bool = false,
-        driverChannel: ActionDriverChannel? = nil
+        driverChannel: ActionDriverChannel? = nil,
+        caller: CallerIdentity? = nil
     ) {
         self.featureSetName = featureSetName
         self.businessActivity = businessActivity
@@ -286,6 +293,14 @@ public actor RuntimeContext: ExecutionContext {
         self._isTemplateContext = isTemplateContext
         self.driverChannel = driverChannel
         self.parent = parent
+
+        // Caller resolution order: explicit > inherit from parent > none.
+        // Inheritance is the important half: transports set the caller once,
+        // on the context they build for the request, and every child made
+        // below it — loop bodies, template renders, `Application.<Name>`
+        // frames — must resolve the same partition or a nested `Store` would
+        // write somewhere the enclosing `Retrieve` never looks.
+        self.caller = caller ?? (parent as? RuntimeContext)?.caller ?? .none
 
         // Resolve the chain root once, so a call-frame jump costs nothing at
         // lookup time (see `_isCallFrameRoot`).

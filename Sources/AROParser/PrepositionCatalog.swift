@@ -73,6 +73,7 @@ public enum PrepositionCatalog {
         "compute": [.`for`, .from, .with],
         "configure": [.`for`, .from, .into, .to, .with],
         "declare": [.`for`, .with],
+        "attach": [.to, .with],
         "connect": [.to, .with],
         "construct": [.`for`, .from, .to, .with],
         "convert": [.from, .into, .to],
