@@ -155,11 +155,14 @@ class BenchmarkFileTest(unittest.TestCase):
             ids.add(t['id'])
             self.assertTrue(t['prompt'].strip())
             self.assertIn(t['grade_by'], ('execution_output', 'aro_test',
-                                          'aro_check'))
+                                          'aro_check', 'doc_qa'))
+            self.assertIn(t.get('job', 'write'), ('write', 'fix', 'question'))
             if t['grade_by'] == 'execution_output':
                 self.assertIn('expected_output', t)
             if t['grade_by'] == 'aro_test':
                 self.assertIn('test', t)
+            if t['grade_by'] == 'doc_qa':
+                self.assertIn('must_include', t)
             self.assertIn('reference', t, f'{t["id"]} has no reference')
 
     def test_the_benchmark_is_not_all_one_grade(self):
@@ -337,6 +340,96 @@ class RubricTest(unittest.TestCase):
         text = self.RUBRIC.read_text()
         for axis in he.AXES:
             self.assertIn(axis, text)
+
+
+
+class DocQAGradingTest(unittest.TestCase):
+    """`aro ask` has to answer questions about ARO, not only write programs.
+
+    Graded against a rubric rather than a judge model: reproducible, needs no
+    second model, and `must_not_include` is aimed at the failure that matters —
+    the confident wrong answer (GitLab #794).
+    """
+
+    TASK = {
+        'id': 'q-publish-scope',
+        'grade_by': 'doc_qa',
+        'job': 'question',
+        'must_include': ['publish', 'business activity'],
+        'must_not_include': ['visible everywhere'],
+    }
+
+    def test_an_answer_covering_every_point_passes(self):
+        r = fe.grade(self.TASK, 'Use Publish; it reaches the same business activity.')
+        self.assertTrue(r['passed'])
+
+    def test_matching_is_case_insensitive(self):
+        r = fe.grade(self.TASK, 'PUBLISH exports it to the Business Activity.')
+        self.assertTrue(r['passed'], r['reason'])
+
+    def test_a_missing_point_fails_and_says_which(self):
+        r = fe.grade(self.TASK, 'Use Publish.')
+        self.assertFalse(r['passed'])
+        self.assertIn('business activity', r['reason'])
+
+    def test_a_confidently_wrong_answer_fails(self):
+        # The whole point of must_not_include: this one says everything the
+        # rubric asks for and then contradicts it.
+        r = fe.grade(self.TASK,
+                     'Use Publish in the business activity; it is visible everywhere.')
+        self.assertFalse(r['passed'])
+        self.assertIn('wrong', r['reason'])
+
+    def test_an_empty_answer_is_not_reported_as_missing_code(self):
+        # "no ARO in the answer" is the wrong complaint for a prose question.
+        r = fe.grade(self.TASK, '   ')
+        self.assertFalse(r['passed'])
+        self.assertEqual(r['reason'], 'said nothing')
+
+
+class PerJobSummaryTest(unittest.TestCase):
+    """A single pass rate hides which of the three jobs moved."""
+
+    def test_summary_reports_each_job_separately(self):
+        rows = [
+            {'id': 'a', 'grade_by': 'execution_output', 'job': 'write', 'passed': True},
+            {'id': 'b', 'grade_by': 'execution_output', 'job': 'write', 'passed': True},
+            {'id': 'c', 'grade_by': 'execution_output', 'job': 'fix', 'passed': False},
+            {'id': 'd', 'grade_by': 'doc_qa', 'job': 'question', 'passed': True},
+        ]
+        summary = fe.summarise(rows)
+        self.assertEqual(set(summary['by_job']), {'write', 'fix', 'question'})
+        # A model that writes perfectly and cannot fix anything must not look
+        # like a 75% model and nothing else.
+        self.assertEqual(summary['by_job']['write']['successes'], 2)
+        self.assertEqual(summary['by_job']['fix']['successes'], 0)
+
+    def test_a_row_without_a_job_counts_as_write(self):
+        # Every task predating GitLab #794 is a "write a program" task.
+        summary = fe.summarise([
+            {'id': 'a', 'grade_by': 'execution_output', 'passed': True},
+        ])
+        self.assertIn('write', summary['by_job'])
+
+
+class BenchmarkCoversAllThreeJobsTest(unittest.TestCase):
+    """The shipped benchmark must actually exercise the three jobs."""
+
+    def test_every_job_has_tasks(self):
+        tasks = fe.load_tasks()
+        jobs = {t.get('job', 'write') for t in tasks}
+        self.assertEqual(jobs, {'write', 'fix', 'question'},
+                         'the benchmark decides which base model we train on; '
+                         'it has to score all three things aro ask does')
+
+    def test_every_question_task_has_a_rubric_and_a_reference(self):
+        for t in fe.load_tasks():
+            if t.get('grade_by') == 'doc_qa':
+                self.assertTrue(t.get('must_include'), t['id'])
+                # The reference answer is what proves the rubric is satisfiable;
+                # a typo in must_include would otherwise never pass and nobody
+                # would notice.
+                self.assertTrue(t.get('reference'), t['id'])
 
 
 if __name__ == '__main__':
