@@ -6,4 +6,4 @@ defragmented: https://example.com/docs/guide/page.html?x=1
 normalized: https://example.com/a/c
 scheme=https host=example.com
 path=/docs/guide/page.html query=x=1 fragment=top
-startup
+[OK] startup

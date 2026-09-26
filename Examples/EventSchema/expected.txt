@@ -25,4 +25,4 @@ Notification: Received valid event
 - Priority: high
 
 === All events emitted ===
-demo
+[OK] demo

@@ -3,5 +3,19 @@
 # SQLite.swift library doesn't compile on Windows (no SQLite3 module available)
 skip-on-windows: SQLite.swift library requires SQLite3 module not available on Windows
 timeout: 300
+#
+# Interpreter only. The expected output used to be the banner line alone with a
+# note that the plugin might not load, so the test passed whether the plugin
+# worked or not. Pinning the real output (GitLab #820) showed the compiled
+# binary fails at its first plugin action:
+#   Cannot call the create-result from the sqlite: execute.
+# `aro build --static` reports baking the plugin in, yet the action is not
+# resolvable at run time -- the same shape of failure CSVProcessor's Rust
+# plugin shows, while HashPluginDemo's C plugin and QualifierPlugin's Swift
+# qualifiers both work compiled. That is a bug to fix in the build/runtime
+# (GitLab #884), not an expectation to weaken, so this example asserts the
+# interpreter's full output until it is; restoring `mode: both` is that
+# issue's acceptance test.
+mode: interpreter
 # Use occurrence-check for cross-platform compatibility (dictionary ordering varies)
 occurrence-check: true

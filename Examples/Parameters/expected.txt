@@ -1,10 +1,14 @@
-# Generated: Thu Feb  6 11:00:00 2026
 # Type: console
 # Command: aro run ./Examples/Parameters --name "Test" --count 5
 # NOTE: This example uses test-script for verification
 # This expected.txt is for reference only, not used in testing
+# NOTE: hand-maintained, not `--generate`d. The harness generates by running
+# `aro run ./Examples/Parameters` with no arguments, and this example exists to
+# read arguments — a bare run fails on the first Extract. The output recorded
+# here is the one the header's command produces (GitLab #820).
 ---
 Hello, Test!
 Count: 5
-_expression_
-  value: Test
+Port: 8080
+[OK] _expression_
+value: Test

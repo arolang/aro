@@ -1,12 +1,24 @@
-# Generated: Mon Apr 13 16:04:23 2026
 # Type: console
 # Command: aro run ./Examples/QualifierPlugin
 # Timeout: 30s
+# NOTE: hand-maintained, not `--generate`d. Two of the plugin's qualifiers are
+# random — `collections.pick-random` and `collections.shuffle` — so their
+# values differ every run and cannot be pinned. Their heading lines are
+# asserted so the statements are still known to have run; everything else in
+# the example is deterministic and asserted in full. test.hint sets
+# occurrence-check, so the two unpinned values are simply extra output
+# (GitLab #820).
 ---
 Original list:
 [1, 2, 3, 4, 5]
+Random element:
+Shuffled list:
 Reversed list:
 [5, 4, 3, 2, 1]
+Original string:
 Hello World
+Reversed string:
 dlroW olleH
-demo
+Using qualifier in expression:
+[OK] demo
+value: Hello World
