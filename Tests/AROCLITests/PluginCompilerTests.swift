@@ -330,6 +330,46 @@ struct PluginCompilerTests {
             #expect(result.pythonLinkerFlags.isEmpty)
         }
     }
+
+    // MARK: - Routing must not depend on manifest validation (GitLab #734)
+
+    @Test("A plugin whose name fails the package-name rule still routes by language")
+    func routingIgnoresNameValidation() {
+        // `Examples/ZipService` declares `name: ZipPlugin`, which `validate()`
+        // rejects — the package-name rule wants lowercase-with-hyphens. Routing
+        // went through the *validating* parser for a while, so the decode threw,
+        // the compiler logged "treating the plugin as declaring no code to
+        // link", and the compiled binary could not call the plugin at all:
+        //
+        //     Runtime Error: Cannot call the result from the zip: compress.
+        //
+        // Reading a manifest and approving one are different questions.
+        let manifest = """
+        name: ZipPlugin
+        version: 1.0.0
+        provides:
+          - type: swift-plugin
+            path: Sources/
+        """
+
+        #expect(PluginCompiler.manifestDeclaresNativePlugin(manifest),
+                "a PascalCase name must not hide the swift-plugin entry")
+        #expect(!PluginCompiler.manifestDeclaresPythonPlugin(manifest))
+    }
+
+    @Test("A Python plugin with the same name shape routes to Python")
+    func pythonRoutingIgnoresNameValidation() {
+        let manifest = """
+        name: MarkdownRenderer
+        version: 1.0.0
+        provides:
+          - type: python-plugin
+            path: src/
+        """
+
+        #expect(PluginCompiler.manifestDeclaresPythonPlugin(manifest))
+        #expect(!PluginCompiler.manifestDeclaresNativePlugin(manifest))
+    }
 }
 
 #endif  // !os(Windows)

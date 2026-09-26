@@ -832,7 +832,9 @@ struct PluginCompiler: Sendable {
     private static func parseManifest(_ yaml: String) -> PluginManifest? {
         guard !yaml.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
         do {
-            return try PluginManifest.parse(yaml: yaml)
+            // `decode`, not `parse`: routing asks what language the plugin is,
+            // not whether its name obeys the package-name rule (GitLab #734).
+            return try PluginManifest.decode(yaml: yaml)
         } catch {
             FileHandle.standardError.write(Data(
                 "[PluginCompiler] Warning: plugin.yaml could not be read (\(error)); treating the plugin as declaring no code to link.\n".utf8))

@@ -623,12 +623,16 @@ public final class NativePluginHost: @unchecked Sendable, PluginHostProtocol {
         process.standardOutput = outPipe
         process.standardError = errorPipe
 
+        // GitLab #826: compiling a plugin at load time can take minutes on a
+        // first run (dependency resolution, network fetches). Say so.
+        let progress = PluginBuildProgress.started(plugin: pluginName, command: "swift build -c release")
         try process.run()
         process.waitUntilExit()
         let outData = outPipe.fileHandleForReading.readDataToEndOfFile()
         let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
 
         if process.terminationStatus != 0 {
+            PluginBuildProgress.failed(progress)
             let stderrStr = String(data: errorData, encoding: .utf8) ?? ""
             let stdoutStr = String(data: outData, encoding: .utf8) ?? ""
             let combined = [stderrStr, stdoutStr].filter { !$0.isEmpty }.joined(separator: "\n")
@@ -636,6 +640,7 @@ public final class NativePluginHost: @unchecked Sendable, PluginHostProtocol {
             AROLogger.debug("Swift package build failed: \(errorMessage)", subsystem: "plugins")
             throw NativePluginError.compilationFailed(pluginName, message: "swift build failed: \(errorMessage)")
         }
+        PluginBuildProgress.finished(progress)
 
         // Use `swift build --show-bin-path` to find the actual output directory
         // (on Linux this may be .build/x86_64-unknown-linux-gnu/release/ rather than .build/release/)
@@ -718,15 +723,18 @@ public final class NativePluginHost: @unchecked Sendable, PluginHostProtocol {
         process.standardOutput = outputPipe
         process.standardError = errorPipe
 
+        let progress = PluginBuildProgress.started(plugin: pluginName, command: "cargo build --release")
         try process.run()
         process.waitUntilExit()
 
         if process.terminationStatus != 0 {
+            PluginBuildProgress.failed(progress)
             let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
             let errorMessage = String(data: errorData, encoding: .utf8) ?? "Unknown error"
             AROLogger.debug("Cargo build failed: \(errorMessage)", subsystem: "plugins")
             throw NativePluginError.compilationFailed(pluginName, message: "Cargo build failed: \(errorMessage)")
         }
+        PluginBuildProgress.finished(progress)
 
         AROLogger.debug("Cargo build succeeded", subsystem: "plugins")
 
@@ -819,14 +827,22 @@ public final class NativePluginHost: @unchecked Sendable, PluginHostProtocol {
         let errorPipe = Pipe()
         process.standardError = errorPipe
 
+        // `firstRun: false` — one clang invocation, no dependency resolution,
+        // no network. Announced anyway, because silence during any compile is
+        // what made the SQLite case read as a hang (GitLab #826).
+        let progress = PluginBuildProgress.started(
+            plugin: pluginName, command: "cc -shared", firstRun: false)
+
         try process.run()
         process.waitUntilExit()
 
         if process.terminationStatus != 0 {
+            PluginBuildProgress.failed(progress)
             let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
             let errorMessage = String(data: errorData, encoding: .utf8) ?? "Unknown error"
             throw NativePluginError.compilationFailed(pluginName, message: errorMessage)
         }
+        PluginBuildProgress.finished(progress)
     }
 
     /// Resolve a symbol from the loaded library handle

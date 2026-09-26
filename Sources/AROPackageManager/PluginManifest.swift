@@ -206,11 +206,25 @@ public struct PluginManifest: Codable, Sendable, Equatable {
     /// - Parameter yaml: YAML string
     /// - Returns: Parsed manifest
     public static func parse(yaml: String) throws -> PluginManifest {
+        let manifest = try decode(yaml: yaml)
+        try manifest.validate()
+        return manifest
+    }
+
+    /// Decode a manifest **without** validating it.
+    ///
+    /// Reading a manifest and approving one are different questions, and only
+    /// `aro add` / install need the second. Asking "which language is this
+    /// plugin written in?" must not depend on whether the name passes the
+    /// package-name rule: `Examples/ZipService` declares `name: ZipPlugin`,
+    /// which `validate()` rejects as not-lowercase, and routing it through the
+    /// validating parser made the compiler treat a perfectly good Swift plugin
+    /// as declaring no code to link (GitLab #734, found by ZipService failing
+    /// in compiled mode).
+    public static func decode(yaml: String) throws -> PluginManifest {
         let decoder = YAMLDecoder()
         do {
-            let manifest = try decoder.decode(PluginManifest.self, from: yaml)
-            try manifest.validate()
-            return manifest
+            return try decoder.decode(PluginManifest.self, from: yaml)
         } catch let error as DecodingError {
             throw ManifestError.invalidYAML(error.localizedDescription)
         }

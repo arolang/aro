@@ -1665,14 +1665,25 @@ public final class PluginLoader: @unchecked Sendable {
         let errorPipe = Pipe()
         process.standardError = errorPipe
 
+        // `firstRun: false` — a C plugin is one clang invocation with no
+        // dependency resolution, so it takes about a second and reaches no
+        // network. It is announced anyway: silence during *any* compile is
+        // what made the SQLite case read as a hang (GitLab #826).
+        let progress = PluginBuildProgress.started(
+            plugin: output.deletingPathExtension().lastPathComponent,
+            command: "cc -shared",
+            firstRun: false)
+
         try process.run()
         process.waitUntilExit()
 
         if process.terminationStatus != 0 {
+            PluginBuildProgress.failed(progress)
             let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
             let errorMessage = String(data: errorData, encoding: .utf8) ?? "Unknown error"
             throw PluginError.compilationFailed("cc", message: errorMessage)
         }
+        PluginBuildProgress.finished(progress)
     }
 
     /// Compile a Rust plugin using cargo build --release
@@ -1706,14 +1717,19 @@ public final class PluginLoader: @unchecked Sendable {
         process.standardOutput = outputPipe
         process.standardError = errorPipe
 
+        // GitLab #826: say that a compile is happening. Otherwise a first run
+        // is minutes of silence that reads as a hang.
+        let progress = PluginBuildProgress.started(plugin: pluginName, command: "cargo build --release")
         try process.run()
         process.waitUntilExit()
 
         if process.terminationStatus != 0 {
+            PluginBuildProgress.failed(progress)
             let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
             let errorMessage = String(data: errorData, encoding: .utf8) ?? "Unknown error"
             throw PluginError.compilationFailed(pluginName, message: "cargo build failed: \(errorMessage)")
         }
+        PluginBuildProgress.finished(progress)
 
         // Locate the compiled library in target/release
         let targetReleaseDir = projectDir.appendingPathComponent("target/release")
@@ -2110,14 +2126,23 @@ public final class PluginLoader: @unchecked Sendable {
         process.standardError = pipe
         process.standardOutput = pipe
 
+        // A single file through swiftc takes about a second, so this is
+        // announced without the one-time-cost note (GitLab #826).
+        let progress = PluginBuildProgress.started(
+            plugin: source.deletingPathExtension().lastPathComponent,
+            command: "swiftc -emit-library",
+            firstRun: false
+        )
         try process.run()
         process.waitUntilExit()
 
         if process.terminationStatus != 0 {
+            PluginBuildProgress.failed(progress)
             let errorData = pipe.fileHandleForReading.readDataToEndOfFile()
             let errorMessage = String(data: errorData, encoding: .utf8) ?? "Unknown error"
             throw PluginError.compilationFailed(source.lastPathComponent, message: errorMessage)
         }
+        PluginBuildProgress.finished(progress)
     }
 
     /// Load a Swift package plugin
@@ -2147,18 +2172,21 @@ public final class PluginLoader: @unchecked Sendable {
         process.standardOutput = outPipe
         process.standardError = errorPipe
 
+        let progress = PluginBuildProgress.started(plugin: pluginName, command: "swift build -c release")
         try process.run()
         process.waitUntilExit()
         let outData = outPipe.fileHandleForReading.readDataToEndOfFile()
         let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
 
         if process.terminationStatus != 0 {
+            PluginBuildProgress.failed(progress)
             let stderrStr = String(data: errorData, encoding: .utf8) ?? ""
             let stdoutStr = String(data: outData, encoding: .utf8) ?? ""
             let combined = [stderrStr, stdoutStr].filter { !$0.isEmpty }.joined(separator: "\n")
             let errorMessage = combined.isEmpty ? "exit code \(process.terminationStatus)" : combined
             throw PluginError.compilationFailed(pluginName, message: errorMessage)
         }
+        PluginBuildProgress.finished(progress)
 
         // Find the built dynamic library
         // Swift now uses arch-specific paths like .build/arm64-apple-macosx/release/
@@ -2226,18 +2254,23 @@ public final class PluginLoader: @unchecked Sendable {
         process.standardOutput = outPipe
         process.standardError = errorPipe
 
+        // This is the path `aro run Examples/SQLiteExample` takes, and the one
+        // that used to sit silent for over two minutes (GitLab #826).
+        let progress = PluginBuildProgress.started(plugin: pluginName, command: "swift build -c release")
         try process.run()
         process.waitUntilExit()
         let outData = outPipe.fileHandleForReading.readDataToEndOfFile()
         let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
 
         if process.terminationStatus != 0 {
+            PluginBuildProgress.failed(progress)
             let stderrStr = String(data: errorData, encoding: .utf8) ?? ""
             let stdoutStr = String(data: outData, encoding: .utf8) ?? ""
             let combined = [stderrStr, stdoutStr].filter { !$0.isEmpty }.joined(separator: "\n")
             let errorMessage = combined.isEmpty ? "exit code \(process.terminationStatus)" : combined
             throw PluginError.compilationFailed(pluginName, message: errorMessage)
         }
+        PluginBuildProgress.finished(progress)
 
         #if os(Windows)
         let libraryExtension = "dll"
