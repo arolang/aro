@@ -54,6 +54,9 @@ public final class Runtime: @unchecked Sendable {
         return body()
     }
 
+    /// Set once Application-End has run for the current run (GitLab #628).
+    private nonisolated(unsafe) var _didRunApplicationEnd = false
+
     private var isRunning: Bool {
         get { withLock { _isRunning } }
         set { withLock { _isRunning = newValue } }
@@ -79,6 +82,18 @@ public final class Runtime: @unchecked Sendable {
         withLock {
             if _isRunning { return false }
             _isRunning = true
+            _didRunApplicationEnd = false
+            return true
+        }
+    }
+
+    /// Whether this call is the one that gets to run Application-End.
+    ///
+    /// Answers `true` exactly once per run (GitLab #628).
+    private func claimApplicationEnd() -> Bool {
+        withLock {
+            if _didRunApplicationEnd { return false }
+            _didRunApplicationEnd = true
             return true
         }
     }
@@ -152,6 +167,23 @@ public final class Runtime: @unchecked Sendable {
         _ program: AnalyzedProgram,
         entryPoint: String = "Application-Start"
     ) async throws -> Response {
+        try await run(program, entryPoint: entryPoint, runApplicationEnd: true)
+    }
+
+    /// - Parameter runApplicationEnd: whether this call owns the Application-End
+    ///   handler. `runAndKeepAlive` passes `false` and fires it itself once the
+    ///   keep-alive loop has finished (GitLab #628): it used to let `run` fire
+    ///   it *and* fire it again afterwards, so every handler body ran twice —
+    ///   a second `Log`, a second store flush, a second outbound call, and a
+    ///   `Stop the <http-server>` against an already-stopped server. For a
+    ///   program that does not `Keepalive`, the first of those two also ran
+    ///   before the idle drain, so shutdown work happened while events were
+    ///   still in flight.
+    private func run(
+        _ program: AnalyzedProgram,
+        entryPoint: String,
+        runApplicationEnd: Bool
+    ) async throws -> Response {
         guard tryStartRunning() else {
             throw ActionError.runtimeError("Runtime is already running")
         }
@@ -167,13 +199,15 @@ public final class Runtime: @unchecked Sendable {
             let response = try await engine.execute(program, entryPoint: entryPoint)
             // Track if application entered wait state (for response printing suppression)
             enteredWaitState = await engine.enteredWaitState
-            // Execute Application-End: Success handler
-            await executeApplicationEnd(isError: false)
+            if runApplicationEnd {
+                await executeApplicationEnd(isError: false)
+            }
             return response
         } catch {
-            // Execute Application-End: Error handler
             shutdownError = error
-            await executeApplicationEnd(isError: true)
+            if runApplicationEnd {
+                await executeApplicationEnd(isError: true)
+            }
             throw error
         }
     }
@@ -196,7 +230,7 @@ public final class Runtime: @unchecked Sendable {
         RuntimeSignalHandler.shared.register(self)
 
         do {
-            _ = try await run(program, entryPoint: entryPoint)
+            _ = try await run(program, entryPoint: entryPoint, runApplicationEnd: false)
         } catch {
             // Store error for Application-End: Error handler
             shutdownError = error
@@ -239,6 +273,11 @@ public final class Runtime: @unchecked Sendable {
     /// Execute Application-End handler if defined
     /// - Parameter isError: Whether shutdown is due to an error
     private func executeApplicationEnd(isError: Bool) async {
+        // Belt and braces for GitLab #628. The sequencing above is the actual
+        // fix; this makes a second call from any future path a no-op rather
+        // than a doubled side effect, which is the failure mode that went
+        // unnoticed because nothing counted the executions.
+        guard claimApplicationEnd() else { return }
         guard let program = currentProgram else { return }
 
         // Find Application-End feature set
@@ -276,10 +315,20 @@ public final class Runtime: @unchecked Sendable {
         }
 
         // Execute the exit handler
+        // The engine's own storage and registry, not fresh ones (GitLab #629).
+        //
+        // A new `GlobalSymbolStorage()` meant `resolveDependencies` ran against
+        // an empty store, so `Publish as <config> …` in Application-Start was
+        // invisible to Application-End and the documented "graceful shutdown
+        // reads startup state" pattern failed with `undefinedVariable`.
+        // `ActionRegistry.shared` likewise bypassed whatever registry this
+        // `Runtime` was constructed with, so a test's or middleware's registry
+        // did not apply during shutdown — the one moment a shutdown hook most
+        // wants to be observed.
         let executor = FeatureSetExecutor(
-            actionRegistry: ActionRegistry.shared,
+            actionRegistry: await engine.sharedActionRegistry,
             eventBus: eventBus,
-            globalSymbols: GlobalSymbolStorage()
+            globalSymbols: await engine.sharedGlobalSymbols
         )
 
         do {

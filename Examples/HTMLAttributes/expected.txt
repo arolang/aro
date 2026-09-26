@@ -4,4 +4,4 @@
 [One, Not a link, Two]
 anchors=3 hrefs=2
 aligned=2
-startup
+[OK] startup

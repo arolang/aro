@@ -10,4 +10,4 @@ absolute: /srv/app/run.sh
 created: true
 mode: rwxr-xr-x (was rw-r--r--)
 stat: rwxr-xr-x
-startup
+[OK] startup

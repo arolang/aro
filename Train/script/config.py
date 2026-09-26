@@ -442,6 +442,50 @@ PREFERRED_MODEL_ID = 'ARO-Lang/aro-coder-6bit'       # distilled 8B student (for
 TEACHER_MODEL_ID   = 'ARO-Lang/aro-teacher-30b-bf16'  # fine-tuned 30B teacher (for retraining)
 BASE_MODEL_ID      = 'mlx-community/Qwen3-Coder-30B-A3B-Instruct-bf16'
 
+# ── Base-model A/B (GitLab #794) ─────────────────────────────────────────────
+# The candidates `Scripts`-side tooling sweeps when choosing what to train on.
+# Nothing here changes a run on its own: `base_model_candidates()` is what the
+# A/B iterates, and the winner is promoted by editing STUDENT_MODEL_ID above.
+#
+# Why these, and why dense:
+#
+#   * A sparse model transfers *worse* to a new domain than a dense one of
+#     comparable size, and worse on reasoning tasks specifically (ST-MoE,
+#     arXiv 2202.08906). ARO is a new domain and the task — write a correct
+#     program — is reasoning. Every failure recorded in these notebooks is a
+#     training-time MoE problem: NaN at round 2, the router `stop_gradient`
+#     patch in Train/tools/patch_mlx_lm.py, students that collapsed to `!`.
+#   * Qwen2.5-Coder-14B scores higher on coding than the 30B-A3B we train on
+#     today, at half the memory and without any of that.
+#   * Qwen3.5/3.6 do not ship dense models at 14B/32B — the newer generations
+#     went MoE — so the newest *dense* Qwen at a trainable size is Qwen3.
+#
+# Seed-Coder-8B is here because it ships a true *base* model, which is the
+# right starting point when the adaptation is this heavy.
+BASE_MODEL_CANDIDATES = [
+    ('qwen3-14b',        'mlx-community/Qwen3-14B-bf16'),
+    ('qwen2.5-coder-14b', 'mlx-community/Qwen2.5-Coder-14B-Instruct-bf16'),
+    ('seed-coder-8b',    'mlx-community/Seed-Coder-8B-Base-bf16'),
+    ('qwen3-8b',         STUDENT_MODEL_ID),   # today's student, the control
+]
+
+# Whether the teacher is itself fine-tuned, or used only to generate data.
+#
+# Fine-tuning a model and sampling from it are different jobs. Every MoE
+# failure above is training-time; inference on a sparse model is stable and
+# cheap (3B active). Keeping the teacher but not training it drops ~60 GB of
+# memory pressure and both failure modes without giving up distillation.
+TEACHER_IS_INFERENCE_ONLY = True
+
+
+def base_model_candidates():
+    """(label, model id) for each base the A/B should score.
+
+    A list rather than a single BASE_MODEL_ID because the question this issue
+    asks — is a dense base as good? — cannot be answered by one run.
+    """
+    return list(BASE_MODEL_CANDIDATES)
+
 # Legacy alias — notebooks that reference FALLBACK_MODEL_ID still work.
 FALLBACK_MODEL_ID  = BASE_MODEL_ID
 
@@ -2273,73 +2317,123 @@ FIXTRAIN_RULES = [
         'message': 'Compute qualifier is not registered in the runtime — see '
                    'aro_qualifier_catalog.json (GitLab #486)',
         'check': _unknown_compute_qualifier,
+        'wrong': 'Compute the <total: sumify> from <amounts>.',
+        'corrected': 'Compute the <amounts> from [1, 2, 3].\n'
+                     'Compute the <total: sum> from <amounts>.',
     },
     {
         'name': 'string-concat-plus', 'severity': 'error',
         'message': 'string concatenation must use `++`, not `+` '
                    '(FIXTRAIN ISSUE-003/014/026/037)',
         'pattern': _re.compile(r'"[^"\n]*"\s*\+(?!\+)|(?<!\+)\+\s*"'),
+        'wrong': 'Compute the <label> from "Order placed: " + <order-id>.',
+        'corrected': 'Compute the <order-id> from "A-17".\n'
+                     'Compute the <label> from "Order placed: " ++ <order-id>.',
     },
     {
         'name': 'emit-with-destination', 'severity': 'error',
         'message': 'Emit takes no destination — use `Emit a <Name: event> with <data>.` '
                    '(FIXTRAIN ISSUE-001/011/029/041)',
         'pattern': _re.compile(r'\bemit\b[^.\n]*\bto\s+the\b', _re.IGNORECASE),
+        'wrong': 'Emit the <user> to the <user-created-event>.',
+        'corrected': 'Create the <user> with { name: "Ada" }.\n'
+                     'Emit a <UserCreated: event> with <user>.',
     },
     {
         'name': 'emit-missing-event-qualifier', 'severity': 'error',
         'message': 'Emit result needs a lowercase `: event` qualifier '
                    '(FIXTRAIN ISSUE-021/029/041)',
         'pattern': _re.compile(r'\bEmit\s+(?:the\s+|an?\s+)?<(?![^>]*:\s*event\b)[^>]*>'),
+        'wrong': 'Emit a <UserCreated> with <user>.',
+        'corrected': 'Create the <user> with { name: "Ada" }.\n'
+                     'Emit a <UserCreated: event> with <user>.',
     },
     {
         'name': 'log-for-console', 'severity': 'error',
         'message': 'Log uses `to the <console>`, never `for` (FIXTRAIN ISSUE-002)',
         'pattern': _re.compile(r'\bLog\b[^.\n]*\bfor\s+the\s+<console>'),
+        'wrong': 'Log the <message> for the <console> with "Calculator ready".',
+        'corrected': 'Log "Calculator ready" to the <console>.',
     },
     {
         'name': 'log-extra-clauses', 'severity': 'error',
         'message': 'Log accepts no clauses after `to the <console>` (FIXTRAIN ISSUE-010)',
         'pattern': _re.compile(r'to\s+the\s+<console>\s+(?:for|with)\b'),
+        'wrong': 'Log <debug> to the <console> for the <application> with <level>.',
+        'corrected': 'Compute the <debug> from "starting".\n'
+                     'Log <debug> to the <console>.',
     },
     {
         'name': 'publish-not-as-form', 'severity': 'error',
         'message': 'Publish syntax is `Publish as <alias> <variable>.` '
                    '(FIXTRAIN ISSUE-012/030)',
         'pattern': _re.compile(r'^\s*Publish\s+(?!as\b)', _re.MULTILINE),
+        'wrong': 'Publish the <result> as <build>.',
+        'corrected': 'Compute the <result> from "green".\n'
+                     'Publish as <build> <result>.',
     },
     {
         'name': 'when-block', 'severity': 'error',
         'message': '`when <cond> { … }` blocks do not exist — `when` is a '
                    'per-statement suffix guard (FIXTRAIN ISSUE-013/033)',
         'pattern': _re.compile(r'^\s*when\b[^.{}\n]*\{\s*$', _re.MULTILINE),
+        'wrong': 'when <ready> {\n'
+                 '    Log "active" to the <console>.\n'
+                 '}',
+        'corrected': 'Compute the <ready> from true.\n'
+                     'Log "active" to the <console> when <ready>.',
     },
     {
         'name': 'else-block', 'severity': 'error',
         'message': '`else { … }` does not exist in ARO (FIXTRAIN ISSUE-013)',
         'pattern': _re.compile(r'^\s*\}?\s*else\s*\{', _re.MULTILINE),
+        'wrong': 'Log "active" to the <console> when <ready>.\n'
+                 'else {\n'
+                 '    Log "inactive" to the <console>.\n'
+                 '}',
+        'corrected': 'Compute the <ready> from true.\n'
+                     'Log "active" to the <console> when <ready>.\n'
+                     'Log "inactive" to the <console> when not <ready>.',
     },
     {
         'name': 'while-loop', 'severity': 'error',
         'message': '`while` loops do not exist — use For-each (FIXTRAIN ISSUE-005)',
         'pattern': _re.compile(r'^\s*while\b[^.\n]*\{', _re.MULTILINE),
+        'wrong': 'while <count> <= 3 {\n'
+                 '    Log <count> to the <console>.\n'
+                 '}',
+        'corrected': 'Compute the <items> from [1, 2, 3].\n'
+                     'for each <item> in <items> {\n'
+                     '    Log <item> to the <console>.\n'
+                     '}',
     },
     {
         'name': 'hallucinated-subscribe', 'severity': 'error',
         'message': '`Subscribe` is not an ARO action — handlers register by '
                    'naming convention (FIXTRAIN ISSUE-022)',
         'pattern': _re.compile(r'^\s*Subscribe\b', _re.MULTILINE),
+        'wrong': 'Subscribe the <handler> to the <UserCreated: event>.',
+        'corrected': '(Send Welcome Email: UserCreated Handler) {\n'
+                     '    Extract the <user> from the <event: user>.\n'
+                     '    Log <user> to the <console>.\n'
+                     '    Return an <OK: status> for the <notification>.\n'
+                     '}',
     },
     {
         'name': 'hallucinated-set', 'severity': 'error',
         'message': '`Set` is not an ARO action — variables are immutable '
                    '(FIXTRAIN ISSUE-023)',
         'pattern': _re.compile(r'^\s*Set\s+the\s+<', _re.MULTILINE),
+        'wrong': 'Set the <count> to 5.',
+        'corrected': 'Compute the <count> from 5.',
     },
     {
         'name': 'hallucinated-build', 'severity': 'error',
         'message': '`Build` is not an ARO action (FIXTRAIN ISSUE-012)',
         'pattern': _re.compile(r'^\s*Build\s+(?:the\s+)?<', _re.MULTILINE),
+        'wrong': 'Build the <report> from <rows>.',
+        'corrected': 'Compute the <rows> from [1, 2].\n'
+                     'Create the <report> with { rows: <rows> }.',
     },
     {
         'name': 'missing-angle-brackets', 'severity': 'error',
@@ -2348,12 +2442,22 @@ FIXTRAIN_RULES = [
             r'^\s*(?:Extract|Retrieve|Transform|Filter|Compute|Create|Store'
             r'|Delete|Update|Send)\s+the\s+[a-z][\w-]*\s+'
             r'(?:from|to|into|with|for)\s+the\s+[a-z]', _re.MULTILINE),
+        'wrong': 'Extract the age from the person.',
+        'corrected': 'Create the <person> with { age: 41 }.\n'
+                     'Extract the <age> from the <person: age>.',
     },
     {
         'name': 'feature-set-missing-activity', 'severity': 'error',
         'message': 'feature set headers need `(Name: Business Activity)` — the '
                    'colon and activity are mandatory (FIXTRAIN ISSUE-019/020/025/032)',
         'pattern': _re.compile(r'^\s*\((?!\*)[^:()\n]*\)\s*\{', _re.MULTILINE),
+        'wrong': '(ExtractDemo) {\n'
+                 '    Log "hi" to the <console>.\n'
+                 '}',
+        'corrected': '(ExtractDemo: Demo API) {\n'
+                     '    Log "hi" to the <console>.\n'
+                     '    Return an <OK: status> for the <demo>.\n'
+                     '}',
     },
     {
         'name': 'feature-set-keyword-header', 'severity': 'error',
@@ -2362,6 +2466,13 @@ FIXTRAIN_RULES = [
         'pattern': _re.compile(
             r'^\s*(?:Application\s+[A-Z][\w ]*|Feature\s+[Ss]et:?\s+[^\n{]*)\{',
             _re.MULTILINE),
+        'wrong': 'Application ExtractDemo {\n'
+                 '    Log "hi" to the <console>.\n'
+                 '}',
+        'corrected': '(ExtractDemo: Demo API) {\n'
+                     '    Log "hi" to the <console>.\n'
+                     '    Return an <OK: status> for the <demo>.\n'
+                     '}',
     },
     {
         'name': 'compute-from-with-arithmetic', 'severity': 'error',
@@ -2370,52 +2481,82 @@ FIXTRAIN_RULES = [
                    '(FIXTRAIN ISSUE-004/016/018)',
         'pattern': _re.compile(
             r'\bCompute\s+the\s+<[^>:]*>\s+from\s+(?:the\s+)?<[^>]*>\s+with\b'),
+        'wrong': 'Compute the <total> from the <quantity> with <price>.',
+        'corrected': 'Compute the <quantity> from 3.\n'
+                     'Compute the <price> from 5.\n'
+                     'Compute the <total> from <quantity> * <price>.',
     },
     {
         'name': 'throw-wrong-preposition', 'severity': 'error',
         'message': 'Throw accepts only `for` (FIXTRAIN ISSUE-009/035)',
         'pattern': _re.compile(r'^\s*Throw\b[^.\n]*\b(?:with|to)\b', _re.MULTILINE),
+        'wrong': 'Throw an <Unauthorized: error> for the <admin> with <no-access>.',
+        'corrected': 'Compute the <admin> from "root".\n'
+                     'Throw an <Unauthorized: error> for the <admin>.',
     },
     {
         'name': 'transform-using', 'severity': 'error',
         'message': '`using` is not an ARO preposition — put the qualifier on the '
                    'result variable (FIXTRAIN ISSUE-027)',
         'pattern': _re.compile(r'^\s*Transform\b[^.\n]*\busing\b', _re.MULTILINE),
+        'wrong': 'Transform the <count> from the <raw> using int.',
+        'corrected': 'Compute the <raw> from "42".\n'
+                     'Transform the <count: int> from <raw>.',
     },
     {
         'name': 'delete-with-dict', 'severity': 'error',
         'message': 'Delete uses `from … where`, not a `with { }` dictionary '
                    '(FIXTRAIN ISSUE-036)',
         'pattern': _re.compile(r'^\s*Delete\b[^.\n]*\bwith\s*\{', _re.MULTILINE),
+        'wrong': 'Delete the <user> from the <user-repository> with { id: <id> }.',
+        'corrected': 'Create the <user> with { id: 1, status: "cancelled" }.\n'
+                     'Store the <user> into the <user-repository>.\n'
+                     'Delete the <purged> from the <user-repository> where <status> is "cancelled".',
     },
     {
         'name': 'execute-from', 'severity': 'error',
         'message': 'Execute identifies the command with `for`, not `from` '
                    '(FIXTRAIN ISSUE-008)',
         'pattern': _re.compile(r'^\s*Execute\b[^.\n]*\bfrom\s+the\b', _re.MULTILINE),
+        'wrong': 'Execute the <result> from the <console> with "date +%Y-%m-%d".',
+        'corrected': 'Compute the <command> from "date +%Y-%m-%d".\n'
+                     'Execute the <result> for the <command>.',
     },
     {
         'name': 'listen-from', 'severity': 'error',
-        'message': 'Listen syntax is `Listen the <keyboard> to the <stdin>.` '
+        'message': 'Listen identifies what it listens to with `for`, not `from` '
+                   '— `Listen the <event-listener> for the <events: eventname>.` '
                    '(FIXTRAIN ISSUE-043)',
         'pattern': _re.compile(r'^\s*Listen\b[^.\n]*\bfrom\s+the\b', _re.MULTILINE),
+        'wrong': 'Listen the <event-listener> from the <events: eventname>.',
+        'corrected': 'Listen the <event-listener> for the <events: eventname>.',
     },
     {
         'name': 'return-from', 'severity': 'error',
         'message': 'Return uses `with`/`for`, never `from` (FIXTRAIN ISSUE-044)',
         'pattern': _re.compile(r'^\s*Return\b[^.\n]*\bfrom\b', _re.MULTILINE),
+        'wrong': 'Return an <OK: status> from the <user>.',
+        'corrected': 'Create the <user> with { name: "Ada" }.\n'
+                     'Return an <OK: status> with <user>.',
     },
     {
         'name': 'accept-wrong-preposition', 'severity': 'error',
-        'message': 'Accept transitions state — `Accept the <entity: new-state>.`; '
+        'message': 'Accept transitions state — '
+                   '`Accept the <transition: draft_to_placed> on <order: status>.`; '
                    'no `from`/`with` clauses (FIXTRAIN ISSUE-024/034)',
         'pattern': _re.compile(r'^\s*Accept\b[^.\n]*\b(?:from|with)\b', _re.MULTILINE),
+        'wrong': 'Accept the <transition: draft_to_placed> from the <order: status>.',
+        'corrected': 'Create the <order> with { status: "draft" }.\n'
+                     'Accept the <transition: draft_to_placed> on <order: status>.',
     },
     {
         'name': 'arrow-assignment', 'severity': 'error',
         'message': '`<-` arrow assignment / type-annotated assignment is not ARO '
                    '(FIXTRAIN ISSUE-038/041)',
         'pattern': _re.compile(r'(?:\s|\))<-'),
+        'wrong': 'Compute the <total> from 42.\n'
+                 '<total> <- 42',
+        'corrected': 'Compute the <total> from 42.',
     },
     # ── warn-severity: reported but not dropped ─────────────────────────────
     {
@@ -2423,12 +2564,19 @@ FIXTRAIN_RULES = [
         'message': 'Render normally targets `to the <console>` — check `from` '
                    'usage (FIXTRAIN ISSUE-040)',
         'pattern': _re.compile(r'^\s*Render\b[^.\n]*\bfrom\s+the\b', _re.MULTILINE),
+        'wrong': 'Render the <menu> from the <console>.',
+        'corrected': 'Compute the <menu> from "1) go".\n'
+                     'Render the <menu> to the <console>.',
     },
     {
         'name': 'store-in-preposition', 'severity': 'warn',
         'message': 'canonical Store preposition is `into` (the runtime accepts '
                    '`in`, docs use `into`) (FIXTRAIN ISSUE-028)',
         'pattern': _re.compile(r'\bStore\s+(?:the\s+)?<[^>]+>\s+in\s+the\b'),
+        'wrong': 'Create the <user> with { id: 1 }.\n'
+                 'Store the <user> in the <user-repository>.',
+        'corrected': 'Create the <user> with { id: 1 }.\n'
+                     'Store the <user> into the <user-repository>.',
     },
 ]
 

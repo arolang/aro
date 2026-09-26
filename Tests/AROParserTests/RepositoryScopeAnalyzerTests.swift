@@ -236,3 +236,66 @@ struct RepositoryScopeAnalyzerTests {
         #expect(RepositoryScopeAnalyzer.scopeNames == ["application", "connection", "session"])
     }
 }
+
+// ============================================================
+// GitLab #632 — a handler whose name names no event
+// ============================================================
+
+@Suite("Handler names that name no event (#632)")
+struct HandlerNameAnalyzerTests {
+
+    private func warnings(_ source: String) throws -> [Diagnostic] {
+        let program = try Parser(tokens: try Lexer.tokenize(source)).parse()
+        let collector = DiagnosticCollector()
+        HandlerNameAnalyzer.check(program, diagnostics: collector)
+        return collector.warnings
+    }
+
+    @Test("A socket handler with no keyword is reported")
+    func keywordlessSocketHandler() throws {
+        // The issue's own repro. It used to subscribe to nothing: compiled,
+        // checked clean, never ran.
+        let found = try warnings("""
+        (Echo Input: Socket Event Handler) {
+            Extract the <chunk> from the <packet: buffer>.
+            Return an <OK: status> for the <packet>.
+        }
+        """)
+        #expect(found.count == 1)
+        #expect(found[0].message.contains("says which event it handles"))
+        #expect(found[0].hints.contains { $0.contains("connects and disconnects too") })
+    }
+
+    @Test("A WebSocket handler with no keyword is reported")
+    func keywordlessWebSocketHandler() throws {
+        let found = try warnings("""
+        (Broadcast Chat: WebSocket Event Handler) {
+            Return an <OK: status> for the <event>.
+        }
+        """)
+        #expect(found.count == 1)
+    }
+
+    @Test("Named handlers are silent")
+    func namedHandlersAreSilent() throws {
+        for name in ["Handle Data Received", "Handle Client Connected",
+                     "Handle Client Disconnected", "Handle Message"] {
+            let found = try warnings("""
+            (\(name): Socket Event Handler) {
+                Return an <OK: status> for the <packet>.
+            }
+            """)
+            #expect(found.isEmpty, "\(name) should not warn")
+        }
+    }
+
+    @Test("Handlers of other families are not this check's business")
+    func otherFamiliesUntouched() throws {
+        let found = try warnings("""
+        (Do Something: UserCreated Handler) {
+            Return an <OK: status> for the <event>.
+        }
+        """)
+        #expect(found.isEmpty)
+    }
+}

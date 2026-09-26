@@ -6,4 +6,4 @@
 site: https://example.com
 depth: 3
 arguments: 2
-startup
+[OK] startup

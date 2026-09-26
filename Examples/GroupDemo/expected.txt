@@ -11,3 +11,4 @@ FR:
 admin:
 user:
 === Demo Complete ===
+[OK] demo

@@ -88,6 +88,11 @@ public final class Compiler {
             RepositoryScopeAnalyzer.check(program,
                                           scopes: declaredRepositoryScopes,
                                           diagnostics: diagnostics)
+
+            // A socket or WebSocket handler whose name names no event
+            // (GitLab #632). It now subscribes to all of them rather than to
+            // none, which is safe but rarely what was meant.
+            HandlerNameAnalyzer.check(program, diagnostics: diagnostics)
             
             return CompilationResult(
                 program: program,

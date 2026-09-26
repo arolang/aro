@@ -10,4 +10,4 @@ Temperature:
 22.5
 Latitude:
 52.52
-startup
+[OK] startup

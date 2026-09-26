@@ -9,4 +9,4 @@ current_weather.winddirection:
 current_weather.weathercode:
 latitude:
 longitude:
-startup
+[OK] startup

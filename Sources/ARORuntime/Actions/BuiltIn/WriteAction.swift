@@ -106,7 +106,17 @@ public struct WriteAction: ActionImplementation {
         // Get data to write - prefer resolveAny to get structured data,
         // only fall back to string if no structured data available
         let content: String
-        if let value = context.resolveAny(result.base) {
+        // Sink syntax puts the content in the result *slot*, not in a variable:
+        // `Write "first" to the <file: "demo-a.txt">.` parses with
+        // `result.base == "_sink_"` and the text in `_result_expression_`
+        // (Parser.swift:616). `resolveAny("_sink_")` finds nothing, so this
+        // action used to fall through to `content = ""` and write an empty
+        // file — the sink text was silently dropped. `GuardsAndDefaults` hid
+        // it by only asserting that the file exists (GitLab #642).
+        let sinkValue = result.base == "_sink_"
+            ? (context.resolveAny("_result_expression_") ?? context.resolveAny("_literal_"))
+            : nil
+        if let value = sinkValue ?? context.resolveAny(result.base) {
             if isRaw {
                 // `raw` qualifier: write the value's string form unchanged,
                 // bypassing any serialiser (issue #197).
@@ -119,7 +129,15 @@ public struct WriteAction: ActionImplementation {
                 content = FormatSerializer.serialize(value, format: format, variableName: result.base, options: formatOptions)
             }
         } else {
-            content = ""
+            // An undefined source is an error, not an empty file (GitLab #642).
+            //
+            // This used to bind `""` and write it, so a typo —
+            // `Write the <reprot> to the <file: "out.json">.` — silently
+            // truncated `out.json` to zero bytes and answered OK. Every other
+            // action throws `undefinedVariable` for an unknown name; this one
+            // destroyed the target first. Nothing in the output said so, and
+            // the file that proved it was the one that had just been erased.
+            throw ActionError.undefinedVariable(result.base)
         }
 
         // Try file service

@@ -25,4 +25,4 @@ Final files listed
 .txt files found:
 2
 === Demo Complete ===
-demo
+[OK] demo

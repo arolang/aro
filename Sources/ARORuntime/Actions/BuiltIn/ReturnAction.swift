@@ -63,20 +63,21 @@ public struct ReturnAction: SynchronousAction {
                 }
                 structured["data"] = array
             } else if let str = expr as? String {
-                // Simple variable that contains a JSON string - try to parse it
-                if let jsonData = str.data(using: .utf8),
-                   let parsed = try? JSONSerialization.jsonObject(with: jsonData),
-                   let dict = parsed as? [String: Any] {
-                    // Variable contains JSON object - use it directly as response data
-                    for (key, value) in dict {
-                        addAnyValue(value, into: &data, key: key)
-                        structured[key] = SendableConverter.fromJSON(value)
-                    }
-                } else {
-                    // Plain string value
-                    data["value"] = AnySendable(str)
-                    structured["value"] = str
-                }
+                // A string is a string (GitLab #637).
+                //
+                // This used to hand every returned string to
+                // `JSONSerialization` and, if it happened to parse as an
+                // object, spread its keys across the top level of the
+                // response. So returning a user-supplied text field that
+                // contained `{"a":1}` changed the response *shape* — the type
+                // of the response depended on the content of a value, which no
+                // contract can describe and no client can rely on. Every plain
+                // string also paid for a parse attempt on the way out.
+                //
+                // A program that means to return structured data has ways to
+                // say so: an object literal, or `Parse` the string first.
+                data["value"] = AnySendable(str)
+                structured["value"] = str
             } else if let body = expr as? RequestBodyValue {  // live body: streams back out
                 // Returning an unread request body writes it straight back to
                 // the client, chunk by chunk (GitLab #477). Carried through the
@@ -134,27 +135,23 @@ public struct ReturnAction: SynchronousAction {
             }
         }
 
-        // If data is empty, try to add a reasonable default value from context
-        // This matches compiled binary behavior which includes return values
-        if data.isEmpty {
-            // Try to find any non-internal variable that might be a return value
-            // Common patterns: last created/modified value, greeting, message, result, etc.
-            let candidateKeys = ["greeting", "message", "result", "data", "output", "value"]
-            for key in candidateKeys {
-                if let value = context.resolveAny(key) {
-                    // Convert to string since AnySendable requires Equatable
-                    if let str = value as? String {
-                        data["value"] = AnySendable(str)
-                    } else {
-                        data["value"] = AnySendable(String(describing: value))
-                    }
-                    // The structured copy keeps the value itself — the
-                    // `String(describing:)` above is a rendering for transport.
-                    structured["value"] = value
-                    break
-                }
-            }
-        }
+        // A `Return` with nothing to return returns nothing (GitLab #636).
+        //
+        // There used to be a fallback here: if `data` came out empty, it
+        // searched the context for `greeting`, `message`, `result`, `data`,
+        // `output` or `value` and put the first one it found in the response.
+        // `resolveAny` walks parent scopes, so
+        // `Return an <OK: status> for the <health-check>.` in a handler that
+        // happened to have — or inherit — a local called `<message>` shipped
+        // that value in the HTTP body. The response shape depended on which
+        // unrelated names existed in scope, which is not a shape anyone can
+        // write a contract against.
+        //
+        // The comment justifying it said this "matches compiled binary
+        // behavior". It did, for a circular reason: a compiled binary calls
+        // this same action through `aro_action_return`, so both modes leaked
+        // identically and parity tests could not see it. Removing it here
+        // removes it from both.
 
         let response = Response(
             status: statusName,

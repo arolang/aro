@@ -1,4 +1,4 @@
-# Generated: manually
+# Generated: Sat Sep 26 18:03:05 2026
 # Type: socket-client
 # Command: aro run ./Examples/SocketClient
 ---
@@ -6,5 +6,4 @@ Connecting to echo server...
 Connected!
 Sent: Hello from ARO!
 Received: Hello from ARO!
-startup
-value: Hello from ARO!
+[OK] startup

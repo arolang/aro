@@ -6,4 +6,4 @@ host -> example.com
 port -> 8080
 tls -> on
 unmatched fields: 0
-startup
+[OK] startup
