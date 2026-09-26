@@ -290,6 +290,11 @@ table and ARO-0004 §11 is generated from it — prefer either over this summary
 is a known, deliberate inconsistency (GitLab #480, ARO-0004 §2.4), not a typo to
 fix here — roles drive data-flow analysis, so changing one changes behaviour.
 
+The five bullets are hand-picked but not hand-trusted: every name in them is
+checked against the runtime by `python3 Scripts/generate-action-reference.py
+--check`, which CI runs, so this summary cannot drift from the registry the way
+it had (GitLab #846). Add a name only if the runtime agrees it has that role.
+
 ### Statement Execution (ARO-0088)
 
 Statements start in source order; the program waits for one at the **first read

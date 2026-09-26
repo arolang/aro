@@ -224,6 +224,11 @@ proposals:
 # ARO-0004 §11 is the authoritative action spec. It had drifted to 48 of 70
 # actions with several wrong rows; it is now derived from the runtime and this
 # job fails if the committed table no longer matches.
+#
+# The same job verifies CLAUDE.md's Action Semantic Roles summary (GitLab
+# #846). That one stays hand-picked — it names a few representative actions per
+# role — so it is checked rather than generated: every name must resolve, in the
+# runtime, to the role its bullet claims.
 action-reference:
   stage: test
   image: python:3.12-slim
