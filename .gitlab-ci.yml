@@ -700,6 +700,9 @@ integration:linux:
     - command -v rustc >/dev/null || { curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y; export PATH="$HOME/.cargo/bin:$PATH"; }
     - rustc --version
     - perl -MNet::EmptyPort -e1 2>/dev/null || cpan -T Net::EmptyPort Term::ANSIColor 2>&1 || true
+    # HTTP::CookieJar lets the harness be the same caller across two requests,
+    # which is the only way a session example can prove anything (ARO-0094).
+    - perl -MHTTP::CookieJar -e1 2>/dev/null || cpan -T HTTP::CookieJar 2>&1 || true
     - |
       if ! command -v swift >/dev/null; then
         wget -q https://download.swift.org/swift-6.3.2-release/ubuntu2204/swift-6.3.2-RELEASE/swift-6.3.2-RELEASE-ubuntu22.04.tar.gz
