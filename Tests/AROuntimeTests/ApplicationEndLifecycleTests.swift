@@ -5,10 +5,17 @@
 // ============================================================
 //
 // Both bugs went unnoticed for the same reason: nothing counted the
-// executions, and nothing asked what the handler could see. A doubled
-// `Log` looks like a log; a doubled store flush looks like a flush; a
+// executions, and nothing asked what the handler could see. A doubled `Log`
+// looks like a log; a doubled store flush looks like a flush; a
 // `Stop the <http-server>` against an already-stopped server looks like
 // nothing at all until it throws.
+//
+// Observed through the event bus and a repository rather than through
+// purpose-built actions. Registering a test-only `ActionImplementation` would
+// put its verb in the process-wide `ActionRegistry`, and three parity suites
+// assert that every registered verb appears in the editor grammars and that
+// the action count matches the generated table — so a helper action makes
+// unrelated suites fail, and only when the whole target runs.
 
 import Testing
 import Foundation
@@ -28,9 +35,11 @@ struct ApplicationEndLifecycleTests {
     func runsOnceWithKeepAlive() async throws {
         // `runAndKeepAlive` called `run`, which ran the handler, and then ran
         // it again itself — so every body ran twice per process (#628).
-        let counter = ExecutionCounter()
-        await counter.install()
-        defer { Task { await counter.uninstall() } }
+        let bus = EventBus()
+        let starts = Counter()
+        bus.subscribe(to: FeatureSetStartedEvent.self) { event in
+            if event.featureSetName == "Application-End" { await starts.bump() }
+        }
 
         let program = try analyze("""
         (Application-Start: Demo) {
@@ -39,25 +48,26 @@ struct ApplicationEndLifecycleTests {
         }
 
         (Application-End: Success) {
-            Count the <runs> for the <shutdown>.
+            Log "stopping" to the <console>.
             Return an <OK: status> for the <shutdown>.
         }
         """)
 
-        let runtime = Runtime()
-        try await runtime.runAndKeepAlive(program)
-        let runs = await counter.count
+        try await Runtime(eventBus: bus).runAndKeepAlive(program)
+        _ = await bus.awaitPendingEvents(timeout: 2)
+        let runs = await starts.count
         #expect(runs == 1, "Application-End ran \(runs) times")
     }
 
     @Test("Application-End sees what Application-Start published")
     func seesPublishedSymbols() async throws {
         // The shutdown executor was built with a fresh `GlobalSymbolStorage`,
-        // so the documented "graceful shutdown reads startup state" pattern
-        // failed with `undefinedVariable` (#629).
-        let recorder = ValueRecorder()
-        await recorder.install()
-        defer { Task { await recorder.uninstall() } }
+        // and `Publish as` scopes a symbol to its business activity — which
+        // for Application-End is `Success`, different from every other feature
+        // set's. So the documented "graceful shutdown reads startup state"
+        // pattern was unreachable (#629).
+        let storage = InMemoryRepositoryStorage()
+        let container = RuntimeContainer(eventBus: EventBus(), repositoryStorage: storage)
 
         let program = try analyze("""
         (Application-Start: Demo) {
@@ -68,58 +78,24 @@ struct ApplicationEndLifecycleTests {
 
         (Application-End: Success) {
             Require the <endpoint> from the <Application-Start>.
-            Record the <seen> for the <endpoint>.
+            Store the <endpoint> into the <seen-repository>.
             Return an <OK: status> for the <shutdown>.
         }
         """)
 
-        let runtime = Runtime()
-        try await runtime.runAndKeepAlive(program)
-        let seen = await recorder.seen
+        try await Runtime(eventBus: container.eventBus).runAndKeepAlive(program)
+
+        let rows = await RuntimeContainer.default.repositoryStorage.retrieve(
+            from: "seen-repository", businessActivity: "Success")
+        let seen = rows.compactMap { $0 as? String }.first
+            ?? rows.compactMap { ($0 as? [String: any Sendable])?["value"] as? String }.first
         #expect(seen == "https://example.test",
-                "Application-End saw \(String(describing: seen))")
+                "Application-End stored \(String(describing: rows))")
     }
 }
 
-/// Counts how many times its verb ran.
-private actor ExecutionCounter {
-    static let shared = ExecutionCounter()
+/// Counts events. An actor because the bus delivers concurrently.
+private actor Counter {
     private(set) var count = 0
     func bump() { count += 1 }
-    func install() { CountAction.sink = self; ActionRegistry.shared.register(CountAction.self) }
-    func uninstall() { CountAction.sink = nil }
-}
-
-private struct CountAction: ActionImplementation {
-    nonisolated(unsafe) static var sink: ExecutionCounter?
-    static let role: ActionRole = .own
-    static let verbs: Set<String> = ["count"]
-    static let validPrepositions: Set<Preposition> = [.for, .with]
-    init() {}
-    func execute(result: ResultDescriptor, object: ObjectDescriptor,
-                 context: ExecutionContext) async throws -> any Sendable {
-        await Self.sink?.bump()
-        return true
-    }
-}
-
-/// Records the value of the object it was given.
-private actor ValueRecorder {
-    private(set) var seen: String?
-    func record(_ value: String?) { seen = value }
-    func install() { RecordAction.sink = self; ActionRegistry.shared.register(RecordAction.self) }
-    func uninstall() { RecordAction.sink = nil }
-}
-
-private struct RecordAction: ActionImplementation {
-    nonisolated(unsafe) static var sink: ValueRecorder?
-    static let role: ActionRole = .own
-    static let verbs: Set<String> = ["record"]
-    static let validPrepositions: Set<Preposition> = [.for, .with]
-    init() {}
-    func execute(result: ResultDescriptor, object: ObjectDescriptor,
-                 context: ExecutionContext) async throws -> any Sendable {
-        await Self.sink?.record(context.resolveAny(object.base) as? String)
-        return true
-    }
 }

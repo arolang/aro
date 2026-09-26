@@ -146,8 +146,16 @@ public struct LogAction: ActionImplementation {
         let formattedMessage: String
         switch context.outputContext {
         case .machine:
-            // JSON format for machine consumption
-            formattedMessage = "{\"level\":\"info\",\"source\":\"\(context.featureSetName)\",\"message\":\"\(message.replacingOccurrences(of: "\"", with: "\\\""))\"}"
+            // JSON, built by a JSON encoder (GitLab #641).
+            //
+            // Hand-escaping only `"` produced a line that was not JSON the
+            // moment a message contained a newline, a tab, a backslash or any
+            // control character — which log messages do, since they carry file
+            // contents and error text. The consumer of machine mode is a
+            // parser, so a line it cannot read is worse than no line: it
+            // usually takes the rest of the stream with it.
+            formattedMessage = Self.machineRecord(
+                source: context.featureSetName, message: message)
         case .human:
             // Readable format for CLI/console: the message, and nothing else.
             //
@@ -233,6 +241,29 @@ public struct LogAction: ActionImplementation {
             try FileHandle.standardOutput.write(contentsOf: data)
         }
     }
+
+    /// One machine-mode log record, encoded rather than interpolated.
+    ///
+    /// `JSONSerialization` handles the escapes a hand-rolled string cannot:
+    /// control characters, backslashes, and the newlines that appear whenever
+    /// a message carries file contents. `sortedKeys` keeps the field order
+    /// stable so the output diffs cleanly.
+    static func machineRecord(source: String, message: String) -> String {
+        let record: [String: String] = [
+            "level": "info",
+            "source": source,
+            "message": message
+        ]
+        guard let data = try? JSONSerialization.data(
+                  withJSONObject: record, options: [.sortedKeys]),
+              let text = String(data: data, encoding: .utf8) else {
+            // Unreachable for a dictionary of strings; if it ever happens,
+            // an empty message is better than a malformed record, because the
+            // consumer is a parser.
+            return "{\"level\":\"info\",\"source\":\"\",\"message\":\"\"}"
+        }
+        return text
+    }
 }
 
 /// Logging service protocol
@@ -249,4 +280,5 @@ public enum LogLevel: String, Sendable {
 public struct LogResult: Sendable, Equatable {
     public let message: String
     public let target: String
+
 }

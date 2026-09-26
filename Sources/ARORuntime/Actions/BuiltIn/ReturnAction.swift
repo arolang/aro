@@ -63,20 +63,21 @@ public struct ReturnAction: SynchronousAction {
                 }
                 structured["data"] = array
             } else if let str = expr as? String {
-                // Simple variable that contains a JSON string - try to parse it
-                if let jsonData = str.data(using: .utf8),
-                   let parsed = try? JSONSerialization.jsonObject(with: jsonData),
-                   let dict = parsed as? [String: Any] {
-                    // Variable contains JSON object - use it directly as response data
-                    for (key, value) in dict {
-                        addAnyValue(value, into: &data, key: key)
-                        structured[key] = SendableConverter.fromJSON(value)
-                    }
-                } else {
-                    // Plain string value
-                    data["value"] = AnySendable(str)
-                    structured["value"] = str
-                }
+                // A string is a string (GitLab #637).
+                //
+                // This used to hand every returned string to
+                // `JSONSerialization` and, if it happened to parse as an
+                // object, spread its keys across the top level of the
+                // response. So returning a user-supplied text field that
+                // contained `{"a":1}` changed the response *shape* — the type
+                // of the response depended on the content of a value, which no
+                // contract can describe and no client can rely on. Every plain
+                // string also paid for a parse attempt on the way out.
+                //
+                // A program that means to return structured data has ways to
+                // say so: an object literal, or `Parse` the string first.
+                data["value"] = AnySendable(str)
+                structured["value"] = str
             } else if let body = expr as? RequestBodyValue {  // live body: streams back out
                 // Returning an unread request body writes it straight back to
                 // the client, chunk by chunk (GitLab #477). Carried through the

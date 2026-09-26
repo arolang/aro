@@ -35,6 +35,15 @@ public struct SendAction: ActionImplementation {
         }
 
         // Try socket server service first (for server-side connection IDs)
+        // The first transport error seen, if any. `Send` used to answer
+        // `success: true` no matter what happened (GitLab #638): both socket
+        // `catch` blocks swallowed their error and the tail of the function
+        // emitted `MessageSentEvent` and returned success. So
+        // `Send the <reply> to the <connection-id>.` against a closed or
+        // unknown connection reported OK, the program could not detect the
+        // drop, and nothing reached "the code is the error message".
+        var deliveryFailure: (any Error)?
+
         #if !os(Windows)
         if let socketServer = context.service(SocketServerService.self) {
             // Try to send to socket connection
@@ -49,7 +58,12 @@ public struct SendAction: ActionImplementation {
                 }
                 return SendResult(destination: destination, success: true)
             } catch {
-                // Connection not found in server - fall through to client
+                // Not "connection not found" — that is one possibility among
+                // many, and the others are real failures. Remembered so the
+                // end of this function can report it if nothing else succeeds
+                // (GitLab #638); the fall-through to the client path below is
+                // still worth trying first.
+                deliveryFailure = error
             }
         }
 
@@ -67,7 +81,7 @@ public struct SendAction: ActionImplementation {
                 }
                 return SendResult(destination: destination, success: true)
             } catch {
-                // Fall through to other services
+                deliveryFailure = error
             }
         }
 
@@ -98,6 +112,21 @@ public struct SendAction: ActionImplementation {
         if let messagingService = context.service(MessagingService.self) {
             try await messagingService.send(data: data, to: destination)
             return SendResult(destination: destination, success: true)
+        }
+
+        // A transport was there, was tried, and failed. Say so.
+        //
+        // Only when something actually failed: with no socket and no
+        // messaging service, `Send` still means "emit a MessageSentEvent",
+        // which is the documented fallback and not an error.
+        if let deliveryFailure {
+            throw AROError(
+                message: "Cannot send to \(destination): "
+                       + String(describing: deliveryFailure),
+                featureSet: context.featureSetName,
+                businessActivity: context.businessActivity,
+                statement: "<Send> the <\(result.base)> to the <\(destination)>."
+            )
         }
 
         // Emit as event

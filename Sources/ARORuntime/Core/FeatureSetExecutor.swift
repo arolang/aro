@@ -782,6 +782,30 @@ public final class FeatureSetExecutor: Sendable {
                 (outerContext as? RuntimeContext)?.markConfigured(resultDescriptor.base)
             }
 
+            // `Publish the <alias> with <value>.` publishes (GitLab #635).
+            //
+            // The verb form emitted a `VariablePublishedEvent` and bound the
+            // alias locally, and stopped there — only the *statement* form
+            // (`Publish as <alias> <var>.`) reached `GlobalSymbolStorage`. So
+            // `Publish`, `Export`, `Expose` and `Share` as verbs looked like
+            // they worked, produced an event a subscriber could see, and left
+            // the symbol invisible to every other feature set. Nothing failed;
+            // the reader simply found nothing.
+            //
+            // Lives here for the same reason the `Configure` mark does: the
+            // action has a context but no global storage, and the write has to
+            // outlive the statement scope.
+            if PublishAction.verbs.contains(verb.lowercased()),
+               let published = context.resolveAny(resultDescriptor.base) {
+                await globalSymbols.publish(
+                    name: resultDescriptor.base,
+                    value: published,
+                    fromFeatureSet: context.featureSetName,
+                    businessActivity: context.businessActivity,
+                    executionId: context.executionId
+                )
+            }
+
             // Bind result to context (unless the action is an effect that
             // already set the response) and skip binding if the action already
             // bound the result, to avoid double-binding.
@@ -1361,6 +1385,28 @@ public final class FeatureSetExecutor: Sendable {
 
         guard let fromInt = toInt(fromVal), let toInt = toInt(toVal) else {
             throw ActionError.typeMismatch(expected: "Int", actual: "\(type(of: fromVal))", variable: "range bounds")
+        }
+
+        // An inverted range is an error, not a crash (GitLab #639).
+        //
+        // `for i in fromInt..<toInt` hits Swift's `Range` precondition when
+        // `lowerBound > upperBound` and aborts the process with an illegal
+        // instruction. For a server that is the whole process, mid-request,
+        // with no ARO error and no stack the author can act on — and the
+        // bounds are often computed, so it fires on data rather than on the
+        // source anyone reviewed.
+        //
+        // Reported rather than silently treated as empty: `from 10 to 1` is
+        // a mistake in the program every time, and ARO-0006 says the runtime
+        // reconstructs what failed instead of quietly doing nothing.
+        guard fromInt <= toInt else {
+            throw AROError(
+                message: "Cannot loop from \(fromInt) to \(toInt): "
+                       + "a range counts up, so the first bound must not be above the second",
+                featureSet: context.featureSetName,
+                businessActivity: context.businessActivity,
+                statement: "for <\(loop.variable)> from \(fromInt) to \(toInt) { … }"
+            )
         }
 
         for i in fromInt..<toInt {
