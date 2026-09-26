@@ -1,5 +1,6 @@
-# Example: PipelineDemo
+# Generated: Sat Sep 26 18:02:59 2026
 # Type: console
+# Command: aro run ./Examples/PipelineDemo
 ---
 === Pipeline Operator ===
 text:
@@ -17,4 +18,3 @@ Alice
 name-len:
 5
 [OK] demo
-  value: ["name": "Alice", "age": 30]

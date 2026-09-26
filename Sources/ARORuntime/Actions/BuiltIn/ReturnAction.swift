@@ -134,27 +134,23 @@ public struct ReturnAction: SynchronousAction {
             }
         }
 
-        // If data is empty, try to add a reasonable default value from context
-        // This matches compiled binary behavior which includes return values
-        if data.isEmpty {
-            // Try to find any non-internal variable that might be a return value
-            // Common patterns: last created/modified value, greeting, message, result, etc.
-            let candidateKeys = ["greeting", "message", "result", "data", "output", "value"]
-            for key in candidateKeys {
-                if let value = context.resolveAny(key) {
-                    // Convert to string since AnySendable requires Equatable
-                    if let str = value as? String {
-                        data["value"] = AnySendable(str)
-                    } else {
-                        data["value"] = AnySendable(String(describing: value))
-                    }
-                    // The structured copy keeps the value itself — the
-                    // `String(describing:)` above is a rendering for transport.
-                    structured["value"] = value
-                    break
-                }
-            }
-        }
+        // A `Return` with nothing to return returns nothing (GitLab #636).
+        //
+        // There used to be a fallback here: if `data` came out empty, it
+        // searched the context for `greeting`, `message`, `result`, `data`,
+        // `output` or `value` and put the first one it found in the response.
+        // `resolveAny` walks parent scopes, so
+        // `Return an <OK: status> for the <health-check>.` in a handler that
+        // happened to have — or inherit — a local called `<message>` shipped
+        // that value in the HTTP body. The response shape depended on which
+        // unrelated names existed in scope, which is not a shape anyone can
+        // write a contract against.
+        //
+        // The comment justifying it said this "matches compiled binary
+        // behavior". It did, for a circular reason: a compiled binary calls
+        // this same action through `aro_action_return`, so both modes leaked
+        // identically and parity tests could not see it. Removing it here
+        // removes it from both.
 
         let response = Response(
             status: statusName,

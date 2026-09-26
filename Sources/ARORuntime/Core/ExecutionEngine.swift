@@ -37,6 +37,19 @@ public actor ExecutionEngine {
         }
     }
 
+    /// The registry this engine was built with.
+    ///
+    /// `Runtime.executeApplicationEnd` used to build its shutdown executor
+    /// with `ActionRegistry.shared` and a brand-new `GlobalSymbolStorage`
+    /// (GitLab #629), so Application-End saw neither the symbols
+    /// Application-Start published nor a registry a test or middleware had
+    /// injected. Both come from here now.
+    public var sharedActionRegistry: ActionRegistry {
+        get async {
+            return actionRegistry
+        }
+    }
+
     /// Service registry for dependency injection
     private let services: ServiceRegistry
 

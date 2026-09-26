@@ -118,9 +118,19 @@ public final class FeatureSetExecutor: Sendable {
         // (`isAccessDenied`, `businessActivity`, `resolveAny`).
         // For a feature set with N published-symbol dependencies
         // this saves 2N actor turns of overhead (#332).
+        //
+        // A lifecycle handler resolves without the business-activity check
+        // (GitLab #629). `Publish as` scopes a symbol to its activity, and
+        // `Application-End`'s activity is `Success` or `Error` — which differs
+        // from every other feature set's by construction. So a shutdown
+        // handler could never read anything Application-Start published, and
+        // the documented "graceful shutdown reads startup state" pattern was
+        // unreachable rather than merely awkward. Passing an empty activity
+        // uses the existing "no scope to violate" path rather than inventing
+        // a second rule.
         let resolutions = await globalSymbols.resolveDependencies(
             analyzedFeatureSet.dependencies,
-            forBusinessActivity: context.businessActivity
+            forBusinessActivity: isLifecycleFeatureSet ? "" : context.businessActivity
         )
         for resolution in resolutions {
             switch resolution {
@@ -850,6 +860,17 @@ public final class FeatureSetExecutor: Sendable {
 
     /// Extra sentence appended to a statement-shaped error when the
     /// statement alone can't convey what went wrong (GitLab #486).
+    /// Whether this context is `Application-Start` or `Application-End`.
+    ///
+    /// Lifecycle handlers sit outside the business-activity scheme —
+    /// `Application-End`'s activity is `Success` or `Error`, which differs
+    /// from every other feature set's by construction — so they resolve
+    /// published symbols without the cross-activity check (GitLab #629).
+    private func isLifecycleFeatureSet(_ context: ExecutionContext) -> Bool {
+        context.featureSetName == "Application-Start"
+            || context.featureSetName.hasPrefix("Application-End")
+    }
+
     private static func statementHint(for error: any Error) -> String? {
         // The allowlist lives on `AROError` so the compiled bridge applies the
         // same one — the two paths were separate, and only this one carried a
@@ -1251,8 +1272,21 @@ public final class FeatureSetExecutor: Sendable {
                 context.bind(statement.variableName, value: envValue)
             }
         case .featureSet(let name):
-            // Cross-feature-set dependency - resolve from global symbols (with business activity validation)
-            if let value = await globalSymbols.resolveAny(statement.variableName, forBusinessActivity: context.businessActivity) {
+            // Cross-feature-set dependency — resolve from global symbols,
+            // subject to the same business-activity rule.
+            //
+            // Skipped when the name is already bound: `executeGated` resolves
+            // the feature set's declared dependencies before the first
+            // statement runs, so by the time the `Require` executes the value
+            // is usually already there. Binding it a second time is an
+            // immutable rebind, which the runtime's backstop reports as
+            // "the semantic analyzer missed a duplicate binding. Please report
+            // this as a compiler bug" — an alarming message for a program that
+            // is doing exactly what the documentation says (GitLab #629).
+            if context.resolveAny(statement.variableName) == nil,
+               let value = await globalSymbols.resolveAny(
+                   statement.variableName,
+                   forBusinessActivity: isLifecycleFeatureSet(context) ? "" : context.businessActivity) {
                 context.bind(statement.variableName, value: value)
             }
             // If not found, the dependency might be provided later
