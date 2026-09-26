@@ -94,3 +94,62 @@ struct ExpressionSerializerCoverageTests {
         #expect(json.contains("$member"))
     }
 }
+
+// ============================================================
+// GitLab #664 — `Break` in a for-each must compile
+// ============================================================
+
+#if !os(Windows)
+
+@Suite("Break inside a for-each compiles (#664)")
+struct BreakInForEachCodeGenTests {
+
+    private func generateIR(_ source: String) throws -> String {
+        let result = Compiler.compile(source)
+        #expect(!result.hasErrors, "source should compile: \(result.diagnostics.map(\.message))")
+        return try LLVMCodeGenerator().generate(program: result.analyzedProgram).irText
+    }
+
+    @Test("A for-each body containing Break generates without error")
+    func breakInForEach() throws {
+        // The streaming path builds the body as its own LLVM function and
+        // hands it to `aro_runtime_foreach_stream`, which returns void — so
+        // there is nowhere for a `Break` to branch to, and codegen failed the
+        // whole build with "break used outside of loop" for a program the
+        // interpreter runs happily. A body that breaks now takes the array
+        // path, which has a break target.
+        let ir = try generateIR("""
+        (Application-Start: Demo) {
+            Create the <items> with ["a", "b"].
+            for each <item> in <items> {
+                Log <item> to the <console>.
+                Break.
+            }
+            Return an <OK: status> for the <demo>.
+        }
+        """)
+        #expect(ir.contains("aro_action_log"))
+        // Call sites, not the extern `declare` line, which is emitted whether
+        // or not anything calls it — a plain `contains` cannot fail here.
+        #expect(!ir.contains("call void @aro_runtime_foreach_stream"),
+                "a breaking body must not take the streaming path")
+    }
+
+    @Test("A for-each without Break still streams")
+    func streamingPreserved() throws {
+        // The fallback must be narrow: only loops that actually break give up
+        // the O(1) memory property.
+        let ir = try generateIR("""
+        (Application-Start: Demo) {
+            Create the <items> with ["a", "b"].
+            for each <item> in <items> {
+                Log <item> to the <console>.
+            }
+            Return an <OK: status> for the <demo>.
+        }
+        """)
+        #expect(ir.contains("call void @aro_runtime_foreach_stream"))
+    }
+}
+
+#endif
