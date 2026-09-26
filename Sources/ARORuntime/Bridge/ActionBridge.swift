@@ -513,6 +513,18 @@ public func aro_action_configure(
     return executeAction(verb: "configure", contextPtr: contextPtr, resultPtr: resultPtr, objectPtr: objectPtr)
 }
 
+/// `Declare the <cart-repository> with { scope: session }.` (ARO-0094).
+/// The catalog and the bridge move together: `LLVMExternalDeclEmitter` emits an
+/// extern per catalog verb, so a catalog entry without a shim does not link.
+@_cdecl("aro_action_declare")
+public func aro_action_declare(
+    _ contextPtr: UnsafeMutableRawPointer?,
+    _ resultPtr: UnsafeRawPointer?,
+    _ objectPtr: UnsafeRawPointer?
+) -> UnsafeMutableRawPointer? {
+    return executeAction(verb: "declare", contextPtr: contextPtr, resultPtr: resultPtr, objectPtr: objectPtr)
+}
+
 @_cdecl("aro_action_accept")
 public func aro_action_accept(
     _ contextPtr: UnsafeMutableRawPointer?,

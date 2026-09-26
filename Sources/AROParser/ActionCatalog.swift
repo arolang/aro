@@ -58,6 +58,8 @@ public enum ActionCatalog {
         "copy", "move", "rename", "append",
         // Configuration
         "configure",
+        // Repository scope (ARO-0094)
+        "declare",
         // Notifications
         "notify", "alert", "signal",
         // SSE / WebSocket streaming

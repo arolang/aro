@@ -1,7 +1,7 @@
 # ARO Language Specification
 
 This directory contains the ARO (Action-Result-Object) language specification: one
-numbered Evolution Proposal per topic, 68 of them. The numbering is sparse —
+numbered Evolution Proposal per topic, 69 of them. The numbering is sparse —
 proposals are added or rejected over time — so gaps are expected.
 
 Every `ARO-NNNN` reference anywhere in the repository must resolve to a file here.
@@ -86,6 +86,7 @@ is put together. 0006 explains why there is no error handling to learn.
 | 87 | [Plugin SDK](ARO-0087-plugin-sdk.md) | SDK and developer experience across Swift, Rust, C, Python |
 | 91 | [Jupyter Kernel](ARO-0091-jupyter-kernel.md) | `aro repl --json`, native ZMQ kernel, notebook semantics |
 | 92 | [The `aro ask` Assistant](ARO-0092-ask-assistant.md) | Local model, tool registry, approval model, `.context` |
+| 94 | [Caller-Scoped Repositories](ARO-0094-caller-scoped-repositories.md) | `session` / `connection` repository scope over HTTP, WebSocket and TCP; session cookies (draft) |
 
 ## Runtime & Compiler Internals
 
@@ -137,7 +138,7 @@ prints the live table, including each action's valid prepositions.
 | Role | Actions |
 |------|---------|
 | REQUEST | Clone, Exists, Extract, List, ParseDispatch, Probe, Prompt, Pull, Read, Receive, Request, Retrieve, Select, Stat, Stream |
-| OWN | Accept, Assert, Call, Clear, Compare, Compute, Configure, Create, Delete, Execute, Filter, GitCheckout, Given, Group, Include, Join, Map, Merge, ParseHtml, Reduce, Reverse, Show, Sleep, Sort, Split, Stage, Then, Transform, Update, Validate, When |
+| OWN | Accept, Assert, Call, Clear, Compare, Compute, Configure, Create, Declare, Delete, Execute, Filter, GitCheckout, Given, Group, Include, Join, Map, Merge, ParseHtml, Reduce, Reverse, Show, Sleep, Sort, Split, Stage, Then, Transform, Update, Validate, When |
 | RESPONSE | Append, Broadcast, Log, Notify, Render, Repaint, Return, Send, Store, Throw, Write |
 | EXPORT | Emit, GitCommit, Publish, Push, Schedule, Tag |
 | SERVER | Close, Connect, Copy, Listen, Make, Move, Start, Stop, Touch, WaitForEvents |

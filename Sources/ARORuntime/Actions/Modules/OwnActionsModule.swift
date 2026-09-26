@@ -15,6 +15,7 @@ public enum OwnActionsModule: ActionModule {
             CreateAction.self,
             UpdateAction.self,
             ConfigureAction.self,
+            DeclareAction.self,
             SortAction.self,
             ReverseAction.self,
             SplitAction.self,
