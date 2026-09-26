@@ -916,6 +916,52 @@ Repositories persist for the **lifetime of the application**:
 - Survive across all HTTP requests
 - Cleared when application restarts
 
+### Everyone Shares One
+
+"Survive across all HTTP requests" is worth reading twice, because it means
+*every* request — including other people's. A repository belongs to the
+application, not to whoever happened to trigger the feature set:
+
+```aro
+(addToCart: Shop API) {
+    Extract the <item> from the <request: body>.
+    Store the <item> into the <cart-repository>.
+    Return a <Created: status> with <item>.
+}
+```
+
+Two customers adding to their carts add to *the same cart*. That is right for a
+catalogue, a rate-limit table or a cache, and wrong for anything belonging to a
+person.
+
+Until ARO has caller scope, a multi-user application carries the caller's
+identity in the data and filters on it:
+
+```aro
+(addToCart: Shop API) {
+    Extract the <item> from the <request: body>.
+    Extract the <customer> from the <request: headers.X-Customer>.
+    Store the { customer: <customer>, item: <item> } into the <cart-repository>.
+    Return a <Created: status> with <item>.
+}
+
+(viewCart: Shop API) {
+    Extract the <customer> from the <request: headers.X-Customer>.
+    Retrieve the <mine> from the <cart-repository> where <customer> is <customer>.
+    Return an <OK: status> with <mine>.
+}
+```
+
+This works, and it has the weakness you would expect: the filter is on every
+statement, so forgetting it once shows one customer another's cart, and nothing
+in the language notices.
+
+**ARO-0094** proposes declaring the scope on the repository instead —
+`Declare the <cart-repository> with { scope: "session" }.` — so that no statement
+restates it and none can forget it. The `Declare` statement exists today and
+records the scope; resolving it per caller over HTTP, WebSocket and TCP is
+in progress. Until it lands, filter in the data as above.
+
 ### Persistence Is Opt-In
 
 A repository is in-memory by default:
