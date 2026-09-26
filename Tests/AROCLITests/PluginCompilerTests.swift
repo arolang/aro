@@ -15,6 +15,7 @@ import Testing
 import Foundation
 import AROCompiler
 import ARORuntime
+import AROPackageManager
 @testable import AROCLI
 
 @Suite("PluginCompiler — pure helpers (#435)")
@@ -106,6 +107,7 @@ struct PluginCompilerTests {
     func detectsPythonPlugin() {
         let yaml = """
         name: markdown
+        version: 1.0.0
         provides:
           - type: python-plugin
             path: src/
@@ -118,7 +120,13 @@ struct PluginCompilerTests {
     @Test("manifestDeclaresNativePlugin detects each native plugin type")
     func detectsEachNativeType() {
         for type in ["swift-plugin", "c-plugin", "cpp-plugin", "rust-plugin"] {
-            let yaml = "provides:\n  - type: \(type)\n"
+            let yaml = """
+            name: demo
+            version: 1.0.0
+            provides:
+              - type: \(type)
+                path: src/
+            """
             #expect(
                 PluginCompiler.manifestDeclaresNativePlugin(yaml),
                 "expected \(type) to be detected as native"
@@ -130,14 +138,59 @@ struct PluginCompilerTests {
         }
     }
 
-    @Test("cpp-plugin is not misread as c-plugin, and vice versa")
+    @Test("cpp-plugin and c-plugin are distinct languages")
     func cppAndCAreDistinct() {
-        // Both are "native", but the substring checks must not confuse them:
-        // "cpp-plugin" does not contain the substring "c-plugin".
-        let cpp = "type: cpp-plugin"
-        let c = "type: c-plugin"
-        #expect(PluginCompiler.manifestDeclaresNativePlugin(cpp))
-        #expect(PluginCompiler.manifestDeclaresNativePlugin(c))
+        func manifest(_ type: String) -> PluginManifest {
+            try! PluginManifest.parse(yaml: """
+            name: demo
+            version: 1.0.0
+            provides:
+              - type: \(type)
+                path: src/
+            """)
+        }
+        #expect(manifest("cpp-plugin").nativeLanguage == .cpp)
+        #expect(manifest("c-plugin").nativeLanguage == .c)
+        #expect(manifest("rust-plugin").nativeLanguage == .rust)
+        #expect(manifest("swift-plugin").nativeLanguage == .swift)
+        #expect(manifest("aro-files").nativeLanguage == nil)
+    }
+
+    /// GitLab #734: the classification used to be `yaml.contains("rust-plugin")`,
+    /// so a plugin whose manifest merely *mentioned* a type — in a comment, a
+    /// description, or the plugin's own name — was compiled as that language.
+    @Test("A comment or description mentioning a type does not classify the plugin")
+    func mentionIsNotDeclaration() {
+        let yaml = """
+        # This is not a rust-plugin; the rust-plugin version lives elsewhere.
+        name: markdown
+        version: 1.0.0
+        description: "Alternative to the c-plugin and python-plugin renderers"
+        provides:
+          - type: swift-plugin
+            path: Sources/
+        """
+        #expect(PluginCompiler.manifestDeclaresNativePlugin(yaml))
+        #expect(!PluginCompiler.manifestDeclaresPythonPlugin(yaml))
+
+        let manifest = try? PluginManifest.parse(yaml: yaml)
+        #expect(manifest?.nativeLanguage == .swift)
+    }
+
+    /// The other half of the same mistake: a feature-set-only plugin whose text
+    /// names a native type ships nothing to link.
+    @Test("An aro-files plugin that mentions rust-plugin declares no native code")
+    func mentionDoesNotMakeItNative() {
+        let yaml = """
+        name: helpers
+        version: 1.0.0
+        description: "Feature sets shared with the rust-plugin examples"
+        provides:
+          - type: aro-files
+            path: features/
+        """
+        #expect(!PluginCompiler.manifestDeclaresNativePlugin(yaml))
+        #expect(!PluginCompiler.manifestDeclaresPythonPlugin(yaml))
     }
 
     @Test("a feature-set-only manifest declares neither native nor python code")
@@ -148,9 +201,22 @@ struct PluginCompilerTests {
         name: helpers
         version: 1.0.0
         handle: Helpers
+        provides:
+          - type: aro-files
+            path: features/
         """
         #expect(!PluginCompiler.manifestDeclaresPythonPlugin(yaml))
         #expect(!PluginCompiler.manifestDeclaresNativePlugin(yaml))
+    }
+
+    @Test("a manifest that cannot be read declares nothing")
+    func unreadableManifest() {
+        // Not YAML at all, and a manifest with no `provides:` block. Neither
+        // can say what to compile, so neither routes the plugin anywhere.
+        for yaml in ["}{ not yaml", "name: helpers\nversion: 1.0.0\n"] {
+            #expect(!PluginCompiler.manifestDeclaresPythonPlugin(yaml))
+            #expect(!PluginCompiler.manifestDeclaresNativePlugin(yaml))
+        }
     }
 
     @Test("empty manifest text declares nothing")
@@ -263,6 +329,46 @@ struct PluginCompilerTests {
             #expect(result.pythonStdlibToStage == nil)
             #expect(result.pythonLinkerFlags.isEmpty)
         }
+    }
+
+    // MARK: - Routing must not depend on manifest validation (GitLab #734)
+
+    @Test("A plugin whose name fails the package-name rule still routes by language")
+    func routingIgnoresNameValidation() {
+        // `Examples/ZipService` declares `name: ZipPlugin`, which `validate()`
+        // rejects — the package-name rule wants lowercase-with-hyphens. Routing
+        // went through the *validating* parser for a while, so the decode threw,
+        // the compiler logged "treating the plugin as declaring no code to
+        // link", and the compiled binary could not call the plugin at all:
+        //
+        //     Runtime Error: Cannot call the result from the zip: compress.
+        //
+        // Reading a manifest and approving one are different questions.
+        let manifest = """
+        name: ZipPlugin
+        version: 1.0.0
+        provides:
+          - type: swift-plugin
+            path: Sources/
+        """
+
+        #expect(PluginCompiler.manifestDeclaresNativePlugin(manifest),
+                "a PascalCase name must not hide the swift-plugin entry")
+        #expect(!PluginCompiler.manifestDeclaresPythonPlugin(manifest))
+    }
+
+    @Test("A Python plugin with the same name shape routes to Python")
+    func pythonRoutingIgnoresNameValidation() {
+        let manifest = """
+        name: MarkdownRenderer
+        version: 1.0.0
+        provides:
+          - type: python-plugin
+            path: src/
+        """
+
+        #expect(PluginCompiler.manifestDeclaresPythonPlugin(manifest))
+        #expect(!PluginCompiler.manifestDeclaresNativePlugin(manifest))
     }
 }
 

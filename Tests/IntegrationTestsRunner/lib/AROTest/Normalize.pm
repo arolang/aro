@@ -61,6 +61,14 @@ sub normalize_output {
     # Remove macOS Swift dual-runtime warnings.
     $output =~ s/^objc\[\d+\]: Class .* is implemented in both .* One of the duplicates must be removed or renamed\.\n//gm;
 
+    # Remove plugin build progress (GitLab #826). The runtime announces on
+    # stderr when it has to compile a plugin, because a first run of e.g.
+    # SQLiteExample is otherwise minutes of silence. This executor merges
+    # stderr into stdout, so the lines would appear in a run that happens to
+    # build and not in one that doesn't -- a property of the checkout, not of
+    # the example.
+    $output =~ s/^\[aro\] (?:Building|Built) plugin '[^']*'.*\n//gm;
+
     # Remove timing values from test output (e.g., "(1ms)", "(<1ms)")
     $output =~ s/\s*\([<]?\d+m?s\)//g;
 

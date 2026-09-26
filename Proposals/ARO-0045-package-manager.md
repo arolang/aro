@@ -239,6 +239,21 @@ Installed Plugins (from Plugins/):
 
 All information comes exclusively from the `plugin.yaml` files of the individual directories.
 
+**Listing never builds.** `list` is a directory walk, a manifest read, and — for
+a plugin whose library is already on disk — one `dlopen` to read its exported
+actions. It does not invoke a compiler, so it cannot spend minutes in
+`swift build` or block on a SwiftPM lock another process holds. A plugin that
+has not been built yet is reported as such:
+
+```
+ Source                           Built      Service           Methods
+ plugins/plugin-swift-collection  no         (not built — run `aro plugins rebuild`)
+```
+
+That is a fact worth printing. `list` is the command you reach for when
+something is already wrong, and it is the one plugin subcommand a script might
+poll; `aro plugins rebuild` is how a plugin gets built.
+
 ---
 
 ### 3. Extended Plugin System: Dual-Mode Plugins
