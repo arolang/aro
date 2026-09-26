@@ -70,7 +70,13 @@ final class EditorWriteQueue {
             NotificationCenter.default.addObserver(
                 forName: name, object: nil, queue: .main
             ) { _ in
-                MainActor.assumeIsolated { EditorWriteQueue.shared.flush() }
+                // `_ =` keeps this closure Void-returning. Without it the
+                // single expression makes `assumeIsolated` infer `T == Int`
+                // from `flush()`'s count, which the statement context wants
+                // to be `Void` — a warning on some toolchains and a hard
+                // "conflicting arguments to generic parameter 'T'" on the
+                // one CI builds macOS with.
+                MainActor.assumeIsolated { _ = EditorWriteQueue.shared.flush() }
             }
         }
     }
