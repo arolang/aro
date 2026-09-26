@@ -28,12 +28,12 @@ struct RepositoryScopeAnalyzerTests {
 
     // MARK: - Collecting declarations
 
-    @Test("Declarations are read off the Declare statements")
+    @Test("Declarations are read off the Configure statements")
     func collectsDeclarations() throws {
         let program = try parse("""
         (Application-Start: Shop) {
-            Declare the <cart-repository> with { scope: "session" }.
-            Declare the <partial-repository> with { scope: "connection" }.
+            Configure the <cart-repository: scope> with "session".
+            Configure the <partial-repository: scope> with "connection".
             Return an <OK: status> for the <startup>.
         }
         """)
@@ -47,7 +47,7 @@ struct RepositoryScopeAnalyzerTests {
     func unknownScope() throws {
         let program = try parse("""
         (Application-Start: Shop) {
-            Declare the <cart-repository> with { scope: "user" }.
+            Configure the <cart-repository: scope> with "user".
             Return an <OK: status> for the <startup>.
         }
         """)
@@ -68,7 +68,7 @@ struct RepositoryScopeAnalyzerTests {
         // is actually wrong.
         let program = try parse("""
         (Application-Start: Shop) {
-            Declare the <cart-repository> with { scope: session }.
+            Configure the <cart-repository: scope> with session.
             Return an <OK: status> for the <startup>.
         }
         """)
@@ -80,9 +80,13 @@ struct RepositoryScopeAnalyzerTests {
     func conflictingDeclarations() throws {
         let program = try parse("""
         (Application-Start: Shop) {
-            Declare the <cart-repository> with { scope: "session" }.
-            Declare the <cart-repository> with { scope: "application" }.
+            Configure the <cart-repository: scope> with "session".
             Return an <OK: status> for the <startup>.
+        }
+
+        (Seed Carts: Shop Setup) {
+            Configure the <cart-repository: scope> with "application".
+            Return an <OK: status> for the <seed>.
         }
         """)
         let collector = DiagnosticCollector()
@@ -93,18 +97,29 @@ struct RepositoryScopeAnalyzerTests {
         #expect(collector.errors[0].message.contains("session-scoped and application-scoped"))
     }
 
-    @Test("Declaring the same scope twice is fine")
+    @Test("The same scope declared twice is fine")
     func idempotentDeclaration() throws {
-        let program = try parse("""
+        // Two files may both say it — feature sets are globally visible, so an
+        // application can declare a repository's scope wherever it is set up.
+        // Repeating the *same* answer is not a conflict.
+        let a = try parse("""
         (Application-Start: Shop) {
-            Declare the <cart-repository> with { scope: "session" }.
-            Declare the <cart-repository> with { scope: "session" }.
+            Configure the <cart-repository: scope> with "session".
             Return an <OK: status> for the <startup>.
         }
         """)
+        let b = try parse("""
+        (Seed Carts: Shop Setup) {
+            Configure the <cart-repository: scope> with "session".
+            Return an <OK: status> for the <seed>.
+        }
+        """)
         let collector = DiagnosticCollector()
-        _ = RepositoryScopeAnalyzer.resolve(
-            RepositoryScopeAnalyzer.declarations(in: program), diagnostics: collector)
+        let scopes = RepositoryScopeAnalyzer.resolve(
+            RepositoryScopeAnalyzer.declarations(in: a)
+                + RepositoryScopeAnalyzer.declarations(in: b),
+            diagnostics: collector)
+        #expect(scopes["cart-repository"] == "session")
         #expect(collector.errors.isEmpty)
     }
 
@@ -114,7 +129,7 @@ struct RepositoryScopeAnalyzerTests {
     func sessionRepositoryInApplicationStart() throws {
         let found = try diagnose("""
         (Application-Start: Shop) {
-            Declare the <cart-repository> with { scope: "session" }.
+            Configure the <cart-repository: scope> with "session".
             Store the <seed> into the <cart-repository>.
             Return an <OK: status> for the <startup>.
         }

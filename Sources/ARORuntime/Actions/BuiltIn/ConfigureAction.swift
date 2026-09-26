@@ -421,7 +421,76 @@ public enum ConfigurableSettings {
     /// Whether the statement configures a repository — `<x-repository: ttl>`.
     /// Storage is an actor, so applying it needs `await`.
     static func isRepositorySetting(result: ResultDescriptor) -> Bool {
-        InMemoryRepositoryStorage.isRepositoryName(result.base) && result.specifiers.first != nil
+        InMemoryRepositoryStorage.isRepositoryName(result.base)
+    }
+
+    /// The properties a `Configure … with { … }` carries, when it carries an
+    /// object rather than naming one setting in the result slot.
+    ///
+    /// Both spellings exist because `Configure` binds its subject, so two
+    /// statements naming one repository are an immutable rebind (ARO-0035, and
+    /// the hint says as much). Setting two properties therefore has to be one
+    /// statement: `Configure the <cart-repository> with { scope: "session",
+    /// ttl: 3600 }.`
+    static func repositoryProperties(context: ExecutionContext) -> [String: any Sendable]? {
+        let raw = context.resolveAny("_with_")
+            ?? context.resolveAny("_expression_")
+            ?? context.resolveAny("_literal_")
+        return raw as? [String: any Sendable]
+    }
+
+    /// Apply one repository property. Returns the value as stored, so the
+    /// caller can bind what was actually applied rather than what was written.
+    ///
+    /// `scope` (ARO-0094) is the one that is not a storage tuning knob: it
+    /// decides *whose* rows a statement reads, so getting it wrong is a data
+    /// leak rather than a performance problem. It is registered, not stored,
+    /// and a second declaration that disagrees is refused rather than taken.
+    static func applyRepositoryProperty(
+        repository: String,
+        field: String,
+        value: any Sendable,
+        context: ExecutionContext
+    ) async throws -> any Sendable {
+        switch field {
+        case "scope":
+            let text = value as? String ?? String(describing: value)
+            guard let scope = RepositoryScope.parse(text) else {
+                throw ActionError.invalidInput(
+                    RepositoryScopeError.unknownScope(repository: repository, raw: text).description,
+                    received: text)
+            }
+            if case .failure(let error) = RepositoryScopeRegistry.shared.declare(repository, scope: scope) {
+                throw ActionError.invalidInput(error.description, received: scope.rawValue)
+            }
+            return scope.rawValue
+
+        case "ttl", "maxSize":
+            let storage = context.service(RepositoryStorageService.self)
+                ?? context.container.repositoryStorage
+            var ttl: TimeInterval? = nil
+            var maxSize: Int? = nil
+            if let existing = context.resolveAny(repository) as? [String: any Sendable] {
+                if let t = existing["ttl"] as? TimeInterval { ttl = t }
+                else if let t = existing["ttl"] as? Double { ttl = t }
+                else if let t = existing["ttl"] as? Int { ttl = TimeInterval(t) }
+                if let m = existing["maxSize"] as? Int { maxSize = m }
+                else if let m = existing["maxSize"] as? Double { maxSize = Int(m) }
+            }
+            if field == "ttl" {
+                if let v = value as? Double { ttl = v } else if let v = value as? Int { ttl = TimeInterval(v) }
+            } else {
+                if let v = value as? Int { maxSize = v } else if let v = value as? Double { maxSize = Int(v) }
+            }
+            await storage.configure(repository: repository, ttl: ttl, maxSize: maxSize)
+            return value
+
+        default:
+            throw ActionError.invalidInput(
+                "Configure the <\(repository)>: '\(field)' is not a repository setting "
+                + "(scope, ttl, maxSize)",
+                received: field)
+        }
     }
 
     /// `Configure the <cache-repository: ttl> with 60.`
@@ -436,16 +505,51 @@ public enum ConfigurableSettings {
     ) async throws -> any Sendable {
         let entity: any Sendable = context.resolveAny(result.base) ?? [String: any Sendable]()
 
+        // `_with_` and `_expression_` as well as `_literal_`: `Configure the
+        // <cart-repository: scope> with "session".` puts the value in
+        // different places depending on how it was written and which mode is
+        // running — the interpreter binds both names, a compiled binary binds
+        // only `_expression_` (ARO-0094).
         let updateValue: any Sendable
         if let literal = context.resolveAny("_literal_") {
             updateValue = literal
+        } else if let with = context.resolveAny("_with_") {
+            updateValue = with
+        } else if let expression = context.resolveAny("_expression_") {
+            updateValue = expression
         } else if let resolved = context.resolveAny(object.base) {
             updateValue = resolved
         } else {
             updateValue = object.base
         }
 
+        // The object form sets every named property in one statement.
+        if result.specifiers.isEmpty {
+            guard let properties = repositoryProperties(context: context) else { return entity }
+            var applied: [String: any Sendable] = [:]
+            for (key, value) in properties {
+                applied[key] = try await applyRepositoryProperty(
+                    repository: result.base, field: key, value: value, context: context)
+            }
+            context.bind(result.base, value: applied, allowRebind: true)
+            return applied
+        }
+
         guard let fieldName = result.specifiers.first else { return entity }
+
+        // Scope is not a storage setting — it is registered, and read again by
+        // every repository statement (ARO-0094). Handled before the TTL/maxSize
+        // pair so it does not fall through to a `storage.configure` that would
+        // have nothing to say.
+        if fieldName == "scope" {
+            let applied = try await applyRepositoryProperty(
+                repository: result.base, field: fieldName, value: updateValue, context: context)
+            var configDict = context.resolveAny(result.base) as? [String: any Sendable] ?? [:]
+            configDict[fieldName] = applied
+            context.bind(result.base, value: configDict, allowRebind: true)
+            return configDict
+        }
+
         let storage = context.service(RepositoryStorageService.self) ?? context.container.repositoryStorage
 
         var currentTTL: TimeInterval? = nil

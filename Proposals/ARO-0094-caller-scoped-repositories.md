@@ -19,7 +19,7 @@ statement does not restate it, cannot forget it, and cannot disagree with
 itself between two lines:
 
 ```aro
-Declare the <cart-repository> with { scope: "session" }.
+Configure the <cart-repository: scope> with "session".
 ...
 Store the <item> into the <cart-repository>.
 ```
@@ -84,18 +84,32 @@ promotes the connection to a session (§6).
 
 ### 3.1 Syntax
 
-`Declare` is a new statement, valid in `Application-Start`:
+A repository's scope is a `Configure` setting, alongside its `ttl` and
+`maxSize` (ARO-0035). It started as a separate `Declare` verb;
+[#886](https://git.ausdertechnik.de/arolang/aro/-/issues/886) folded the two,
+because both meant "set a property of a named thing, at startup, from an object
+of properties" and two verbs for one idea is what ARO removes elsewhere.
 
 ```aro
-Declare the <catalogue-repository> with { scope: "application" }.
-Declare the <cart-repository>      with { scope: "session" }.
-Declare the <partial-repository>   with { scope: "connection" }.
-Declare the <sessions-repository>  with { scope: "application" }.
+Configure the <catalogue-repository: scope> with "application".
+Configure the <cart-repository: scope>      with "session".
+Configure the <partial-repository: scope>   with "connection".
+Configure the <sessions-repository: scope>  with "application".
 ```
 
-The object is the repository; `with` carries its properties. `scope` is the only
-required one. An undeclared repository is `application`-scoped, which is exactly
-today's behaviour — every existing program keeps working, unchanged.
+The repository is the subject; `with` carries the value. An undeclared
+repository is `application`-scoped, which is exactly today's behaviour — every
+existing program keeps working, unchanged.
+
+There is a second spelling, and it is not sugar:
+
+```aro
+Configure the <cart-repository> with { scope: "session", ttl: 3600 }.
+```
+
+`Configure` binds its subject, so two statements naming one repository are an
+immutable rebind — the diagnostic says so and points here. Setting a scope *and*
+a TTL therefore has to be one statement.
 
 ### 3.1.1 Three things implementing this settled
 
@@ -105,29 +119,35 @@ today's behaviour — every existing program keeps working, unchanged.
 is the spelling, and it matches `Configure the <stores: write-back> with
 "manual"`.
 
-**The repository goes in the result position, and is not a variable.**
-`Declare the <cart-repository> with { … }` names the repository in the result
-slot, exactly as `Configure the <application: concurrency>` names its category.
-A repository is not a binding, though — it is global state the statement
-configures — so `Declare` records a side effect and defines nothing. Without
-that, every declaration is "defined but never used" (three warnings in a
-three-line `Application-Start`) and a second declaration is an
-immutable-rebinding error *about variables* rather than the scope conflict it
-actually is. `Configure` still reports the rebind, deliberately and with a hint
-pointing at its object form; the difference is that `Declare` has a better
-diagnostic of its own to give. It remains one more argument that these are the
-same verb ([#886](https://git.ausdertechnik.de/arolang/aro/-/issues/886)).
+**The repository goes in the subject position, and is not a variable.**
+`Configure the <cart-repository: scope>` names the repository where
+`Configure the <application: concurrency>` names its category. A repository is
+not a binding — it is global state the statement configures — so the statement
+records a side effect and defines nothing. Without that, every declaration is
+"defined but never used", three warnings in a three-line `Application-Start`.
 
-**`Declare` has to run for its effect.** `Declare the <x-repository> with
-{ … }` takes its argument as an *expression*, and `FeatureSetExecutor` has a
-fast path for that shape: when the verb is in none of its categories, it binds
-the expression to the result and never calls the action. So the statement
-appeared to work — `<cart-repository>` bound to `{ scope: "session" }`, nothing
-failed — while the scope was never registered and every statement governed by
-it read the application-wide repository. `Declare` and `Attach` are therefore in
+A second `Configure` naming the same repository is still an immutable rebind,
+with a hint pointing at the object form. That is the existing `Configure`
+behaviour and this proposal inherits rather than changes it; it is also why the
+object form exists.
+
+**These statements have to run for their effect.** `… with { … }` takes its
+argument as an *expression*, and `FeatureSetExecutor` has a fast path for that
+shape: when the verb is in none of its categories, it binds the expression to
+the result and never calls the action. The statement then appears to work —
+the subject is bound, nothing fails — while the scope is never registered and
+every statement governed by it reads the application-wide repository.
+`configure` and `attach` are therefore in
 `ActionRoleCatalog.mustRunForEffect` alongside `Store` and `Emit`. The value
 these statements produce is beside the point; the registration *is* the
 statement.
+
+The same divergence bites once more, one layer down: the two modes bind that
+expression under different names — the interpreter to `_with_` and
+`_expression_`, a compiled binary to `_expression_` only. An action reading one
+name works under `aro run` and silently does nothing under `aro build`, so both
+are read. Fixing it in codegen instead breaks `Store`'s inline payload
+(GitLab #887).
 
 ### 3.2 Why not a qualifier at the use site
 
@@ -221,9 +241,9 @@ The point of declaring scope once is that the handler bodies stop differing:
 
 ```aro
 (Application-Start: Shop) {
-    Declare the <cart-repository>      with { scope: "session" }.
-    Declare the <partial-repository>   with { scope: "connection" }.
-    Declare the <sessions-repository>  with { scope: "application" }.
+    Configure the <cart-repository: scope>      with "session".
+    Configure the <partial-repository: scope>   with "connection".
+    Configure the <sessions-repository: scope>  with "application".
 
     Start the <http-server> with <contract>.
     Start the <socket-server> with { port: 9000 }.
@@ -416,7 +436,7 @@ Active sessions live in an ordinary application-scoped repository that the
 application declares. No magic variable and no name the runtime conjures:
 
 ```aro
-Declare the <sessions-repository> with { scope: "application" }.
+Configure the <sessions-repository: scope> with "application".
 ```
 
 A session record is at minimum:
@@ -463,7 +483,7 @@ Connections are visible too, so an admin page can see who is connected and a
 logout can close their sockets:
 
 ```aro
-Declare the <connections-repository> with { scope: "application" }.
+Configure the <connections-repository: scope> with "application".
 ```
 
 Maintained by the runtime, with `{ id, transport, session, connected }` per live
@@ -497,7 +517,7 @@ deserves its own design rather than a paragraph here.
 
 ## 11. Migration
 
-Every repository today is application-scoped and stays so. `Declare` is
+Every repository today is application-scoped and stays so. The scope setting is
 additive; a program that does not use it behaves exactly as it does now. There
 is no deprecation and no rewrite.
 

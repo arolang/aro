@@ -220,18 +220,6 @@
   ],
   "source": "Sources/ARORuntime/Actions/BuiltIn/ComputeAction.swift"
  },
- "declare": {
-  "role": "own",
-  "role_label": "OWN (Internal → Internal)",
-  "prepositions": [
-   "for",
-   "with"
-  ],
-  "aliases": [
-   "declare"
-  ],
-  "source": "Sources/ARORuntime/Actions/BuiltIn/DeclareAction.swift"
- },
  "delete": {
   "role": "own",
   "role_label": "OWN (Internal → Internal)",

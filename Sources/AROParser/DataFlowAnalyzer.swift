@@ -454,30 +454,6 @@ public struct DataFlowAnalyzer {
             definedSymbols.insert(resultName)
 
         case .own:
-            // A system object in the result slot is not a variable.
-            //
-            // `Declare the <cart-repository> with { scope: "session" }.` and
-            // `Configure the <session: secure> with false.` (ARO-0094) both
-            // name framework state that the statement configures — there is
-            // nothing to bind and nothing a later statement could read. Bound
-            // anyway, each one is "defined but never used": three warnings in
-            // a three-line Application-Start, and a second statement naming
-            // the same object becomes an immutable-rebinding error about
-            // variables rather than the conflict it actually is.
-            //
-            // `Declare` only, not `Configure`. Two `Configure` statements
-            // naming one repository *is* reported, deliberately and with a
-            // hint pointing at the object form (`ConfigureRebindHintTests`);
-            // suppressing it here would take that with it. `Declare` has its
-            // own conflict diagnostic, which says more than the rebind one.
-            if statement.action.verb.lowercased() == "declare",
-               SystemObjectCatalog.isSystemObject(resultName) {
-                sideEffects.append("\(statement.action.verb):\(resultName)")
-                return (
-                    DataFlowInfo(inputs: inputs, outputs: outputs, sideEffects: sideEffects),
-                    dependencies
-                )
-            }
             if !isKnownExternal(objectName) && !definedSymbols.contains(objectName)
                 && !dependencies.contains(objectName) && !objectIsTimeUnit {
                 diagnostics.warning(
@@ -1399,13 +1375,13 @@ public struct DataFlowAnalyzer {
             "schedule", "start", "stop", "listen", "keepalive",
             "render", "show", "repaint", "clear",
             "broadcast", "close", "connect",
-            // ARO-0094. `Configure the <session: secure> with false.` and
-            // `Declare the <cart-repository> with { scope: "session" }.`
-            // settle framework state and produce nothing anyone reads, so
-            // "defined but never used" is noise on a statement that did
-            // exactly its job. Same reason these two are in
+            // ARO-0094 / GitLab #886. `Configure the <session: secure> with
+            // false.` and `Configure the <cart-repository: scope> with
+            // "session".` settle framework state and produce nothing anyone
+            // reads, so "defined but never used" is noise on a statement that
+            // did exactly its job. Same reason `configure` is in
             // `ActionRoleCatalog.mustRunForEffect`.
-            "configure", "declare"
+            "configure"
         ]
         return sideEffectVerbs.contains(v)
     }

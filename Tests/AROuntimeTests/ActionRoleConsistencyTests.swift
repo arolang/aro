@@ -107,12 +107,14 @@ struct ActionRoleConsistencyTests {
 
     @Test("The registry has the action count the generated table claims")
     func testActionCount() {
-        // The generated ARO-0004 §11 table says 75. If an action is added, both
+        // The generated ARO-0004 §11 table says 74. If an action is added, both
         // this number and the table need updating — the CI job regenerates it.
         // 72 since Configure became an action of its own (GitLab #728);
         // 73 since Touch left MakeAction to be its own (GitLab #861);
         // 75 since Declare and Attach arrived with caller-scoped repositories
-        // (ARO-0094, GitLab #885).
-        #expect(ActionRegistry.shared.allBuiltInActionInfos.count == 75)
+        // (ARO-0094, GitLab #885);
+        // 74 since Declare folded back into Configure (GitLab #886) — a
+        // repository's scope is a Configure setting, next to its ttl.
+        #expect(ActionRegistry.shared.allBuiltInActionInfos.count == 74)
     }
 }

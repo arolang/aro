@@ -10,8 +10,8 @@ a catalogue and wrong for a cart. ARO-0094 adds a **scope**, declared once where
 the repository is declared:
 
 ```aro
-Declare the <catalogue-repository> with { scope: "application" }.
-Declare the <cart-repository>      with { scope: "session" }.
+Configure the <catalogue-repository: scope> with "application".
+Configure the <cart-repository: scope>      with "session".
 ```
 
 Nothing below restates it. `Store the <item> into the <cart-repository>.` is the
