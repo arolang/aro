@@ -1100,6 +1100,14 @@ documentation:
     - cd Book/AROForDataEngineers
     - chmod +x build-pdf.sh
     - ./build-pdf.sh
+    - cd ../..
+    # Build the Short Studies. Its rendered HTML and PDF used to be checked
+    # into Book/TheShortStudies/output and built by no pipeline at all, so the
+    # copy in the repository was the only one that existed and it aged
+    # (GitLab #847). The script is named build.sh, not build-pdf.sh.
+    - cd Book/TheShortStudies
+    - chmod +x build.sh
+    - ./build.sh
   artifacts:
     name: aro-documentation
     paths:
@@ -1111,6 +1119,8 @@ documentation:
       - Book/AROByHallucination/output/ARO-by-Hallucination.pdf
       - Book/AROByHallucination/output/ARO-by-Hallucination.html
       - Book/AROForDataEngineers/output/ARO-For-Data-Engineers.pdf
+      - Book/TheShortStudies/output/ARO-Short-Studies.pdf
+      - Book/TheShortStudies/output/ARO-Short-Studies.html
     expire_in: 30 days
 
 # =============================================================================
@@ -1168,6 +1178,7 @@ release:
     - ls -la Book/TheEssentialPrimer/output/ARO-Essential-Primer.pdf || echo "Essential Primer PDF not found"
     - ls -la Book/AROByHallucination/output/ARO-by-Hallucination.pdf || echo "ARO by Hallucination PDF not found"
     - ls -la Book/AROForDataEngineers/output/ARO-For-Data-Engineers.pdf || echo "Data Engineers PDF not found"
+    - ls -la Book/TheShortStudies/output/ARO-Short-Studies.pdf || echo "Short Studies PDF not found"
 
     # Determine if prerelease
     - |
@@ -1188,6 +1199,7 @@ release:
       - Book/TheEssentialPrimer/output/ARO-Essential-Primer.pdf
       - Book/AROByHallucination/output/ARO-by-Hallucination.pdf
       - Book/AROForDataEngineers/output/ARO-For-Data-Engineers.pdf
+      - Book/TheShortStudies/output/ARO-Short-Studies.pdf
     expire_in: 1 year
   release:
     tag_name: $CI_COMMIT_TAG
@@ -1214,6 +1226,7 @@ release:
       | ARO Essential Primer | [ARO-Essential-Primer.pdf]($CI_PROJECT_URL/-/releases/$CI_COMMIT_TAG/downloads/ARO-Essential-Primer.pdf) |
       | ARO by Hallucination | [ARO-by-Hallucination.pdf]($CI_PROJECT_URL/-/releases/$CI_COMMIT_TAG/downloads/ARO-by-Hallucination.pdf) |
       | ARO for Data Engineers | [ARO-For-Data-Engineers.pdf]($CI_PROJECT_URL/-/releases/$CI_COMMIT_TAG/downloads/ARO-For-Data-Engineers.pdf) |
+      | ARO Short Studies | [ARO-Short-Studies.pdf]($CI_PROJECT_URL/-/releases/$CI_COMMIT_TAG/downloads/ARO-Short-Studies.pdf) |
 
       ### Installation
 
@@ -1291,6 +1304,14 @@ release:
         - name: 'ARO-by-Hallucination.pdf'
           url: '$CI_PROJECT_URL/-/jobs/artifacts/$CI_COMMIT_TAG/raw/Book/AROByHallucination/output/ARO-by-Hallucination.pdf?job=release'
           filepath: '/ARO-by-Hallucination.pdf'
+          link_type: 'other'
+        - name: 'ARO-For-Data-Engineers.pdf'
+          url: '$CI_PROJECT_URL/-/jobs/artifacts/$CI_COMMIT_TAG/raw/Book/AROForDataEngineers/output/ARO-For-Data-Engineers.pdf?job=release'
+          filepath: '/ARO-For-Data-Engineers.pdf'
+          link_type: 'other'
+        - name: 'ARO-Short-Studies.pdf'
+          url: '$CI_PROJECT_URL/-/jobs/artifacts/$CI_COMMIT_TAG/raw/Book/TheShortStudies/output/ARO-Short-Studies.pdf?job=release'
+          filepath: '/ARO-Short-Studies.pdf'
           link_type: 'other'
 
 # =============================================================================
