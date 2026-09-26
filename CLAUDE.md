@@ -262,9 +262,9 @@ A repository is application-scoped unless it says otherwise, which is what every
 repository was and still is by default. `Declare` says otherwise:
 
 ```aro
-Declare the <catalogue-repository> with { scope: "application" }.
-Declare the <cart-repository>      with { scope: "session" }.
-Declare the <partial-repository>   with { scope: "connection" }.
+Configure the <catalogue-repository: scope> with "application".
+Configure the <cart-repository: scope>      with "session".
+Configure the <partial-repository: scope>   with "connection".
 ```
 
 Handlers do not restate it: `Store the <item> into the <cart-repository>.` is

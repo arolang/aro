@@ -3,9 +3,9 @@
    restates it. *)
 
 (Application-Start: Shop) {
-    Declare the <catalogue-repository> with { scope: "application" }.
-    Declare the <cart-repository>      with { scope: "session" }.
-    Declare the <sessions-repository>  with { scope: "application" }.
+    Configure the <catalogue-repository: scope> with "application".
+    Configure the <cart-repository: scope>      with "session".
+    Configure the <sessions-repository: scope>  with "application".
 
     (* Local development only. A session cookie is not issued over plain HTTP
        at all, so turning that off is something you write down rather than
