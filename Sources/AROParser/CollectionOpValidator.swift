@@ -282,22 +282,12 @@ public struct CollectionOpValidator {
 
     // MARK: - Traversal
 
-    /// Flattens the statement tree, descending into match cases and loop
-    /// bodies. Mirrors `CodeQualityValidator.collectAROStatements`.
+    /// The shared walk (GitLab #660). This used to be a private copy that
+    /// descended into `match` and `for each` only — so an unknown Compute
+    /// qualifier inside a `while` body or a `when { }` block passed
+    /// `aro check` green, and the promise that a green check means the
+    /// qualifier exists held only at the top level of a feature set.
     private func collectAROStatements(_ statements: [Statement]) -> [AROStatement] {
-        var result: [AROStatement] = []
-        for statement in statements {
-            if let aro = statement as? AROStatement {
-                result.append(aro)
-            } else if let match = statement as? MatchStatement {
-                for matchCase in match.cases {
-                    result.append(contentsOf: collectAROStatements(matchCase.body))
-                }
-                result.append(contentsOf: collectAROStatements(match.otherwise ?? []))
-            } else if let loop = statement as? ForEachLoop {
-                result.append(contentsOf: collectAROStatements(loop.body))
-            }
-        }
-        return result
+        AROStatementWalk.flatten(statements)
     }
 }

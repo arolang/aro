@@ -123,6 +123,13 @@ extension AROError {
            case .unknownComputation = actionError {
             return actionError.description
         }
+        // GitLab #843. Without this the user sees only "Cannot extract the
+        // item: 5 from the short" — true, and silent about the one fact
+        // that explains it.
+        if let actionError = error as? ActionError,
+           case .indexOutOfBounds = actionError {
+            return actionError.description + "."
+        }
         return nil
     }
 }
@@ -193,6 +200,13 @@ public enum ActionError: Error, Sendable {
     /// replace the message that says what actually happened with the last
     /// statement that noticed.
     case callDepthExceeded(String)
+
+    /// An element index past the end of a list (GitLab #843).
+    ///
+    /// Its own case so the reason survives into the user's error. The
+    /// statement reconstruction says *which* statement failed; only this
+    /// says why, and "index 5 on a 2-element list" is the whole diagnosis.
+    case indexOutOfBounds(index: Int, count: Int)
 
     /// A Compute qualifier that resolves to no built-in, no
     /// registered plugin qualifier and no date offset (GitLab #486).
@@ -281,6 +295,12 @@ extension ActionError: CustomStringConvertible {
             return "Unknown action verb: '\(verb)'"
         case .callDepthExceeded(let message):
             return "Runtime Error: \(message)"
+        case .indexOutOfBounds(let index, let count):
+            if count == 0 {
+                return "index \(index) on an empty list"
+            }
+            return "index \(index) is past the end of a \(count)-element list "
+                + "(valid indices are 0 to \(count - 1))"
         case .unknownComputation(let name, let known, let chain):
             var message = "Unknown Compute qualifier: '\(name)'"
             if let chain {

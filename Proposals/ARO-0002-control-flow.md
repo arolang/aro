@@ -788,22 +788,21 @@ Extract the <selected: 0,2,4> from the <letters>.
 
 | Access Type | Returns |
 |-------------|---------|
-| Single element (first, last, numeric) | Single value; see below when out of bounds |
+| Single element (first, last, numeric) | Single value; an index past the end fails the statement |
 | Range (3-5) | Array of elements, clamped to the list |
 | Pick (3,5,7) | Array of elements |
 
-**Out of bounds is currently an accident, not a rule.** A numeric specifier
-past the end falls through to the "unknown specifier" branch and binds the
-**whole collection** — `Extract the <item: 5> from the <short>.` on a two-element
-list binds `[1, 2]`, not an empty string and not a null. The subscript form
-`<items>[99]` behaves differently again, and differently between modes: the
-interpreter throws, the compiled binary returns `""`. ARO-0038 §6 says `nil` and
-this table used to say empty string; none of the three descriptions matched.
-Tracked as GitLab #843, which has to settle the behaviour before either document
-can state one.
+**An index past the end fails the statement**, in both execution modes and for
+both spellings — `Extract the <item: 5> from the <short>.` and `<items>[99]`.
+ARO-0038 §6.1 has the full rule and the shape to use when the index may not be
+there.
+
+Three different things used to happen (the specifier form bound the whole
+collection, the interpreter's subscript threw, the compiled binary's returned
+`""`), and this table said a fourth. GitLab #843 settled it.
 
 Empty-list access (`<empty: first>`) does bind an empty value, as ARO-0038 §6.2
-says.
+says — that case was always consistent.
 
 ---
 

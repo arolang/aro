@@ -97,6 +97,24 @@ struct SourceCheckSubcommand: ParsableCommand {
     /// Check one path -- a single file, or a directory treated as one
     /// application -- and print its report.
     ///
+    /// Whether `root` ships plugins (GitLab #844).
+    ///
+    /// Both spellings, because `Plugins/` is canonical and lowercase
+    /// `plugins/` is still read with a deprecation warning — and on Linux
+    /// they are two different directories. An empty directory counts: it is
+    /// a project that has plugins in mind, and being wrong in that direction
+    /// only costs a diagnostic nobody was relying on.
+    private static func hasPluginDirectory(at root: URL) -> Bool {
+        for name in ["Plugins", "plugins"] {
+            var isDir: ObjCBool = false
+            let path = root.appendingPathComponent(name).path
+            if FileManager.default.fileExists(atPath: path, isDirectory: &isDir), isDir.boolValue {
+                return true
+            }
+        }
+        return false
+    }
+
     /// Split out of `run()` so `--recursive` can call it once per application
     /// without the summary and the exit code being decided here (GitLab #824).
     /// - Returns: the error and warning counts for this path.
@@ -150,12 +168,21 @@ struct SourceCheckSubcommand: ParsableCommand {
         // undeclared here may be declared next door.
         let scopes = isDirectory ? repositoryScopes(in: sourceFiles) : [:]
 
+        // GitLab #844: whether a bare verb might name a plugin action.
+        // A plugin's action names come from `aro_plugin_info()` at load
+        // time — `plugin.yaml` does not list them — so an application that
+        // ships plugins has a verb namespace this command cannot enumerate,
+        // and `Greet` or `ParseCSV` must not be called a mistake.
+        let root = isDirectory ? resolvedPath : resolvedPath.deletingLastPathComponent()
+        let pluginActionsPossible = Self.hasPluginDirectory(at: root)
+
         for sourceFile in sourceFiles {
             let (errors, warnings) = try checkFile(
                 sourceFile,
                 handledEvents: handledEvents,
                 declaredActions: declaredActions,
                 repositoryScopes: scopes,
+                pluginActionsPossible: pluginActionsPossible,
                 checksWholeApplication: isDirectory
             )
             totalErrors += errors
@@ -544,8 +571,14 @@ struct SourceCheckSubcommand: ParsableCommand {
         // If the snippet is already a full feature set (`(Name: Activity) { … }`),
         // wrapping it again creates an invalid nested feature-set. Detect and
         // check directly — same parser, no wrapper needed.
+        //
+        // The test runs after leading comments are skipped (GitLab #845).
+        // `(* … *)` before a feature set is the house style, so nearly every
+        // documentation block that introduces one failed this test, got
+        // wrapped as a statement body, and reported "Expected action verb …
+        // but got (" against a wrapper the author never wrote.
         let featureSetHeader = #"^\s*\(\s*[\w\- ]+:\s*[\w\- ]+(?:\s+takes\s+<[\w\-]+>)?\s*\)\s*(?:when\s+[^{]+)?\s*\{"#
-        if trimmed.range(of: featureSetHeader, options: .regularExpression) != nil {
+        if CheckSnippetShape.skippingLeadingComments(trimmed).range(of: featureSetHeader, options: .regularExpression) != nil {
             try checkSnippetUnwrapped(source, label: label)
             return
         }
@@ -559,7 +592,11 @@ struct SourceCheckSubcommand: ParsableCommand {
         let wrapped = header + source + footer
 
         let compiler = Compiler()
-        let result = compiler.compile(wrapped)
+        // A snippet has no application directory, so it has no plugins and
+        // every verb in it must be a built-in (GitLab #844). This is the
+        // exact case the issue reports: `aro check --syntax 'Frobnicate the
+        // <x> from the <y>.'` exited 0.
+        let result = compiler.compile(wrapped, pluginActionsPossible: false)
 
         // Diagnostics on lines <= wrapperLineOffset came from `header`
         // itself (impossible — header is known-valid — but defensive).
@@ -571,10 +608,16 @@ struct SourceCheckSubcommand: ParsableCommand {
         // We only care about syntax: filter out "External dependency" and
         // "defined but not used" warnings, which are semantic-analyser
         // artefacts of the dummy wrapper, not real issues in the snippet.
-        func isSemanticNoise(_ message: String) -> Bool {
-            return message.hasPrefix("External dependency")
-                || message.contains("is defined but never used")
-                || message.contains("not published by any feature set")
+        func isSemanticNoise(_ d: AROParser.Diagnostic) -> Bool {
+            // By code, not by text (GitLab #675). This matched three message
+            // shapes, two of which had already been reworded once — and a
+            // filter that stops matching does not fail, it silently stops
+            // filtering, so the noise `--syntax` exists to suppress comes
+            // back with no sign that anything changed.
+            switch d.code {
+            case .unpublishedDependency, .unusedVariable: return true
+            case .none: return false
+            }
         }
 
         var realErrors = 0
@@ -598,7 +641,7 @@ struct SourceCheckSubcommand: ParsableCommand {
             if let loc = d.location, loc.line <= wrapperLineOffset || loc.line > snippetUpperBound {
                 continue
             }
-            if isSemanticNoise(d.message) {
+            if isSemanticNoise(d) {
                 continue
             }
             switch d.severity {
@@ -639,12 +682,19 @@ struct SourceCheckSubcommand: ParsableCommand {
     /// header — no wrapper, just run the parser and report.
     private func checkSnippetUnwrapped(_ source: String, label: String) throws {
         let compiler = Compiler()
-        let result = compiler.compile(source)
+        // No application directory, so no plugins — see the wrapped path.
+        let result = compiler.compile(source, pluginActionsPossible: false)
 
-        func isSemanticNoise(_ message: String) -> Bool {
-            return message.hasPrefix("External dependency")
-                || message.contains("is defined but never used")
-                || message.contains("not published by any feature set")
+        func isSemanticNoise(_ d: AROParser.Diagnostic) -> Bool {
+            // By code, not by text (GitLab #675). This matched three message
+            // shapes, two of which had already been reworded once — and a
+            // filter that stops matching does not fail, it silently stops
+            // filtering, so the noise `--syntax` exists to suppress comes
+            // back with no sign that anything changed.
+            switch d.code {
+            case .unpublishedDependency, .unusedVariable: return true
+            case .none: return false
+            }
         }
 
         var realErrors = 0
@@ -652,7 +702,7 @@ struct SourceCheckSubcommand: ParsableCommand {
         var printedHeader = false
 
         for d in result.diagnostics {
-            if isSemanticNoise(d.message) { continue }
+            if isSemanticNoise(d) { continue }
             switch d.severity {
             case .error:
                 if !printedHeader { print("\(label):"); printedHeader = true }
@@ -725,6 +775,7 @@ struct SourceCheckSubcommand: ParsableCommand {
         handledEvents: Set<String> = [],
         declaredActions: UserActionRegistry? = nil,
         repositoryScopes: [String: String] = [:],
+        pluginActionsPossible: Bool = true,
         checksWholeApplication: Bool = true
     ) throws -> (errors: Int, warnings: Int) {
         let source = try String(contentsOf: file, encoding: .utf8)
@@ -734,6 +785,7 @@ struct SourceCheckSubcommand: ParsableCommand {
             externallyHandledEvents: handledEvents,
             declaredUserActions: declaredActions,
             declaredRepositoryScopes: repositoryScopes,
+            pluginActionsPossible: pluginActionsPossible,
             checksWholeApplication: checksWholeApplication
         )
 

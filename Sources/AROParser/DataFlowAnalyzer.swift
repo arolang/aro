@@ -103,6 +103,14 @@ public struct DataFlowAnalyzer {
             sideEffectResults.insert(aro.result.base)
         }
 
+        // ARO-0015 fixtures (GitLab #823). `Given the <text> with "hello".`
+        // binds the input that the feature set *under test* reads, so the
+        // read is in another feature set by construction and looking for it
+        // here will never find one.
+        for aro in allAros where aro.action.verb.lowercased() == "given" {
+            sideEffectResults.insert(aro.result.base)
+        }
+
         // Variables consumed as the *base* of another statement's result
         // qualifier (e.g. the `defaults` in `Merge the <opts: defaults>
         // with <raw>.`) are real uses too — the data-flow visitor only
@@ -142,7 +150,8 @@ public struct DataFlowAnalyzer {
                     // Consequential (GitLab #509): when the statement that
                     // was meant to use the variable itself errored, this is
                     // fallout, not the finding — rank it below root causes.
-                    category: .consequential
+                    category: .consequential,
+                    code: .unusedVariable
                 )
             }
         }
@@ -411,10 +420,19 @@ public struct DataFlowAnalyzer {
             }
         }
 
-        // Extract variables from range modifiers with clause
-        if let withClause = statement.rangeModifiers.withClause {
-            let withVars = extractVariables(from: withClause)
-            for varName in withVars {
+        // Every range-modifier operand is a read (GitLab #823).
+        //
+        // Only `with` was walked, so the operand of the other two was
+        // invisible: `Compare the <same> from the <expected> against the
+        // <actual>.` reported `actual` "defined but never used" — a variable
+        // the statement on the line above reads — and
+        // `Create the <span: date-range> from <start> to <end>.` did the same
+        // to `end`. `RangeModifiers` has carried all three since GitLab #469;
+        // this walk had not caught up.
+        for clause in [statement.rangeModifiers.withClause,
+                       statement.rangeModifiers.againstClause,
+                       statement.rangeModifiers.toClause].compactMap({ $0 }) {
+            for varName in extractVariables(from: clause) {
                 if !definedSymbols.contains(varName) && !isKnownExternal(varName) {
                     dependencies.insert(varName)
                 }
@@ -491,14 +509,54 @@ public struct DataFlowAnalyzer {
             definedSymbols.insert(resultName)
 
         case .own:
+            // Three `.own` verbs whose object slot names something other
+            // than a variable (GitLab #823).
+            let verb = statement.action.verb.lowercased()
+
+            // ARO-0015 §2.2: `When the <sum> from the <add-numbers>.` names
+            // the feature set under test. Reported "used before definition"
+            // in every test in the examples.
+            //
+            // ARO-0016: `Call the <rows> from the <sqlite: execute> with
+            // { … }.` names an external service and the method on it —
+            // nine warnings in SQLiteExample alone, and one in ZipService.
+            //
+            // ARO-0010: `Execute the <result> for the <listing> with
+            // <command>.` labels what is being run; the command is in the
+            // `with` clause.
+            let objectNamesAFeatureSet = verb == "when"
+            let objectNamesAService = verb == "call" || verb == "invoke"
+            let objectIsALabel = (verb == "exec" || verb == "execute"
+                                  || verb == "shell" || verb == "run")
+                && statement.object.preposition == .for
+
+            let objectIsNotAVariable = objectNamesAFeatureSet
+                || objectNamesAService || objectIsALabel
+
             if !isKnownExternal(objectName) && !definedSymbols.contains(objectName)
-                && !dependencies.contains(objectName) && !objectIsTimeUnit {
+                && !dependencies.contains(objectName) && !objectIsTimeUnit
+                && !objectIsNotAVariable {
                 diagnostics.warning(
                     "Variable '\(objectName)' used before definition",
                     at: statement.object.noun.span.start
                 )
             }
-            if !objectIsTimeUnit { inputs.insert(objectName) }
+            if !objectIsTimeUnit && !objectIsNotAVariable { inputs.insert(objectName) }
+
+            // ARO-0015 §2.3: `Then the <sum> with 8.` asserts *about* its
+            // result slot — it reads the binding rather than making one.
+            // Treated as an output, every `Then` left its subject looking
+            // unused, which is how `len`, `upper` and `lower` were warned
+            // about in AssertDemo.
+            if verb == "then" {
+                inputs.insert(resultName)
+                if !isKnownExternal(resultName) && !definedSymbols.contains(resultName) {
+                    dependencies.insert(resultName)
+                }
+                return (DataFlowInfo(inputs: inputs, outputs: outputs, sideEffects: sideEffects),
+                        dependencies)
+            }
+
             outputs.insert(resultName)
 
             let dataType = TypeInferencer.inferResultType(statement)
@@ -536,9 +594,18 @@ public struct DataFlowAnalyzer {
             // to the analyzer and every later use reports "External dependency
             // 'ticket' is not published by any feature set".
             //
-            // Scoped to the payload form: the `<stored: user>` spelling reads a
-            // variable that already exists, and the bare spelling stores one, so
-            // neither defines a name.
+            // The `<stored-user: user>` spelling binds too (GitLab #823).
+            // The comment here used to say it "reads a variable that already
+            // exists", and the runtime disagrees — `Store the <stored-user:
+            // user> into the <user-repository>.` binds `stored-user` to the
+            // stored record, id and all, which is the whole reason to write
+            // it that way. `user` is the read. Treating the base as a read
+            // made `Return a <Created: status> with <stored-user>.` report
+            // "External dependency 'stored-user' is not published" in both
+            // UserService and RepositoryObserver.
+            //
+            // The bare spelling still defines nothing: it stores a variable
+            // under its own name.
             // StoreAction.verbs, mirrored here because AROParser cannot see it.
             // `append` joins them: the block above hands the `with` form to
             // this branch precisely because the slot is an output there, and
@@ -548,10 +615,36 @@ public struct DataFlowAnalyzer {
             // changes are individually correct and silently drop the check
             // when combined (GitLab #580, #585).
             let storeVerbs = ["store", "save", "persist", "append"]
-            if storeVerbs.contains(statement.action.verb.lowercased()),
+            let isStore = storeVerbs.contains(statement.action.verb.lowercased())
+            let intoARepository = statement.object.preposition == .into
+                || statement.object.preposition == .to
+
+            // `<stored-user: user>`: the specifier names what is stored, the
+            // base names the binding the statement produces.
+            if isStore, intoARepository, let stored = statement.result.specifiers.first {
+                if definedSymbols.contains(stored) { inputs.insert(stored) }
+                checkImmutabilityViolation(
+                    name: resultName, verb: statement.action.verb,
+                    objectName: objectName, preposition: statement.object.preposition,
+                    span: statement.result.span,
+                    definedSymbols: definedSymbols, inMutableScope: inMutableScope
+                )
+                outputs.insert(resultName)
+                builder.define(
+                    name: resultName,
+                    definedAt: statement.span,
+                    visibility: .internal,
+                    source: .computed,
+                    dataType: TypeInferencer.inferResultType(statement)
+                )
+                definedSymbols.insert(resultName)
+            }
+
+            if isStore,
                statement.rangeModifiers.withClause != nil,
                statement.result.typeAnnotation == nil,
-               statement.object.preposition == .into || statement.object.preposition == .to {
+               statement.result.specifiers.isEmpty,
+               intoARepository {
                 // A name that already holds a value cannot also hold the stored
                 // record — the runtime refuses the rebind, so say so here where
                 // it is cheap to fix (ARO-0001 immutability).
@@ -1091,7 +1184,8 @@ public struct DataFlowAnalyzer {
                     && !isDeclaredRuntimeProvided(dependency, in: analyzed.symbolTable) {
                     diagnostics.warning(
                         "External dependency '\(dependency)' is not published by any feature set",
-                        hints: ["Consider adding a <Publish> statement or marking it as framework-provided"]
+                        hints: ["Consider adding a <Publish> statement or marking it as framework-provided"],
+                        code: .unpublishedDependency
                     )
                 }
             }
@@ -1367,34 +1461,16 @@ public struct DataFlowAnalyzer {
         return sideEffectPatterns.contains(name.lowercased())
     }
 
-    /// Flatten a statement tree (descending into `match` cases and
-    /// `for-each` bodies) into the contained AROStatements. Used so
-    /// side-effect / template-renders / qualifier-base checks see every
-    /// action in the feature set, not just the top-level ones.
+    /// The shared walk (GitLab #660), so side-effect, template-render and
+    /// qualifier-base checks see every action in the feature set rather than
+    /// only the top-level ones.
+    ///
+    /// This copy was the fullest of the three — it had grown range and while
+    /// bodies as bugs found them — and still missed `when { }` blocks and
+    /// pipelines. `AROStatementWalk` is a `StatementVisitor`, so the next AST
+    /// node cannot be forgotten the same way.
     private func collectAROStatements(_ statements: [Statement]) -> [AROStatement] {
-        var out: [AROStatement] = []
-        for stmt in statements {
-            if let aro = stmt as? AROStatement {
-                out.append(aro)
-            } else if let m = stmt as? MatchStatement {
-                for c in m.cases {
-                    out.append(contentsOf: collectAROStatements(c.body))
-                }
-                out.append(contentsOf: collectAROStatements(m.otherwise ?? []))
-            } else if let loop = stmt as? ForEachLoop {
-                out.append(contentsOf: collectAROStatements(loop.body))
-            } else if let loop = stmt as? RangeLoop {
-                // Missing from the walk while RangeLoop was invisible to the
-                // data-flow visitor. Once the visitor analyzed its body, a
-                // `Delete the <drained> …` inside a range loop started warning
-                // "defined but never used" — the exemption list is built from
-                // this walk and never saw the statement.
-                out.append(contentsOf: collectAROStatements(loop.body))
-            } else if let loop = stmt as? WhileLoop {
-                out.append(contentsOf: collectAROStatements(loop.body))
-            }
-        }
-        return out
+        AROStatementWalk.flatten(statements)
     }
 
     /// Verbs whose "result" is really just a confirmation handle for a
@@ -1418,7 +1494,22 @@ public struct DataFlowAnalyzer {
             // reads, so "defined but never used" is noise on a statement that
             // did exactly its job. Same reason `configure` is in
             // `ActionRoleCatalog.mustRunForEffect`.
-            "configure"
+            "configure",
+
+            // GitLab #823. Three more whose result is a confirmation handle:
+            //
+            // `Accept the <transition: draft_to_placed> on <order: status>.`
+            // performs a state transition (ARO-0022); the binding is the
+            // transition's name, and reading it afterwards is not a thing
+            // anyone does — this warned on every `Accept` in the examples.
+            //
+            // `Sleep the <wait1> for 2 seconds.` is the delay. The whole
+            // point is that nothing reads it — ARO-0088 keeps `Sleep` out of
+            // the deferral allowlist for the same reason.
+            //
+            // `Exec`/`Execute`'s result is read often enough to keep, so it
+            // is deliberately not here.
+            "accept", "sleep", "delay", "pause", "wait"
         ]
         return sideEffectVerbs.contains(v)
     }

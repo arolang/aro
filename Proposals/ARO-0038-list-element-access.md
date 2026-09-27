@@ -177,22 +177,37 @@ Extract the <top-three: 0-2> from the <stack>.
 
 ### 6.1 Out of Bounds
 
-**Specified here as `nil`; not what the runtime does.** Today an index past the
-end falls through `ExtractAction`'s specifier chain into its "unknown specifier"
-branch and binds the **whole list**:
+**An index past the end fails the statement**, in both execution modes:
 
 ```aro
 Create the <short> with [1, 2].
 Extract the <item: 5> from the <short>.
-(* specified: item = nil                       *)
-(* actual:    item = [1, 2] — the whole list   *)
+(* Cannot extract the item: 5 from the short.
+   index 5 is past the end of a 2-element list (valid indices are 0 to 1). *)
 ```
 
-and the subscript form `<short>[5]` throws in the interpreter while the compiled
-binary returns `""`. The three descriptions in this proposal, in ARO-0002 §5.7
-and in the code were all different, which is why GitLab #843 exists: it has to
-choose one behaviour — error or null — and make both execution modes do it.
-Until then, do not rely on any of them; guard the length instead.
+The subscript form `<short>[5]` fails the same way and with the same sentence.
+
+This is ARO-0006: the statement is the error message, and the runtime can name
+both the index and the length, which is the whole diagnosis. The alternative —
+binding null and continuing — was considered and rejected for the reason
+GitLab #486 closed the qualifier namespace: an index typo that produces a
+plausible value is a wrong answer delivered confidently, and the failure
+surfaces far from its cause.
+
+To read an index that may not be there, ask first:
+
+```aro
+Compute the <count: length> from <short>.
+Extract the <item: 5> from the <short> when <count> > 5.
+```
+
+Three things used to happen instead, none of them this: the specifier form
+bound the **whole list** (falling through `ExtractAction`'s "unknown
+specifier" branch), the interpreter's subscript form threw, and the compiled
+binary's subscript form wrote a warning to stderr and returned `""`. This
+proposal said `nil` and ARO-0002 §5.7 said empty string. GitLab #843 settled
+it.
 
 ### 6.2 Empty Lists
 
