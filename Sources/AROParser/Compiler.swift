@@ -57,7 +57,8 @@ public final class Compiler {
         externallyHandledEvents: Set<String> = [],
         declaredUserActions: UserActionRegistry? = nil,
         preboundSymbols: Set<String> = [],
-        declaredRepositoryScopes: [String: String] = [:]
+        declaredRepositoryScopes: [String: String] = [:],
+        pluginActionsPossible: Bool = true
     ) -> CompilationResult {
         // Clear diagnostics from previous compilations
         diagnostics.clear()
@@ -76,7 +77,8 @@ public final class Compiler {
                 program,
                 externallyHandledEvents: externallyHandledEvents,
                 declaredUserActions: declaredUserActions,
-                preboundSymbols: preboundSymbols)
+                preboundSymbols: preboundSymbols,
+                pluginActionsPossible: pluginActionsPossible)
 
             // ARO-0094 §7.2. The scopes come from the whole application
             // because `Declare` lives in Application-Start while the

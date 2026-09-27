@@ -237,24 +237,47 @@ public struct Diagnostic: Sendable, CustomStringConvertible {
         case consequential
     }
 
+    /// A stable identity for a kind of diagnostic (GitLab #675).
+    ///
+    /// Consumers used to recognise a diagnostic by matching its text:
+    /// `message.hasPrefix("External dependency")`,
+    /// `message.contains("is defined but never used")`. Both of those
+    /// warnings have been reworded before, and the next rewording silently
+    /// re-enables the noise the filter exists to suppress — silently, because
+    /// a filter that stops matching does not fail, it just stops filtering.
+    ///
+    /// Only kinds something actually dispatches on need a code. A diagnostic
+    /// with `nil` here is not second-class; it is one nobody has had to
+    /// recognise yet, and the message stays free to be rewritten.
+    public enum Code: String, Sendable {
+        /// `Require the <x> from the <SomeFeatureSet>.` where nothing
+        /// publishes `x`.
+        case unpublishedDependency
+        /// A binding no later statement reads.
+        case unusedVariable
+    }
+
     public let severity: Severity
     public let message: String
     public let location: SourceLocation?
     public let hints: [String]
     public let category: Category
+    public let code: Code?
 
     public init(
         severity: Severity,
         message: String,
         location: SourceLocation? = nil,
         hints: [String] = [],
-        category: Category = .rootCause
+        category: Category = .rootCause,
+        code: Code? = nil
     ) {
         self.severity = severity
         self.message = message
         self.location = location
         self.hints = hints
         self.category = category
+        self.code = code
     }
     
     public var description: String {
@@ -350,18 +373,22 @@ public final class DiagnosticCollector: @unchecked Sendable {
         _ message: String,
         at location: SourceLocation? = nil,
         hints: [String] = [],
-        category: Diagnostic.Category = .rootCause
+        category: Diagnostic.Category = .rootCause,
+        code: Diagnostic.Code? = nil
     ) {
-        add(Diagnostic(severity: .error, message: message, location: location, hints: hints, category: category))
+        add(Diagnostic(severity: .error, message: message, location: location,
+                       hints: hints, category: category, code: code))
     }
 
     public func warning(
         _ message: String,
         at location: SourceLocation? = nil,
         hints: [String] = [],
-        category: Diagnostic.Category = .rootCause
+        category: Diagnostic.Category = .rootCause,
+        code: Diagnostic.Code? = nil
     ) {
-        add(Diagnostic(severity: .warning, message: message, location: location, hints: hints, category: category))
+        add(Diagnostic(severity: .warning, message: message, location: location,
+                       hints: hints, category: category, code: code))
     }
     
     public func note(_ message: String, at location: SourceLocation? = nil) {

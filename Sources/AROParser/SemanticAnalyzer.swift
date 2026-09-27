@@ -284,15 +284,23 @@ public final class SemanticAnalyzer {
     /// - Parameter preboundSymbols: names already bound outside this source —
     ///   a REPL session's variables when a single cell is compiled on its own
     ///   (GitLab #689). Empty for an ordinary compile.
+    ///   - pluginActionsPossible: whether the application may call plugin
+    ///     actions by their bare verb, which makes an unknown verb
+    ///     unverifiable rather than wrong (GitLab #844). Defaults to `true`,
+    ///     the answer that reports nothing — a caller that has not looked
+    ///     should not be the one to reject a program.
     public func analyze(
         _ program: Program,
         externallyHandledEvents: Set<String> = [],
         declaredUserActions: UserActionRegistry? = nil,
-        preboundSymbols: Set<String> = []
+        preboundSymbols: Set<String> = [],
+        pluginActionsPossible: Bool = true
     ) -> AnalyzedProgram {
         let dataFlow = DataFlowAnalyzer(diagnostics: diagnostics,
                                         preboundSymbols: preboundSymbols)
-        let codeQuality = CodeQualityValidator(diagnostics: diagnostics)
+        let codeQuality = CodeQualityValidator(
+            diagnostics: diagnostics,
+            pluginActionsPossible: pluginActionsPossible)
         let collectionOps = CollectionOpValidator(diagnostics: diagnostics)
         let responseStatus = ResponseStatusValidator(diagnostics: diagnostics)
         let events = EventAnalyzer(diagnostics: diagnostics)
@@ -335,6 +343,24 @@ public final class SemanticAnalyzer {
             for symbol in analyzed.symbolTable.publishedSymbols.values {
                 globalRegistry.register(symbol: symbol, fromFeatureSet: featureSet.name)
             }
+
+            // ARO-0015 fixtures are published too (GitLab #823).
+            //
+            // `Given the <text> with "hello".` in a `… Test` feature set
+            // supplies the input that the feature set under test reads, so
+            // the binding crosses feature sets exactly the way `Publish as`
+            // does — that is what a Given *is*. Without this, AssertDemo
+            // reported `text` unpublished three times and unused five, and
+            // the advice was to publish a fixture the framework already
+            // supplies.
+            if Self.isTestFeatureSet(featureSet) {
+                for statement in AROStatementWalk.flatten(featureSet.statements)
+                where statement.action.verb.lowercased() == "given" {
+                    guard let symbol = analyzed.symbolTable.symbols[statement.result.base]
+                    else { continue }
+                    globalRegistry.register(symbol: symbol, fromFeatureSet: featureSet.name)
+                }
+            }
         }
 
         // Third pass: verify external dependencies
@@ -373,5 +399,14 @@ extension SemanticAnalyzer {
     public static func analyze(_ source: String, diagnostics: DiagnosticCollector = DiagnosticCollector()) throws -> AnalyzedProgram {
         let program = try Parser.parse(source, diagnostics: diagnostics)
         return SemanticAnalyzer(diagnostics: diagnostics).analyze(program)
+    }
+
+    /// ARO-0015 §"The business activity suffix determines test membership":
+    /// `Calculator Test` and `Calculator Tests` are tests, `Calculator` is
+    /// not.
+    static func isTestFeatureSet(_ featureSet: FeatureSet) -> Bool {
+        let activity = featureSet.businessActivity
+        return activity.hasSuffix(" Test") || activity.hasSuffix(" Tests")
+            || activity == "Test" || activity == "Tests"
     }
 }

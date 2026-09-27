@@ -897,7 +897,14 @@ public enum ExpressionError: Error, CustomStringConvertible {
         case .typeMismatch(let msg):
             return "Type mismatch: \(msg)"
         case .indexOutOfBounds(let index, let count):
-            return "Index \(index) out of bounds (count: \(count))"
+            // Same wording as `ActionError.indexOutOfBounds` and the
+            // compiled bridge (GitLab #843) — one behaviour deserves one
+            // sentence, whichever of the three paths produced it.
+            if count == 0 {
+                return "index \(index) on an empty list"
+            }
+            return "index \(index) is past the end of a \(count)-element list "
+                + "(valid indices are 0 to \(count - 1))"
         case .unsupportedExpression(let type):
             return "Unsupported expression type: \(type)"
         }

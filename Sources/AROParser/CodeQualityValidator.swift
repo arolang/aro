@@ -12,13 +12,29 @@ public struct CodeQualityValidator {
 
     private let diagnostics: DiagnosticCollector
 
-    public init(diagnostics: DiagnosticCollector) {
+    /// Whether the application may call plugin actions (GitLab #844).
+    ///
+    /// A plugin action is callable by its bare verb — `Greet`, `ParseCSV` —
+    /// and the names come from `aro_plugin_info()` at load time, not from
+    /// `plugin.yaml`, so nothing short of loading the plugin can enumerate
+    /// them. When an application ships plugins, the verb namespace is
+    /// genuinely open and an unknown verb is unverifiable rather than wrong.
+    private let pluginActionsPossible: Bool
+
+    public init(diagnostics: DiagnosticCollector, pluginActionsPossible: Bool = true) {
         self.diagnostics = diagnostics
+        self.pluginActionsPossible = pluginActionsPossible
     }
 
     /// Checks for code quality issues in a feature set
     public func validate(_ featureSet: FeatureSet) {
         let statements = featureSet.statements
+
+        // GitLab #844: a verb that belongs to no action. Runs before the
+        // preposition check, because `PrepositionCatalog` answers nil for an
+        // unknown verb and that check reads nil as "cannot check" — so an
+        // invented verb slipped past both.
+        validateVerbs(in: statements)
 
         // GitLab #479: prepositions are part of an action's contract, and the
         // constraint is decidable from the AST. Checked over the whole statement
@@ -73,11 +89,24 @@ public struct CodeQualityValidator {
             }
         }
 
-        // Check for missing Return statement (excluding Application-End handlers)
+        // Check for missing Return statement.
+        //
+        // Two exemptions, and the first one was already meant to be here.
+        // It read `businessActivity.hasPrefix("Application-End")` — but in
+        // `(Application-End: Success)` the *name* is `Application-End` and
+        // the activity is `Success`, so the guard never fired and every
+        // shutdown handler was warned about (GitLab #823).
         let activity = featureSet.businessActivity
-        let isLifecycleHandler = activity.hasPrefix("Application-End")
+        let isLifecycleHandler = featureSet.name.hasPrefix("Application-End")
+            || activity.hasPrefix("Application-End")
 
-        if !isLifecycleHandler && !foundTerminator {
+        // ARO-0015 test feature sets end with `Then`, which *is* their
+        // terminator — §2.3, and every worked example in the proposal ends
+        // that way. Asking them for a Return asks them to stop being tests.
+        let isTestFeatureSet = activity.hasSuffix(" Test") || activity.hasSuffix(" Tests")
+            || activity == "Test" || activity == "Tests"
+
+        if !isLifecycleHandler && !isTestFeatureSet && !foundTerminator {
             let hasAnyReturn = statements.contains { stmt in
                 if let aro = stmt.asAROStatement {
                     let verb = aro.action.verb.lowercased()
@@ -104,6 +133,60 @@ public struct CodeQualityValidator {
             }
         }
     }
+    // MARK: - Verb Validation (GitLab #844)
+
+    /// Reports a statement whose verb names no action.
+    ///
+    /// `aro check` used to accept `Increment the <counter> for the <one>.`
+    /// and exit 0; the program then died at run time with
+    /// `unknownAction("increment")`, and only if that line was reached. A
+    /// green check is the project's claim that a file is valid ARO, and the
+    /// verb namespace is as closed as the qualifier namespace that GitLab
+    /// #486 shut for the same reason.
+    ///
+    /// It matters beyond the one program. `aro check` is the oracle the
+    /// `aro ask` training pipeline grades on, so a model that invented
+    /// `Increment`, `Reserve` or `Generate` scored as correct — and thirteen
+    /// invented verbs had accumulated in the documentation presented as
+    /// built-ins (GitLab #834) because nothing rejected them.
+    ///
+    /// A dotted name is accepted: `Markdown.ToHTML` is a plugin action and
+    /// `Application.DoubleValue` is ARO-0081, and neither is resolvable
+    /// without loading plugins, which the check path deliberately does not
+    /// do. ARO-0081 calls are validated separately against the
+    /// application's own feature sets.
+    private func validateVerbs(in statements: [Statement]) {
+        // An application with plugins has an open verb namespace; see
+        // `pluginActionsPossible`. Saying nothing is the honest answer, and
+        // the alternative — a warning on every plugin call — is the noise
+        // GitLab #823 is about.
+        guard !pluginActionsPossible else { return }
+
+        for aro in collectAROStatements(statements) {
+            let verb = aro.action.verb
+            guard !ActionVerbCatalog.isKnownVerb(verb) else { continue }
+
+            var hints: [String] = []
+            if let closest = ActionVerbCatalog.closestVerb(to: verb) {
+                hints.append("Did you mean '\(closest.prefix(1).uppercased() + closest.dropFirst())'?")
+            } else {
+                // Only when nothing is close. A plain typo does not need to
+                // be told how plugins are namespaced; a verb nobody has ever
+                // heard of is usually someone reaching for one.
+                hints.append(
+                    "A plugin action is namespaced: Handle.\(verb); "
+                    + "an ARO-0081 action is Application.\(verb)")
+            }
+            hints.append("Run `aro actions` for the full set")
+
+            diagnostics.error(
+                "'\(verb)' is not a verb of any action",
+                at: aro.span.start,
+                hints: hints
+            )
+        }
+    }
+
     // MARK: - Preposition Validation (GitLab #479)
 
     /// Reports statements whose preposition the action does not accept.
@@ -376,21 +459,12 @@ public struct CodeQualityValidator {
         }
     }
 
+    /// The shared walk (GitLab #660). This used to be a private copy that
+    /// descended into `match` and `for each` only, so a statement inside a
+    /// `while`, a range loop, a `when { }` block or a pipeline was never
+    /// checked here.
     private func collectAROStatements(_ statements: [Statement]) -> [AROStatement] {
-        var result: [AROStatement] = []
-        for statement in statements {
-            if let aro = statement as? AROStatement {
-                result.append(aro)
-            } else if let match = statement as? MatchStatement {
-                for matchCase in match.cases {
-                    result.append(contentsOf: collectAROStatements(matchCase.body))
-                }
-                result.append(contentsOf: collectAROStatements(match.otherwise ?? []))
-            } else if let loop = statement as? ForEachLoop {
-                result.append(contentsOf: collectAROStatements(loop.body))
-            }
-        }
-        return result
+        AROStatementWalk.flatten(statements)
     }
 
 }
