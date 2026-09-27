@@ -109,7 +109,21 @@ struct HandlerDependencies: Sendable {
             _ = try await makeExecutor().execute(analyzedFS, context: handlerContext)
             AROLogger.debug("Handler executed successfully: \(analyzedFS.featureSet.name)")
         } catch {
-            AROLogger.error("Handler error: \(error)")
+            // Not twice (GitLab #816). When the failure came from a deferred
+            // statement, `recordDeferredFailure` has already written the
+            // whole thing — statement, feature set, trace — to stderr, and
+            // this logged the same error again under a different prefix.
+            // The event still goes out either way: a handler somewhere may
+            // be listening for it, and that is not a duplicate of anything.
+            if !handlerContext.didReportDeferredFailure {
+                AROLogger.error("Handler error: \(error)")
+            }
+            // So `aro run` can exit non-zero (GitLab #816). Recoverable for
+            // the *process* — the application keeps running — but not a
+            // success for the *run*.
+            HandlerFailureLog.record(
+                featureSet: analyzedFS.featureSet.name,
+                error: String(describing: error))
             eventBus.publish(ErrorOccurredEvent(
                 error: String(describing: error),
                 context: analyzedFS.featureSet.name,

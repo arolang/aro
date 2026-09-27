@@ -1,14 +1,22 @@
-# Generated: Mon Jan 20 2026
+# Example: EventListener
 # Type: console
 # Command: aro run ./Examples/EventListener
-# Note: Uses occurrence-check - ListenResult format may vary
+# Note: occurrence-check. The listener records are asserted now that they
+# print as ARO values rather than `ListenResult(type: …)`, and now that the
+# port target is the 18787 the source asks for rather than a silent 8080
+# (GitLab #822).
 ---
 === Event Listener Demo ===
 --- Port Listener Setup ---
 Port listener configured for port 18787
+type: port
+target: 18787
 --- Event Listener Setup ---
 Event listener configured for user-created events
+type: events
+target: user-created
 --- File Listener Setup ---
 File listener configured
+type: file
 All listeners configured!
 [OK] demo

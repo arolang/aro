@@ -416,6 +416,22 @@ struct RunCommand: AsyncParsableCommand {
                 print(response.format(for: outputContext))
             }
         }
+
+        // A run whose handlers threw did not succeed (GitLab #816).
+        //
+        // `aro run Examples/EventReplay` printed three handler failures and
+        // exited 0, so a script driving it could not tell. The failures are
+        // recoverable for the process — the application keeps running, which
+        // is right, one bad event should not take a server down — but the
+        // run is how a caller finds out, and it was saying nothing.
+        let failed = HandlerFailureLog.failedFeatureSets
+        if !failed.isEmpty {
+            let names = failed.joined(separator: ", ")
+            let plural = failed.count == 1 ? "handler" : "handlers"
+            FileHandle.standardError.write(Data(
+                "[ARO] \(failed.count) event \(plural) failed: \(names)\n".utf8))
+            throw ExitCode.failure
+        }
     }
 }
 

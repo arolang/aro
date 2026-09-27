@@ -1471,20 +1471,33 @@ public final class CCompiler {
             let outputHandle = outputPipe.fileHandleForReading
             let errorHandle = errorPipe.fileHandleForReading
 
-            DispatchQueue.global().async {
+            // Wait for the readers, do not guess at how long they need
+            // (GitLab #668). This used to be two detached reads and a
+            // `Thread.sleep(0.1)`, which is a race with no upper bound: a
+            // large linker error — exactly the case where the output is
+            // worth having — could still be arriving when the sleep ended,
+            // and the `LinkerError` then carried a truncated message or an
+            // empty one. Losing the diagnostic at the moment it matters most
+            // is the worst available failure.
+            //
+            // `readDataToEndOfFile` returns when the child closes its end,
+            // so the group is satisfied by the child exiting; the two reads
+            // still run concurrently, which is what keeps a child that fills
+            // one pipe from deadlocking on the other.
+            let readers = DispatchGroup()
+
+            DispatchQueue.global().async(group: readers) {
                 let data = outputHandle.readDataToEndOfFile()
                 outputBox.append(data)
             }
 
-            DispatchQueue.global().async {
+            DispatchQueue.global().async(group: readers) {
                 let data = errorHandle.readDataToEndOfFile()
                 errorBox.append(data)
             }
 
             process.waitUntilExit()
-
-            // Give a moment for pipe reading to complete
-            Thread.sleep(forTimeInterval: 0.1)
+            readers.wait()
 
             #if os(Linux)
             debugLog("[LINKER] Process exited with status: \(process.terminationStatus)")
