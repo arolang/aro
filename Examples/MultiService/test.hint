@@ -1,7 +1,8 @@
 # Test hints for MultiService
 # Multi-service example with HTTP, Socket, and File Monitor
 type: multiservice
-# mode: both — all three gaps that pinned this to the interpreter are closed.
+# mode: interpreter — the three gaps that pinned this here are closed; a
+# fourth, smaller one is not. See the note above the directive.
 #
 # File events were the first: the compiled binary reported FILE MODIFIED for a
 # creation on macOS and reported nothing at all on Linux, because only the
@@ -22,6 +23,20 @@ type: multiservice
 # — and passed only while the tree was quiet. The compiled binary delivers the
 # path through `_expression_` where the interpreter uses `_literal_`, and only
 # the latter was read; the former fell through to a `"."` default.
-mode: both
+# Still `interpreter`, for a reason that only appears on Linux.
+#
+# Flipped to `both`, the compiled binary there is fast enough to see its own
+# test file:
+#
+#   A| Socket: FILE CREATED: ms_testfile.txt
+#
+# which the expected output does not contain — no mode has ever emitted it
+# before — and `Socket: Hello from HTTP!` then lands after capture ends.
+# Both are timing, not correctness: the event is real and the directory is
+# the right one, which is #882 working. macOS passes `both`; Linux does not.
+#
+# Pinning that would encode a race, so this stays interpreter-only until the
+# file event can be awaited rather than raced.
+mode: interpreter
 timeout: 20
 skip-on-windows: Multi-service tests not supported on Windows CI
