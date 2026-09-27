@@ -25,10 +25,11 @@ import WinSDK
 /// which one is in force.
 ///
 /// **The handler runs on an ordinary thread, not in a signal context**
-/// (GitLab #630). On POSIX the signal is ignored by `signal(2)` and delivered
-/// through a `DispatchSourceSignal` instead; on Windows it arrives on a thread
-/// the console subsystem creates. Both are normal threads, so a handler may
-/// take a lock, allocate, and start a `Task`.
+/// (GitLab #630). On POSIX the signal handler writes one byte to a self-pipe
+/// and returns; a dedicated thread reads that byte and calls the installed
+/// handler. On Windows it arrives on a thread the console subsystem creates.
+/// Both are normal threads, so a handler may take a lock, allocate, and start
+/// a `Task`.
 ///
 /// It did not used to be. `signal(SIGINT) { _ in … }` ran the handler in a
 /// POSIX signal context, where `pthread_mutex_lock`, Swift runtime allocation
@@ -47,14 +48,14 @@ public enum ShutdownSignals {
     private static let lock = NSLock()
     nonisolated(unsafe) private static var handler: (@convention(c) () -> Void)?
 
-    /// The dispatch sources delivering SIGINT and SIGTERM.
+    /// Read end of the self-pipe, and the thread draining it.
     ///
-    /// Held for the life of the process: a `DispatchSourceSignal` stops
-    /// delivering the moment it is deallocated, so dropping these would
-    /// silently restore the "Ctrl-C does nothing" behaviour — and `signal(…,
-    /// SIG_IGN)` has by then guaranteed the default terminate-on-SIGINT is
-    /// gone too.
-    nonisolated(unsafe) private static var sources: [DispatchSourceSignal] = []
+    /// Held for the life of the process: the reader thread is what turns a
+    /// signal into a normal-thread call, and there is nothing to shut it
+    /// down *with* once shutdown is the thing it delivers.
+    nonisolated(unsafe) private static var pipeReadFD: Int32 = -1
+    nonisolated(unsafe) private static var pipeWriteFD: Int32 = -1
+    nonisolated(unsafe) private static var readerStarted = false
 
     /// Install `body` as the process's shutdown handler.
     ///
@@ -71,35 +72,92 @@ public enum ShutdownSignals {
         // This one already ran on an ordinary thread.
         SetConsoleCtrlHandler(aroConsoleControlHandler, true)
         #else
-        installDispatchSources()
+        // Only take over the disposition if there is somewhere to deliver to.
+        //
+        // If the pipe cannot be created, installing a handler that writes to
+        // a closed fd would make the process *ignore* SIGTERM — which is the
+        // failure this whole arrangement exists to avoid, arrived at from the
+        // other direction. Leaving the default disposition means Ctrl-C
+        // terminates without running `Application-End`, which is worse than
+        // graceful and much better than unkillable.
+        if installSelfPipe() {
+            signal(SIGINT) { _ in ShutdownSignals.notifyFromSignalContext() }
+            signal(SIGTERM) { _ in ShutdownSignals.notifyFromSignalContext() }
+        }
         #endif
     }
 
     #if !os(Windows)
-    /// Install the two signal sources, once.
+    /// Everything the signal handler is allowed to do: one `write`.
     ///
-    /// `install` is called by three sites and the last handler wins, which is
-    /// what `signal` did; the *sources* must not be created three times, so
-    /// they are created once and read the current handler when they fire.
-    private static func installDispatchSources() {
+    /// `write(2)` is on POSIX's async-signal-safe list. Taking a lock,
+    /// allocating, or starting a `Task` is not, which is what the previous
+    /// handler did — see the type comment.
+    ///
+    /// `errno` is saved and restored because a handler that clobbers it
+    /// corrupts whatever the interrupted thread was about to read from it,
+    /// and that bug would be even harder to find than the one this replaces.
+    private static func notifyFromSignalContext() {
+        let saved = errno
+        var byte: UInt8 = 1
+        _ = withUnsafeBytes(of: &byte) { buffer in
+            write(pipeWriteFD, buffer.baseAddress, 1)
+        }
+        errno = saved
+    }
+
+    /// Create the self-pipe and the thread that drains it, once.
+    ///
+    /// A **self-pipe**, not a `DispatchSourceSignal`. The source version was
+    /// tried and reverted: it requires `signal(…, SIG_IGN)` first, because a
+    /// source observes a signal rather than consuming it — and on Linux the
+    /// compiled HTTP examples then ignored `SIGTERM` outright and had to be
+    /// killed, turning `OrderService`, `RepositoryObserver` and `UserService`
+    /// into 60-second timeouts in CI. Setting a process's disposition to
+    /// `SIG_IGN` and depending on a library to deliver it instead is a bet
+    /// that the library is servicing its queues; a handler plus a pipe is not
+    /// a bet.
+    ///
+    /// `install` is called from three sites and the last handler wins, as it
+    /// did with `signal`; only the pipe and its reader are once-only.
+    /// - Returns: whether a signal handler may now be installed.
+    @discardableResult
+    private static func installSelfPipe() -> Bool {
         lock.lock()
         defer { lock.unlock() }
-        guard sources.isEmpty else { return }
+        guard !readerStarted else { return true }
 
-        // `SIG_IGN` first, and it is load-bearing: a `DispatchSourceSignal`
-        // observes the signal, it does not consume it, so without this the
-        // default disposition still terminates the process before the source
-        // ever runs.
-        signal(SIGINT, SIG_IGN)
-        signal(SIGTERM, SIG_IGN)
-
-        let queue = DispatchQueue(label: "aro.shutdown-signals")
-        for number in [SIGINT, SIGTERM] {
-            let source = DispatchSource.makeSignalSource(signal: number, queue: queue)
-            source.setEventHandler { ShutdownSignals.invoke() }
-            source.resume()
-            sources.append(source)
+        var fds: [Int32] = [-1, -1]
+        guard pipe(&fds) == 0 else {
+            FileHandle.standardError.write(Data((
+                "[ARO] Could not create the shutdown signal pipe (errno \(errno)); "
+                + "Ctrl-C will terminate without running Application-End.\n").utf8))
+            return false
         }
+        pipeReadFD = fds[0]
+        pipeWriteFD = fds[1]
+        readerStarted = true
+
+        let thread = Thread {
+            var byte: UInt8 = 0
+            while true {
+                let n = withUnsafeMutableBytes(of: &byte) { buffer in
+                    read(ShutdownSignals.pipeReadFD, buffer.baseAddress, 1)
+                }
+                if n == 1 {
+                    // An ordinary thread: locks, allocation and tasks are all
+                    // fine here, which is the entire point.
+                    ShutdownSignals.invoke()
+                } else if n < 0 && errno == EINTR {
+                    continue
+                } else {
+                    break
+                }
+            }
+        }
+        thread.name = "aro.shutdown-signals"
+        thread.start()
+        return true
     }
     #endif
 
