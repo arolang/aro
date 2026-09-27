@@ -1704,8 +1704,19 @@ public struct ValidateAction: ActionImplementation {
             }
 
         default:
-            // Unknown rule - assume valid
-            isValid = true
+            // An unknown rule does not pass (GitLab #643).
+            //
+            // It used to set `isValid = true`, so `Validate the <ok: emial>
+            // for the <address>.` — a typo — reported success for every input.
+            // This is the same hole GitLab #486 closed for Compute
+            // qualifiers: an invented name that compiles, checks green and
+            // produces a confident wrong answer. A validation that always
+            // passes is worse than no validation, because the program reads
+            // as though it checked something.
+            throw ActionError.invalidInput(
+                "'\(ruleName)' is not a validation rule "
+                + "(\(knownRules.sorted().joined(separator: ", ")))",
+                received: ruleName)
         }
 
         return ValidationResult(isValid: isValid, rule: ruleName)
@@ -1887,8 +1898,16 @@ public struct TransformAction: ActionImplementation {
             return value
 
         default:
-            // value is already `any Sendable`
-            return value
+            // An unknown format is an error, not the identity (GitLab #643).
+            //
+            // `Transform the <x: jsn> from <y>.` used to return `<y>`
+            // unchanged and answer OK, so a typo became a silent no-op that
+            // `aro check` was happy with — and the program carried the
+            // untransformed value onward as though it had been converted.
+            throw ActionError.invalidInput(
+                "'\(transformType)' is not a Transform format "
+                + "(\(knownTransforms.sorted().joined(separator: ", ")))",
+                received: transformType)
         }
     }
 

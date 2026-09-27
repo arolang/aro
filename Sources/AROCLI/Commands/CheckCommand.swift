@@ -155,7 +155,8 @@ struct SourceCheckSubcommand: ParsableCommand {
                 sourceFile,
                 handledEvents: handledEvents,
                 declaredActions: declaredActions,
-                repositoryScopes: scopes
+                repositoryScopes: scopes,
+                checksWholeApplication: isDirectory
             )
             totalErrors += errors
             totalWarnings += warnings
@@ -723,7 +724,8 @@ struct SourceCheckSubcommand: ParsableCommand {
         _ file: URL,
         handledEvents: Set<String> = [],
         declaredActions: UserActionRegistry? = nil,
-        repositoryScopes: [String: String] = [:]
+        repositoryScopes: [String: String] = [:],
+        checksWholeApplication: Bool = true
     ) throws -> (errors: Int, warnings: Int) {
         let source = try String(contentsOf: file, encoding: .utf8)
         let compiler = Compiler()
@@ -731,7 +733,8 @@ struct SourceCheckSubcommand: ParsableCommand {
             source,
             externallyHandledEvents: handledEvents,
             declaredUserActions: declaredActions,
-            declaredRepositoryScopes: repositoryScopes
+            declaredRepositoryScopes: repositoryScopes,
+            checksWholeApplication: checksWholeApplication
         )
 
         let errors = result.diagnostics.filter { $0.severity == .error }
