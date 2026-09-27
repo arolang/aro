@@ -83,6 +83,13 @@ public final class PluginLoader: @unchecked Sendable {
     /// Registered C plugin execute functions
     private var cPluginFunctions: [String: (execute: CPluginExecuteFunction, free: CPluginFreeFunction?)] = [:]
 
+    /// Per plugin: action name → the verbs it declares (GitLab #884).
+    ///
+    /// `callCPlugin` needs it to work out what else to call an action, for
+    /// SDKs that register their own function name rather than the declared
+    /// verb. See `PluginActionDispatch`.
+    private var cPluginVerbsByName: [String: [String: [String]]] = [:]
+
     // (Python plugin paths are stored in EmbeddedPythonPluginPaths.shared)
 
     private init() {
@@ -535,6 +542,12 @@ public final class PluginLoader: @unchecked Sendable {
 
                     // Register actions using shared parser
                     let parsedActions = PluginInfoParser.parseActionList(from: info)
+
+                    // Remember the manifest's name→verbs map so `callCPlugin`
+                    // can retry with the SDK's own function name when the
+                    // declared verb is not what the plugin dispatches on
+                    // (GitLab #884).
+                    cPluginVerbsByName[name.lowercased()] = parsedActions.verbsMap
                     var entries: [(verb: String, pluginName: String?, handler: @Sendable (ResultDescriptor, ObjectDescriptor, any ExecutionContext) async throws -> any Sendable)] = []
 
                     for actionName in parsedActions.names {
@@ -780,7 +793,11 @@ public final class PluginLoader: @unchecked Sendable {
     ) throws -> any Sendable {
         lock.lock()
         let pluginFuncs = cPluginFunctions[serviceName.lowercased()]
+        let verbsByName = cPluginVerbsByName[serviceName.lowercased()] ?? [:]
         lock.unlock()
+        if ProcessInfo.processInfo.environment["ARO_DEBUG"] != nil {
+            FileHandle.standardError.write("[callCPlugin] svc=\(serviceName) method=\(method) found=\(pluginFuncs != nil) keys=\(cPluginFunctions.keys.sorted())\n".data(using: .utf8)!)
+        }
 
         guard let pluginFuncs = pluginFuncs else {
             throw PluginError.serviceNotFound(serviceName)
@@ -792,24 +809,55 @@ public final class PluginLoader: @unchecked Sendable {
         let argsData = try JSONSerialization.data(withJSONObject: enrichedArgs)
         let argsJSON = String(data: argsData, encoding: .utf8) ?? "{}"
 
-        // Pass method directly to aro_plugin_execute
-        // For service routing, CPluginServiceWrapper prepends "service:" before calling here
-        let resultPtr = method.withCString { methodCStr in
-            argsJSON.withCString { argsCStr in
-                pluginFuncs.execute(methodCStr, argsCStr)
+        // Ask by the verb first, then by the names the SDK might actually
+        // dispatch on (GitLab #884).
+        //
+        // `aro-plugin-sdk-rust` writes its manifest from the declared
+        // `name:`/`verbs:` but registers only the Rust function name —
+        // snake_case of the action name — so a plugin advertising `ParseCSV`
+        // with verb `parsecsv` answers `Unknown action: parsecsv` and wants
+        // `parse_csv`. `NativePluginHost` has retried like this since the SDK
+        // shipped; this path, which is the one a **statically linked** plugin
+        // takes, did not — so `Examples/CSVProcessor` worked under `aro run`
+        // and failed under `aro build`.
+        //
+        // For a service call the wrapper has already prefixed `service:`,
+        // and no snake_case candidate will match that; the first attempt is
+        // the verb as given either way, so those are unaffected.
+        let candidates = PluginActionDispatch.candidates(
+            for: method, verbsByName: verbsByName)
+
+        var lastResultJSON: String?
+        for candidate in candidates {
+            let resultPtr = candidate.withCString { methodCStr in
+                argsJSON.withCString { argsCStr in
+                    pluginFuncs.execute(methodCStr, argsCStr)
+                }
             }
+            guard let resultPtr else { continue }
+            let resultJSON = String(cString: resultPtr)
+            pluginFuncs.free?(resultPtr)
+            lastResultJSON = resultJSON
+
+            // Keep trying while the plugin says it has no such action; any
+            // other answer — including a real error — is this candidate's.
+            if PluginActionDispatch.isUnknownAction(resultJSON) { continue }
+            return try decodeCPluginResult(resultJSON, serviceName: serviceName, method: method)
         }
 
-        // Check for nil result
-        guard let resultPtr = resultPtr else {
+        guard let resultJSON = lastResultJSON else {
             throw PluginError.executionFailed(serviceName, method: method, message: "Plugin returned null")
         }
+        // Every candidate was unknown: surface the plugin's own last words
+        // rather than a message about candidates it never asked for.
+        return try decodeCPluginResult(resultJSON, serviceName: serviceName, method: method)
+    }
 
-        // Free via defer to prevent leaks if subsequent parsing throws
-        defer { pluginFuncs.free?(resultPtr) }
-        let resultJSON = String(cString: resultPtr)
-
-        // Check for error in response
+    /// Turn one `aro_plugin_execute` response into a value, or throw the
+    /// error it carries.
+    private func decodeCPluginResult(
+        _ resultJSON: String, serviceName: String, method: String
+    ) throws -> any Sendable {
         if resultJSON.contains("\"error\":") {
             if let data = resultJSON.data(using: .utf8),
                let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
@@ -818,7 +866,6 @@ public final class PluginLoader: @unchecked Sendable {
             }
         }
 
-        // Parse result
         guard let resultData = resultJSON.data(using: .utf8),
               let result = try JSONSerialization.jsonObject(with: resultData) as? [String: Any] else {
             return resultJSON
