@@ -264,18 +264,22 @@ public struct StartAction: ActionImplementation {
                   let dirPath = objectConfig["directory"] as? String {
             path = dirPath
         }
-        // Priority 4: a bare `_expression_` under some *other* preposition.
+        // Priority 4: `_expression_`, which is how a **compiled** binary
+        // delivers `Start the <file-monitor> with "sub".` (GitLab #882).
         //
-        // `with <expression>` no longer reaches here: the compiled bridge
-        // mirrors it into `_with_` (GitLab #882), so it is answered by
-        // Priority 1 exactly as the interpreter answers it. This branch
-        // accepted only a dictionary with a `directory` key, which is how
-        // #882 presented — a plain string fell through to the `"."` below
-        // and a compiled binary watched its working directory whatever path
-        // the program named, one file event per build artefact under a
-        // project root. That is fixed upstream now; the string case stays
-        // here because a non-`with` spelling still arrives this way and
-        // silently watching `"."` is the failure worth never repeating.
+        // This accepted only a dictionary with a `directory` key, so a plain
+        // string fell through to the `"."` below and the binary watched its
+        // working directory — whatever path the program named. The
+        // interpreter was unaffected because its executor binds `_literal_`
+        // for the same statement (Priority 2), while codegen serialises it
+        // as an expression: two spellings of one statement, and only one of
+        // them was read here.
+        //
+        // The symptom was a compiled watcher reporting every change under
+        // the working directory. Run from a project root that is one event
+        // per build artefact, which is what kept `Examples/MultiService`
+        // pinned to `mode: interpreter` — its compiled run passed only when
+        // the tree happened to be quiet.
         else if let exprValue = context.resolveAny("_expression_") {
             if let dirPath = exprValue as? String {
                 path = dirPath

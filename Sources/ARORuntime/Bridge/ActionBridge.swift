@@ -160,30 +160,6 @@ func boxResult(_ value: any Sendable) -> UnsafeMutableRawPointer {
     return UnsafeMutableRawPointer(Unmanaged.passRetained(boxed).toOpaque())
 }
 
-/// `<Verb> the <result> with <expression>.` binds the evaluated expression to
-/// `_with_` as well as `_expression_` (ARO-0042), because every action that
-/// takes a `with` payload reads that payload from `_with_`.
-///
-/// `FeatureSetExecutor` does this for the interpreter — the same two
-/// conditions, `preposition == .with` and an object whose base is
-/// `_expression_` — and nothing did it on the compiled path. So a compiled
-/// `Start the <file-monitor> with "sub".` reached
-/// `StartAction.startFileMonitor` with `_with_` unbound, fell through to the
-/// `"."` default, and the binary watched its own working directory instead of
-/// the directory the program named (GitLab #882). Every other action reading a
-/// `with` payload from a bare expression had the same hole.
-///
-/// `_with_` is swept per statement via `FrameworkVariables.transientKeys`, so
-/// this cannot leak into the next statement. An explicit `with` clause already
-/// bound by `ModifierBinder.bindRangeModifiers` wins, hence the nil check.
-func mirrorExpressionObjectToWith(_ objectDesc: ObjectDescriptor, context: ExecutionContext) {
-    guard objectDesc.preposition == .with,
-          objectDesc.base == "_expression_",
-          context.resolveAny("_with_") == nil,
-          let expressionValue = context.resolveAny("_expression_") else { return }
-    context.bind("_with_", value: expressionValue)
-}
-
 // MARK: - Unified Action Execution
 
 /// Execute an action through ActionRunner
@@ -200,8 +176,6 @@ private func executeAction(
 
     let resultDesc = toResultDescriptor(result)
     let objectDesc = toObjectDescriptor(object)
-
-    mirrorExpressionObjectToWith(objectDesc, context: ctxHandle.context)
 
     // Deferred execution in compiled binaries (ARO-0088 §2, §7).
     //
