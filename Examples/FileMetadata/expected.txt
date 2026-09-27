@@ -17,4 +17,4 @@ name: FileMetadata
 created: __TIMESTAMP__
 modified: __TIMESTAMP__
 All metadata retrieved!
-demo
+[OK] demo

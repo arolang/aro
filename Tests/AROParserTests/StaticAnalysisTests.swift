@@ -76,19 +76,39 @@ struct DuplicateFeatureSetTests {
 @Suite("Empty Feature Set Detection")
 struct EmptyFeatureSetTests {
 
-    @Test("Parser error for empty feature set")
+    @Test("An empty feature set is a warning, not an error")
     func testEmptyFeatureSet() throws {
-        // Empty feature sets are rejected at the parser level, not semantic analysis
+        // This asserted `hasErrors`, and passed — but not for the reason it
+        // gave. The source was `(Empty Feature: API)`, and `Empty` is a lexer
+        // keyword, so the *header* failed to parse; the emptiness was never
+        // reached. Rename the feature set and the same source produced only a
+        // warning, which is what the analyser has always done for an empty
+        // body. GitLab #855 made the header parse and uncovered it.
         let source = """
-        (Empty Feature: API) {
+        (Quiet Feature: API) {
         }
         """
         let compiler = Compiler()
         let result = compiler.compile(source)
 
-        // Parser should report an error for empty feature sets
-        // The exact error depends on parser behavior - it should fail compilation
-        #expect(result.hasErrors)
+        #expect(!result.hasErrors, "an empty body is advice, not a failure")
+        #expect(result.diagnostics.contains {
+            $0.severity == .warning && $0.message.contains("has no statements")
+        })
+    }
+
+    @Test("A keyword in the name does not turn the warning into an error")
+    func testEmptyFeatureSetWithKeywordName() throws {
+        // The original spelling, now that it parses (GitLab #855). It must
+        // reach the same verdict as any other name.
+        let result = Compiler().compile("""
+        (Empty Feature: API) {
+        }
+        """)
+        #expect(!result.hasErrors)
+        #expect(result.diagnostics.contains {
+            $0.severity == .warning && $0.message.contains("has no statements")
+        })
     }
 
     @Test("No warning for non-empty feature set")

@@ -19,7 +19,7 @@ struct REPLRebindSurvivalTests {
 
     @Test("Rebinding across cells errors and the session survives")
     func rebindAcrossCells() async throws {
-        let session = REPLSession(suppressLogPrefix: true)
+        let session = REPLSession()
 
         _ = try await session.executeStatement("Compute the <v> from 5.")
         #expect(session.getVariable("v") as? Int == 5)
@@ -42,7 +42,7 @@ struct REPLRebindSurvivalTests {
 
     @Test("Match-arm rebind of a session variable errors, session survives")
     func matchArmRebind() async throws {
-        let session = REPLSession(suppressLogPrefix: true)
+        let session = REPLSession()
 
         _ = try await session.executeStatement("Compute the <mode> from 5.")
 

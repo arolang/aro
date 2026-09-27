@@ -125,7 +125,7 @@ aro run .
 You should see:
 
 ```
-[Application-Start] Hello from ARO!
+Hello from ARO!
 [OK] startup
 ```
 

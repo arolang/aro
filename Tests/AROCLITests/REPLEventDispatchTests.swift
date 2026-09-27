@@ -25,7 +25,7 @@ struct REPLEventDispatchTests {
     /// repository name, so parallel/serial test order can't leak
     /// state between cases.
     private struct Playground {
-        let session = REPLSession(suppressLogPrefix: true)
+        let session = REPLSession()
         /// A name fragment unique to this Playground.
         ///
         /// This used to filter letters out of a UUID's first eight

@@ -1,0 +1,4 @@
+# Test hints for ApplicationLimits (ARO-0088 §10a, GitLab #862)
+# The loop is parallel, so handler output arrives in no fixed order.
+mode: both
+occurrence-check: true

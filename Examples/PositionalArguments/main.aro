@@ -1,0 +1,23 @@
+(* Positional command-line arguments — ARO-0047 §Positional Arguments
+ *
+ * Run with: aro run ./Examples/PositionalArguments https://example.com 3
+ *
+ * The `takes` clause on Application-Start declares the positionals, in order.
+ * They are then read exactly like flags, so `--url https://example.com` keeps
+ * working for a caller who prefers it.
+ *)
+
+(Application-Start: Crawler takes <url> <depth>) {
+    Extract the <site> from the <parameter: url>.
+    Extract the <levels> from the <parameter: depth>.
+
+    Log "site: ${<site>}" to the <console>.
+    Log "depth: ${<levels>}" to the <console>.
+
+    (* Every positional, in order — what a variadic tool reads instead. *)
+    Extract the <args> from the <parameter: arguments>.
+    Compute the <argument-count: length> from <args>.
+    Log "arguments: ${<argument-count>}" to the <console>.
+
+    Return an <OK: status> for the <startup>.
+}

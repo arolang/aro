@@ -6,6 +6,10 @@ import Darwin
 import Glibc
 #endif
 
+#if os(Windows)
+import WinSDK
+#endif
+
 /// Detects terminal capabilities at runtime
 public struct CapabilityDetector: Sendable {
     /// Detect terminal capabilities using system calls and environment variables
@@ -32,7 +36,27 @@ public struct CapabilityDetector: Sendable {
 
     /// Detect terminal dimensions using ioctl or environment variables
     private static func detectDimensions() -> (rows: Int, columns: Int) {
-        #if !os(Windows)
+        #if os(Windows)
+        // Windows has no `ioctl`, and asking the environment first meant the
+        // size came from `LINES`/`COLUMNS` — variables nothing on Windows sets
+        // — so every terminal was 24x80 and a resize was never noticed
+        // (GitLab #699). `GetConsoleScreenBufferInfo` is the real question.
+        //
+        // The *window* rectangle, not `dwSize`: `dwSize` is the scrollback
+        // buffer, which is routinely 9 000 rows tall, and laying a UI out to
+        // that is worse than laying it out to a wrong-but-plausible 24.
+        let handle = GetStdHandle(STD_OUTPUT_HANDLE)
+        if handle != INVALID_HANDLE_VALUE {
+            var info = CONSOLE_SCREEN_BUFFER_INFO()
+            if GetConsoleScreenBufferInfo(handle, &info) {
+                let rows = Int(info.srWindow.Bottom - info.srWindow.Top) + 1
+                let columns = Int(info.srWindow.Right - info.srWindow.Left) + 1
+                if rows > 0 && columns > 0 {
+                    return (rows, columns)
+                }
+            }
+        }
+        #else
         // Try ioctl first (most accurate)
         var winsize = winsize()
         if ioctl(STDOUT_FILENO, TIOCGWINSZ, &winsize) == 0 {
@@ -147,17 +171,12 @@ public struct CapabilityDetector: Sendable {
         #if !os(Windows)
         return isatty(STDOUT_FILENO) != 0
         #else
-        // Windows: check if we're in Windows Terminal
-        if ProcessInfo.processInfo.environment["WT_SESSION"] != nil {
-            return true
-        }
-
-        // Check if PROMPT is set (indicates interactive CMD/PowerShell)
-        if ProcessInfo.processInfo.environment["PROMPT"] != nil {
-            return true
-        }
-
-        return false
+        // `TTYDetector` asks `GetFileType(GetStdHandle(…))`, which is the same
+        // question `isatty` answers and has worked on Windows all along. The
+        // environment sniffing it replaces reported "no terminal" for an
+        // interactive `cmd.exe` and "terminal" for a Windows Terminal session
+        // with its output piped to a file (GitLab #699).
+        return TTYDetector.stdoutIsTTY
         #endif
     }
 

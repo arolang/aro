@@ -41,7 +41,7 @@ struct RepositoryWhereOperatorTests {
 
     @Test("A lone `>` predicate returns the matching row, not nothing")
     func loneGreaterThan() async {
-        let session = REPLSession(suppressLogPrefix: true)
+        let session = REPLSession()
         let engine = REPLCellEngine(session: session)
         await seed(engine, repo: "op565a-repository")
 
@@ -54,7 +54,7 @@ struct RepositoryWhereOperatorTests {
 
     @Test("Lone, chained and Filter spellings give the same answer")
     func threeSpellingsAgree() async {
-        let session = REPLSession(suppressLogPrefix: true)
+        let session = REPLSession()
         let engine = REPLCellEngine(session: session)
         await seed(engine, repo: "op565b-repository")
 
@@ -75,7 +75,7 @@ struct RepositoryWhereOperatorTests {
 
     @Test("`>=` matches the boundary and everything above it")
     func greaterEqualIncludesBoundary() async {
-        let session = REPLSession(suppressLogPrefix: true)
+        let session = REPLSession()
         let engine = REPLCellEngine(session: session)
         await seed(engine, repo: "op565c-repository")
 
@@ -90,7 +90,7 @@ struct RepositoryWhereOperatorTests {
 
     @Test("`<` compares rather than equates")
     func lessThan() async {
-        let session = REPLSession(suppressLogPrefix: true)
+        let session = REPLSession()
         let engine = REPLCellEngine(session: session)
         await seed(engine, repo: "op565d-repository")
         _ = await engine.executeCell(
@@ -100,7 +100,7 @@ struct RepositoryWhereOperatorTests {
 
     @Test("`is not` excludes rather than includes")
     func isNot() async {
-        let session = REPLSession(suppressLogPrefix: true)
+        let session = REPLSession()
         let engine = REPLCellEngine(session: session)
         await seed(engine, repo: "op565e-repository")
         _ = await engine.executeCell(
@@ -112,7 +112,7 @@ struct RepositoryWhereOperatorTests {
 
     @Test("`in` tests membership")
     func membership() async {
-        let session = REPLSession(suppressLogPrefix: true)
+        let session = REPLSession()
         let engine = REPLCellEngine(session: session)
         await seed(engine, repo: "op565f-repository")
         _ = await engine.executeCell(
@@ -122,7 +122,7 @@ struct RepositoryWhereOperatorTests {
 
     @Test("`contains` tests substrings")
     func contains() async {
-        let session = REPLSession(suppressLogPrefix: true)
+        let session = REPLSession()
         let engine = REPLCellEngine(session: session)
         await seed(engine, repo: "op565g-repository")
         _ = await engine.executeCell(
@@ -134,7 +134,7 @@ struct RepositoryWhereOperatorTests {
 
     @Test("`is` still matches exactly, and still unwraps a single row")
     func equalityUnchanged() async {
-        let session = REPLSession(suppressLogPrefix: true)
+        let session = REPLSession()
         let engine = REPLCellEngine(session: session)
         await seed(engine, repo: "op565h-repository")
 
@@ -148,7 +148,7 @@ struct RepositoryWhereOperatorTests {
 
     @Test("A retrieve with no where clause still returns everything")
     func noWhereClause() async {
-        let session = REPLSession(suppressLogPrefix: true)
+        let session = REPLSession()
         let engine = REPLCellEngine(session: session)
         await seed(engine, repo: "op565i-repository")
         _ = await engine.executeCell("Retrieve the <rows> from the <op565i-repository>.")
@@ -157,7 +157,7 @@ struct RepositoryWhereOperatorTests {
 
     @Test("A non-equality predicate that matches nothing returns empty, not everything")
     func noMatchIsEmpty() async {
-        let session = REPLSession(suppressLogPrefix: true)
+        let session = REPLSession()
         let engine = REPLCellEngine(session: session)
         await seed(engine, repo: "op565j-repository")
         _ = await engine.executeCell(

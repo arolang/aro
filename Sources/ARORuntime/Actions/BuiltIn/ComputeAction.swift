@@ -169,6 +169,21 @@ public struct ComputeAction: SynchronousAction {
               summary: "Percent-encode a query value", op: Self.opURLEncode),
         .init(name: "url-decode", inputTypes: [.string], acceptsParameters: false,
               summary: "Decode a percent-encoded value", op: Self.opURLDecode),
+        // URL arithmetic (ARO-0019 §3.1a, GitLab #859). `url-encode` and
+        // `url-decode` were already here, so the namespace and the precedent
+        // were too — what was missing is everything you do to a URL that is
+        // not escaping it.
+        .init(name: "url-resolve", inputTypes: [.string], acceptsParameters: true,
+              summary: "Resolve a relative URL against a base; "
+                     + "with { base: … } or with <base>", op: Self.opURLResolve),
+        .init(name: "url-defragment", inputTypes: [.string], acceptsParameters: false,
+              summary: "The URL without its #fragment", op: Self.opURLDefragment),
+        .init(name: "url-normalize", inputTypes: [.string], acceptsParameters: false,
+              summary: "Lowercase scheme and host, remove . and .. and a "
+                     + "default port", op: Self.opURLNormalize),
+        .init(name: "url-parts", inputTypes: [.string], acceptsParameters: false,
+              summary: "Split into scheme, host, port, path, query, fragment",
+              op: Self.opURLParts),
         .init(name: "base64-encode", inputTypes: [.string], acceptsParameters: false,
               summary: "Standard Base64 encode", op: Self.opBase64Encode),
         .init(name: "base64-decode", inputTypes: [.string], acceptsParameters: false,
@@ -205,6 +220,33 @@ public struct ComputeAction: SynchronousAction {
               acceptsParameters: false,
               summary: "A random element, or a random Int below a bound",
               op: Self.opRandom),
+        // Paths (ARO-0036 §9, GitLab #861). Pure functions on a string, so
+        // they belong here rather than in a file action: none of them touches
+        // the filesystem, and `absolute` only consults the working directory.
+        .init(name: "basename", inputTypes: [.string], acceptsParameters: false,
+              summary: "Last path component, extension included", op: Self.opBasename),
+        .init(name: "dirname", inputTypes: [.string], acceptsParameters: false,
+              summary: "Everything before the last path component", op: Self.opDirname),
+        .init(name: "extension", inputTypes: [.string], acceptsParameters: false,
+              summary: "File extension without the dot; empty when there is none",
+              op: Self.opExtension),
+        .init(name: "stem", inputTypes: [.string], acceptsParameters: false,
+              summary: "Last path component without its extension", op: Self.opStem),
+        .init(name: "absolute", inputTypes: [.string], acceptsParameters: false,
+              summary: "Resolved against the working directory, . and .. removed",
+              op: Self.opAbsolute),
+        .init(name: "path-join", inputTypes: [.string, .list], acceptsParameters: true,
+              summary: "Join path components with exactly one separator; "
+                     + "with <name> or with [\"a\", \"b\"]", op: Self.opPathJoin),
+        // Regex capture groups (ARO-0037 §7, GitLab #858). The pattern
+        // comes from the `by /…/` clause Split already owns, so one
+        // regex spelling covers both actions.
+        .init(name: "captures", inputTypes: [.string], acceptsParameters: true,
+              summary: "First regex match as a record of its capture groups; "
+                     + "by /pattern/flags", op: Self.opCaptures),
+        .init(name: "all-captures", inputTypes: [.string], acceptsParameters: true,
+              summary: "Every regex match, as a list of capture records; "
+                     + "by /pattern/flags", op: Self.opAllCaptures),
         // Money (GitLab #517).
         .init(name: "fixed", inputTypes: [.int, .double, .string],
               acceptsParameters: true,
@@ -401,6 +443,9 @@ public struct ComputeAction: SynchronousAction {
         let stringToHash: String
         if let str = input as? String {
             stringToHash = str
+        // `isValidJSONObject` has already said this serialises; the `try?` covers
+        // only the residual encoder failure, and falling through to the
+        // `String(describing:)` branch below hashes the same value either way.
         } else if JSONSerialization.isValidJSONObject(input),
                   let data = try? JSONSerialization.data(withJSONObject: input, options: [.sortedKeys]),
                   let json = String(data: data, encoding: .utf8) {
@@ -511,6 +556,336 @@ public struct ComputeAction: SynchronousAction {
         }
         let replacement = config["replace"] as? String ?? ""
         return text.replacingOccurrences(of: find, with: replacement)
+    }
+
+    // MARK: - URL arithmetic (ARO-0019 §3.1a, GitLab #859)
+
+    /// The base a `url-resolve` was given: `with { base: … }` or `with <base>`.
+    private static func resolveBase(_ context: ExecutionContext) -> String? {
+        if let config = context.resolveAny("_with_") as? [String: any Sendable],
+           let base = config["base"] {
+            return asText(base)
+        }
+        for slot in ["_with_", "_literal_"] {
+            if let value = context.resolveAny(slot), !(value is [String: any Sendable]) {
+                let text = asText(value)
+                if !text.isEmpty { return text }
+            }
+        }
+        return nil
+    }
+
+    /// `Compute the <abs: url-resolve> from <href> with { base: <page-url> }.`
+    ///
+    /// Resolution is RFC 3986's, via `URL(string:relativeTo:)` — which is the
+    /// point of having this at all. The crawler chapter built it out of
+    /// `Split` and concatenation, and that is wrong for `../`, for a
+    /// protocol-relative `//host/path`, and for a fragment on a relative link.
+    ///
+    /// An absolute input is returned unchanged, so resolving a page's links
+    /// does not need to ask which kind each one is.
+    private static func opURLResolve(_ input: any Sendable,
+                                     _ context: ExecutionContext) throws -> any Sendable {
+        let href = asText(input).trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let base = resolveBase(context) else {
+            throw ActionError.missingRequiredField(
+                field: "a base: with { base: \"https://example.com/a/b\" }",
+                action: "Compute url-resolve")
+        }
+        guard let baseURL = URL(string: base.trimmingCharacters(in: .whitespacesAndNewlines)) else {
+            throw ActionError.invalidInput(
+                "Compute url-resolve: the base must be an absolute URL", received: base)
+        }
+        guard let resolved = URL(string: href, relativeTo: baseURL) else {
+            // Not a URL at all. Returning the input unchanged would be the
+            // silent-wrong-answer this qualifier exists to remove.
+            throw ActionError.invalidInput(
+                "Compute url-resolve: not a URL", received: href)
+        }
+        return resolved.absoluteURL.absoluteString
+    }
+
+    /// The URL without its `#fragment`.
+    ///
+    /// A fragment is a client-side pointer into a document, so two URLs that
+    /// differ only there are the same *request* — which is why a crawler has
+    /// to strip it before deciding whether it has seen a page.
+    private static func opURLDefragment(_ input: any Sendable,
+                                        _ context: ExecutionContext) throws -> any Sendable {
+        // Lexical, deliberately: RFC 3986 reserves `#`, so a literal one must
+        // be written `%23` and the first raw `#` is always where the fragment
+        // starts. Cutting there is exact.
+        //
+        // Going through `URLComponents` would also be exact for a well-formed
+        // URL and *wrong* for anything else: it re-renders what it parsed, so
+        // `"not a url#frag"` came back `"not%20a%20url"` — a value this
+        // qualifier was only asked to truncate, quietly re-encoded.
+        let text = asText(input)
+        guard let hash = text.firstIndex(of: "#") else { return text }
+        return String(text[..<hash])
+    }
+
+    /// Lowercase the scheme and host, remove `.` and `..`, and drop a port
+    /// that is the scheme's default.
+    ///
+    /// The three things that make two spellings of one address compare
+    /// unequal. It does **not** touch the path's case or the query's order:
+    /// a path is case-sensitive on most servers and a query's order can carry
+    /// meaning, so "normalising" either would change what the URL means.
+    private static func opURLNormalize(_ input: any Sendable,
+                                       _ context: ExecutionContext) throws -> any Sendable {
+        let text = asText(input).trimmingCharacters(in: .whitespacesAndNewlines)
+        guard var components = URLComponents(string: text) else { return text }
+
+        components.scheme = components.scheme?.lowercased()
+        components.host = components.host?.lowercased()
+
+        let defaultPorts = ["http": 80, "https": 443, "ftp": 21, "ws": 80, "wss": 443]
+        if let scheme = components.scheme, components.port == defaultPorts[scheme] {
+            components.port = nil
+        }
+
+        if !components.path.isEmpty, let url = URL(string: text) {
+            // `standardized` is what removes `.` and `..`, and it only applies
+            // to a URL with a path to walk.
+            let standardizedPath = url.standardized.path
+            if !standardizedPath.isEmpty { components.path = standardizedPath }
+        }
+        // An authority with no path is `https://example.com` — the empty path
+        // is what `URLComponents` renders, and `/` is the same resource.
+        if components.path.isEmpty, components.host != nil {
+            components.path = "/"
+        }
+
+        return components.string ?? text
+    }
+
+    /// `{ scheme, host, port, path, query, fragment }`.
+    ///
+    /// Absent parts are absent from the record rather than present and empty,
+    /// so `<parts: port>` reads as missing for a URL that names no port —
+    /// which is the difference between "no port" and "port 0".
+    private static func opURLParts(_ input: any Sendable,
+                                   _ context: ExecutionContext) throws -> any Sendable {
+        let text = asText(input).trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let components = URLComponents(string: text) else {
+            throw ActionError.invalidInput("Compute url-parts: not a URL", received: text)
+        }
+        var parts: [String: any Sendable] = [:]
+        if let scheme = components.scheme { parts["scheme"] = scheme }
+        if let host = components.host, !host.isEmpty { parts["host"] = host }
+        if let port = components.port { parts["port"] = port }
+        if !components.path.isEmpty { parts["path"] = components.path }
+        if let query = components.query { parts["query"] = query }
+        if let fragment = components.fragment { parts["fragment"] = fragment }
+        if let user = components.user { parts["user"] = user }
+        return parts
+    }
+
+    // MARK: - Paths (ARO-0036 §9, GitLab #861)
+
+    /// A path's components, with empty ones dropped and the leading `/` noted.
+    ///
+    /// Written by hand rather than through `URL`: `URL(fileURLWithPath:)`
+    /// consults the filesystem to decide whether a path is a directory, so
+    /// `basename` of a path that happens to exist could differ from
+    /// `basename` of one that does not. A path operation is a string
+    /// operation, and it has to answer the same way on every machine.
+    private static func pathComponents(_ path: String) -> (isAbsolute: Bool, parts: [String]) {
+        let isAbsolute = path.hasPrefix("/")
+        let parts = path.split(separator: "/", omittingEmptySubsequences: true).map(String.init)
+        return (isAbsolute, parts)
+    }
+
+    /// `"/var/data/report.csv"` → `"report.csv"`.
+    ///
+    /// A trailing slash is not a component: the basename of `"/var/data/"` is
+    /// `"data"`, which is what every shell means by it.
+    private static func opBasename(_ input: any Sendable, _ context: ExecutionContext) throws -> any Sendable {
+        let (isAbsolute, parts) = pathComponents(asText(input))
+        return parts.last ?? (isAbsolute ? "/" : "")
+    }
+
+    /// `"/var/data/report.csv"` → `"/var/data"`.
+    ///
+    /// `"."` for a bare filename, because that is the directory it is in and
+    /// the answer composes with `path-join`; `""` would not.
+    private static func opDirname(_ input: any Sendable, _ context: ExecutionContext) throws -> any Sendable {
+        let (isAbsolute, parts) = pathComponents(asText(input))
+        let leading = parts.dropLast()
+        if leading.isEmpty { return isAbsolute ? "/" : "." }
+        return (isAbsolute ? "/" : "") + leading.joined(separator: "/")
+    }
+
+    /// `"report.csv"` → `"csv"`. Without the dot, because every use of it —
+    /// a comparison, a switch, building a new name — otherwise has to strip one.
+    ///
+    /// A dotfile has no extension: `.gitignore` is a name, not an extension,
+    /// and treating it as one is the classic off-by-one here.
+    private static func opExtension(_ input: any Sendable, _ context: ExecutionContext) throws -> any Sendable {
+        guard let name = try opBasename(input, context) as? String,
+              let dot = name.lastIndex(of: "."),
+              dot != name.startIndex,
+              dot != name.index(before: name.endIndex) else { return "" }
+        return String(name[name.index(after: dot)...])
+    }
+
+    /// `"/var/data/report.csv"` → `"report"`.
+    ///
+    /// The piece `basename` and `extension` leave between them, so that
+    /// renaming a file keeps its name and changes its type.
+    private static func opStem(_ input: any Sendable, _ context: ExecutionContext) throws -> any Sendable {
+        guard let name = try opBasename(input, context) as? String else { return "" }
+        guard let ext = try opExtension(input, context) as? String, !ext.isEmpty else { return name }
+        return String(name.dropLast(ext.count + 1))
+    }
+
+    /// Resolve against the working directory and remove `.` and `..`.
+    ///
+    /// Purely lexical after the working-directory prefix: `..` pops a
+    /// component rather than following a symlink, so the answer does not
+    /// depend on what exists.
+    private static func opAbsolute(_ input: any Sendable, _ context: ExecutionContext) throws -> any Sendable {
+        let path = asText(input)
+        let rooted = path.hasPrefix("/") ? path : AROWorkingDirectory.url(path).path
+        let (_, parts) = pathComponents(rooted)
+        var resolved: [String] = []
+        for part in parts {
+            switch part {
+            case ".": continue
+            case "..": if !resolved.isEmpty { resolved.removeLast() }
+            default: resolved.append(part)
+            }
+        }
+        return "/" + resolved.joined(separator: "/")
+    }
+
+    /// `Compute the <full: path-join> from <dir> with <name>.`
+    ///
+    /// Joins with **exactly one** separator, which is the whole point: string
+    /// concatenation gets `"a/" + "/b"` wrong and nobody notices until a path
+    /// arrives with a trailing slash.
+    ///
+    /// **An absolute right-hand component does not reset the path.**
+    /// `path-join` of `"/uploads"` and `"/etc/passwd"` is
+    /// `"/uploads/etc/passwd"`, not `"/etc/passwd"`. This is deliberately
+    /// unlike Python's `os.path.join`, and the reason is the call it is for:
+    /// joining a trusted directory to an untrusted name. A join that a
+    /// leading slash can turn into "anywhere on the filesystem" is a path
+    /// traversal waiting to be written, and the surprising behaviour would be
+    /// found the hard way. Use `absolute` when you want a path resolved.
+    private static func opPathJoin(_ input: any Sendable, _ context: ExecutionContext) throws -> any Sendable {
+        var segments: [any Sendable] = [input]
+        if let extra = context.resolveAny("_with_") ?? context.resolveAny("_literal_") {
+            if let list = extra as? [any Sendable] {
+                segments.append(contentsOf: list)
+            } else {
+                segments.append(extra)
+            }
+        }
+        // A list as the *input* joins its own elements, so
+        // `Compute the <p: path-join> from <parts>.` reads naturally too.
+        if segments.count == 1, let list = input as? [any Sendable] {
+            segments = list
+        }
+
+        let leadingSlash = asText(segments.first ?? "").hasPrefix("/")
+        var parts: [String] = []
+        for segment in segments {
+            parts.append(contentsOf: pathComponents(asText(segment)).parts)
+        }
+        let joined = parts.joined(separator: "/")
+        return leadingSlash ? "/" + joined : joined
+    }
+
+    // MARK: - Regex capture groups (ARO-0037 §7, GitLab #858)
+
+    /// The `by /pattern/flags` clause, as a compiled regex.
+    ///
+    /// Shared with `Split`, which binds the same two framework variables —
+    /// there is one regex spelling in the language and this is it.
+    private static func byClauseRegex(_ context: ExecutionContext,
+                                      qualifier: String) throws -> NSRegularExpression {
+        guard let pattern = context.resolveAny("_by_pattern_") as? String else {
+            throw ActionError.missingRequiredField(
+                "\(qualifier) requires a pattern: by /(?<name>…)/"
+            )
+        }
+        let flags = (context.resolveAny("_by_flags_") as? String) ?? ""
+        var options: NSRegularExpression.Options = []
+        if flags.contains("i") { options.insert(.caseInsensitive) }
+        if flags.contains("s") { options.insert(.dotMatchesLineSeparators) }
+        if flags.contains("m") { options.insert(.anchorsMatchLines) }
+        return try RegexCache.shared.regex(pattern, options: options)
+    }
+
+    /// One match as a record: the whole match under `match`, each named group
+    /// under its name, each numbered group under its number as a string.
+    ///
+    /// A group that took part in no match is absent rather than empty — the
+    /// difference between "matched nothing" and "did not participate" is the
+    /// one a caller needs, and an absent key is how ARO says the latter.
+    private static func captureRecord(_ match: NSTextCheckingResult,
+                                      in text: String,
+                                      names: [String]) -> [String: any Sendable] {
+        var record: [String: any Sendable] = [:]
+        if let whole = Range(match.range, in: text) {
+            record["match"] = String(text[whole])
+        }
+        for index in 1..<match.numberOfRanges {
+            guard let range = Range(match.range(at: index), in: text) else { continue }
+            record["\(index)"] = String(text[range])
+        }
+        for name in names {
+            guard let range = Range(match.range(withName: name), in: text) else { continue }
+            record[name] = String(text[range])
+        }
+        return record
+    }
+
+    /// Named groups in a pattern, in source order.
+    ///
+    /// `NSRegularExpression` will hand back a range for a name it knows, but
+    /// will not enumerate the names — so they are read off the pattern.
+    private static func groupNames(in pattern: String) -> [String] {
+        guard let finder = try? NSRegularExpression(pattern: "\\(\\?<([A-Za-z_][A-Za-z0-9_]*)>") else {
+            return []
+        }
+        let range = NSRange(pattern.startIndex..., in: pattern)
+        return finder.matches(in: pattern, range: range).compactMap { match in
+            guard let r = Range(match.range(at: 1), in: pattern) else { return nil }
+            return String(pattern[r])
+        }
+    }
+
+    /// `Compute the <parts: captures> from the <line> by /(?<k>\w+)=(?<v>.*)/.`
+    ///
+    /// Binds the first match's capture groups. **A non-match binds an empty
+    /// record**, it does not fail — the same call ARO-0006 makes for a
+    /// `Retrieve` that matches nothing (GitLab #835): finding nothing is an
+    /// answer, and the program guards on it.
+    private static func opCaptures(_ input: any Sendable,
+                                   _ context: ExecutionContext) throws -> any Sendable {
+        let text = asText(input)
+        let regex = try byClauseRegex(context, qualifier: "captures")
+        let range = NSRange(text.startIndex..., in: text)
+        guard let match = regex.firstMatch(in: text, range: range) else {
+            return [String: any Sendable]()
+        }
+        return captureRecord(match, in: text, names: groupNames(in: regex.pattern))
+    }
+
+    /// Every match, as a list of the records `captures` binds.
+    /// No match binds an empty list, for the same reason.
+    private static func opAllCaptures(_ input: any Sendable,
+                                      _ context: ExecutionContext) throws -> any Sendable {
+        let text = asText(input)
+        let regex = try byClauseRegex(context, qualifier: "all-captures")
+        let range = NSRange(text.startIndex..., in: text)
+        let names = groupNames(in: regex.pattern)
+        return regex.matches(in: text, range: range).map {
+            captureRecord($0, in: text, names: names) as any Sendable
+        }
     }
 
     // MARK: - Collection / text primitives (GitLab #486)
@@ -958,6 +1333,8 @@ public struct ComputeAction: SynchronousAction {
             return date
         }
         if let str = input as? String {
+            // Asking whether this string is a date. Unparseable means "not a
+            // date", which the nil return says; the caller decides if that matters.
             return try? ARODate.parse(str)
         }
         return nil
@@ -1401,17 +1778,28 @@ public struct CompareAction: ActionImplementation {
     }
 
     private func compare(_ lhs: Any, _ rhs: Any) -> ComparisonOutcome {
+        // Numbers before text, including numbers spelled as text.
+        //
+        // The string branch used to come first, so two operands that both
+        // *looked* like numbers were ordered lexicographically and
+        // `Compare the <r> from <"10"> against <"9">` answered `less`
+        // (GitLab #633). That is not an edge case: values read from a CSV, a
+        // query parameter, the environment or a `.store` file are strings, so
+        // the wrong answer was the common one, and it is silently wrong —
+        // a sort or a threshold check just comes out in the wrong order.
+        //
+        // Only when *both* sides parse as numbers. A number against a word
+        // still compares as text, which is the only sensible reading left.
+        if let lhsNum = asDouble(lhs), let rhsNum = asDouble(rhs) {
+            if lhsNum == rhsNum { return .equal }
+            if lhsNum < rhsNum { return .less }
+            return .greater
+        }
+
         // String comparison
         if let lhsStr = lhs as? String, let rhsStr = rhs as? String {
             if lhsStr == rhsStr { return .equal }
             if lhsStr < rhsStr { return .less }
-            return .greater
-        }
-
-        // Numeric comparison
-        if let lhsNum = asDouble(lhs), let rhsNum = asDouble(rhs) {
-            if lhsNum == rhsNum { return .equal }
-            if lhsNum < rhsNum { return .less }
             return .greater
         }
 
@@ -1673,6 +2061,8 @@ public struct CreateAction: ActionImplementation {
             return date
         }
         if let str = input as? String {
+            // Asking whether this string is a date. Unparseable means "not a
+            // date", which the nil return says; the caller decides if that matters.
             return try? ARODate.parse(str)
         }
         return nil
@@ -2168,9 +2558,16 @@ public struct DeleteAction: ActionImplementation {
             return dict
         }
 
-        // Delete from array by index (0 = most recent element)
+        // Delete from array by index, counting from the front.
+        //
+        // This used to be `array.count - 1 - index`, so `Delete the <0> from
+        // <list>` removed the *last* element (GitLab #646). The doc comment
+        // said only "removes by index" and nothing else in the language counts
+        // backwards by default: ARO-0038's reverse indexing is a specifier on
+        // `Extract`, not a rule for every index everywhere. A program that
+        // deleted element 0 in a loop silently ate the list from the wrong end.
         if var array = source as? [any Sendable], let index = Int(keyToDelete), index >= 0, index < array.count {
-            array.remove(at: array.count - 1 - index)
+            array.remove(at: index)
             return array
         }
 
@@ -2230,9 +2627,13 @@ public struct DeleteAction: ActionImplementation {
             // Counted before the clear, because afterwards there is nothing to
             // count and "cleared 0" would be indistinguishable from "cleared
             // everything" — which is the distinction GitLab #866 is about.
+            let partition = try context.repositoryPartition(of: repositoryName)
             let cleared = await storage.retrieve(
-                from: repositoryName, businessActivity: context.businessActivity).count
-            await storage.clear(repository: repositoryName, businessActivity: context.businessActivity)
+                from: repositoryName, businessActivity: context.businessActivity,
+                caller: partition).count
+            await storage.clear(repository: repositoryName,
+                                businessActivity: context.businessActivity,
+                                caller: partition)
             // Emit repository cleared event
             context.emit(RepositoryChangedEvent(
                 repositoryName: repositoryName,
@@ -2256,6 +2657,7 @@ public struct DeleteAction: ActionImplementation {
             deleteResult = await storage.delete(
                 from: repositoryName,
                 businessActivity: context.businessActivity,
+                caller: try context.repositoryPartition(of: repositoryName),
                 where: field,
                 equals: matchValue
             )

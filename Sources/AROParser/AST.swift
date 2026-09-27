@@ -82,6 +82,16 @@ public struct FeatureSet: ASTNode {
     public let userActionTakesField: String?
     /// Optional type annotation for the `takes` field (e.g. "Integer").
     public let userActionTakesType: String?
+    /// Positional command-line arguments declared by an `Application-Start`
+    /// header (ARO-0047 §Positional Arguments, GitLab #857):
+    ///
+    /// ```aro
+    /// (Application-Start: Crawler takes <url> <depth>) { … }
+    /// ```
+    ///
+    /// Each name binds the positional at the same index, readable as
+    /// `<parameter: url>`. Empty for every other feature set.
+    public let positionalParameters: [String]
     public let span: SourceSpan
 
     public init(
@@ -91,6 +101,7 @@ public struct FeatureSet: ASTNode {
         whenCondition: (any Expression)? = nil,
         userActionTakesField: String? = nil,
         userActionTakesType: String? = nil,
+        positionalParameters: [String] = [],
         span: SourceSpan
     ) {
         self.name = name
@@ -99,6 +110,7 @@ public struct FeatureSet: ASTNode {
         self.whenCondition = whenCondition
         self.userActionTakesField = userActionTakesField
         self.userActionTakesType = userActionTakesType
+        self.positionalParameters = positionalParameters
         self.span = span
     }
 
@@ -208,57 +220,6 @@ public struct AROStatement: Statement {
         self.rangeModifiers = rangeModifiers
         self.statementGuard = statementGuard
         self.span = span
-    }
-
-    // MARK: - Legacy Initializer (Backward Compatibility)
-
-    @available(*, deprecated, message: "Use the grouped initializer instead")
-    public init(
-        action: Action,
-        result: QualifiedNoun,
-        object: ObjectClause,
-        literalValue: LiteralValue? = nil,
-        expression: (any Expression)? = nil,
-        aggregation: AggregationClause? = nil,
-        whereClause: WhereClause? = nil,
-        byClause: ByClause? = nil,
-        toClause: (any Expression)? = nil,
-        withClause: (any Expression)? = nil,
-        whenCondition: (any Expression)? = nil,
-        resultExpression: (any Expression)? = nil,
-        span: SourceSpan
-    ) {
-        self.action = action
-        self.result = result
-        self.object = object
-        self.span = span
-
-        // Build ValueSource from legacy fields
-        if let resExpr = resultExpression {
-            self.valueSource = .sinkExpression(resExpr)
-        } else if let expr = expression {
-            self.valueSource = .expression(expr)
-        } else if let literal = literalValue {
-            self.valueSource = .literal(literal)
-        } else {
-            self.valueSource = .none
-        }
-
-        // Build QueryModifiers from legacy fields
-        self.queryModifiers = QueryModifiers(
-            whereClause: whereClause,
-            aggregation: aggregation,
-            byClause: byClause
-        )
-
-        // Build RangeModifiers from legacy fields
-        self.rangeModifiers = RangeModifiers(
-            toClause: toClause,
-            withClause: withClause
-        )
-
-        // Build StatementGuard from legacy field
-        self.statementGuard = StatementGuard(condition: whenCondition)
     }
 
     // MARK: - Convenience Accessors
@@ -767,9 +728,16 @@ public struct RangeModifiers: Sendable, CustomStringConvertible {
     /// Empty range modifiers
     public static let none = RangeModifiers()
 
-    /// Check if any range modifier is present
+    /// Check if any range modifier is present.
+    ///
+    /// `againstClause` counts. It was added for `Compare` (GitLab #469) after
+    /// this property was written, and leaving it out meant a statement whose
+    /// *only* modifier was `against` looked like it had none — so the compiled
+    /// modifier binder and the string collector both skipped it on their
+    /// `guard !modifiers.isEmpty`, and `Compare the <r> from the <a> against
+    /// the <b>.` lost its right operand in a binary (GitLab #663).
     public var isEmpty: Bool {
-        toClause == nil && withClause == nil
+        toClause == nil && withClause == nil && againstClause == nil
     }
 
     public var description: String {

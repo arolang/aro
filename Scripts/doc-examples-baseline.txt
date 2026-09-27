@@ -6,231 +6,223 @@
 #
 #     python3 Scripts/check-doc-examples.py --write-baseline
 #
-# Format: <file>:<line of the block's first line>
-<<<<<<< HEAD
-=======
->>>>>>> origin/main
-CLAUDE.md:325
-CLAUDE.md:470
-CLAUDE.md:615
-Examples/AuditLogDemo/Plugins/plugin-aro-auditlog/README.md:28
-Examples/AuditLogDemo/Plugins/plugin-aro-auditlog/README.md:65
-Examples/CSVProcessor/Plugins/plugin-rust-csv/README.md:58
-Examples/Computations/README.md:16
-Examples/ConfigurableTimeout/README.md:14
-Examples/ConfigurableTimeout/README.md:40
-Examples/DirectoryReplicatorEvents/README.md:16
-Examples/DirectoryReplicatorEvents/README.md:27
-Examples/DirectoryReplicatorEvents/README.md:45
-Examples/MarkdownRenderer/Plugins/plugin-python-markdown/README.md:68
-Examples/RepositoryObserver/README.md:25
-Examples/SQLiteExample/README.md:54
-Examples/TerminalUI/README.md:82
-Examples/URLClient/README.md:29
-Proposals/ARO-0001-language-fundamentals.md:1008
-Proposals/ARO-0001-language-fundamentals.md:1074
-Proposals/ARO-0001-language-fundamentals.md:318
-Proposals/ARO-0001-language-fundamentals.md:325
-Proposals/ARO-0001-language-fundamentals.md:527
-Proposals/ARO-0001-language-fundamentals.md:806
-Proposals/ARO-0001-language-fundamentals.md:838
-Proposals/ARO-0001-language-fundamentals.md:844
-Proposals/ARO-0001-language-fundamentals.md:946
-Proposals/ARO-0001-language-fundamentals.md:964
-Proposals/ARO-0002-control-flow.md:213
-Proposals/ARO-0002-control-flow.md:264
-Proposals/ARO-0002-control-flow.md:280
-Proposals/ARO-0002-control-flow.md:419
-Proposals/ARO-0002-control-flow.md:438
-Proposals/ARO-0002-control-flow.md:44
-Proposals/ARO-0002-control-flow.md:516
-Proposals/ARO-0002-control-flow.md:570
-Proposals/ARO-0002-control-flow.md:585
-Proposals/ARO-0002-control-flow.md:633
-Proposals/ARO-0002-control-flow.md:645
-Proposals/ARO-0002-control-flow.md:655
-Proposals/ARO-0002-control-flow.md:665
-Proposals/ARO-0002-control-flow.md:675
-Proposals/ARO-0002-control-flow.md:720
-Proposals/ARO-0002-control-flow.md:819
-Proposals/ARO-0002-control-flow.md:87
-Proposals/ARO-0002-control-flow.md:987
-Proposals/ARO-0003-type-system.md:321
-Proposals/ARO-0003-type-system.md:57
-Proposals/ARO-0003-type-system.md:82
-Proposals/ARO-0004-actions.md:1016
-Proposals/ARO-0004-actions.md:521
-Proposals/ARO-0004-actions.md:898
-Proposals/ARO-0005-application-architecture.md:150
-Proposals/ARO-0005-application-architecture.md:229
-Proposals/ARO-0005-application-architecture.md:264
-Proposals/ARO-0005-application-architecture.md:326
-Proposals/ARO-0005-application-architecture.md:487
-Proposals/ARO-0005-application-architecture.md:511
-Proposals/ARO-0006-error-philosophy.md:158
-Proposals/ARO-0006-error-philosophy.md:233
-Proposals/ARO-0006-error-philosophy.md:295
-Proposals/ARO-0006-error-philosophy.md:360
-Proposals/ARO-0006-error-philosophy.md:409
-Proposals/ARO-0007-events-reactive.md:161
-Proposals/ARO-0007-events-reactive.md:507
-Proposals/ARO-0007-events-reactive.md:725
-Proposals/ARO-0007-events-reactive.md:871
-Proposals/ARO-0008-io-services.md:1027
-Proposals/ARO-0008-io-services.md:1178
-Proposals/ARO-0008-io-services.md:1231
-Proposals/ARO-0008-io-services.md:1241
-Proposals/ARO-0008-io-services.md:1254
-Proposals/ARO-0008-io-services.md:336
-Proposals/ARO-0008-io-services.md:616
-Proposals/ARO-0008-io-services.md:686
-Proposals/ARO-0008-io-services.md:752
-Proposals/ARO-0008-io-services.md:903
-Proposals/ARO-0008-io-services.md:979
-Proposals/ARO-0008-io-services.md:993
-Proposals/ARO-0009-native-compilation.md:655
-Proposals/ARO-0010-advanced-features.md:272
-Proposals/ARO-0010-advanced-features.md:289
-Proposals/ARO-0010-advanced-features.md:345
-Proposals/ARO-0010-advanced-features.md:39
-Proposals/ARO-0010-advanced-features.md:424
-Proposals/ARO-0010-advanced-features.md:457
-Proposals/ARO-0010-advanced-features.md:476
-Proposals/ARO-0010-advanced-features.md:498
-Proposals/ARO-0010-advanced-features.md:531
-Proposals/ARO-0010-advanced-features.md:539
-Proposals/ARO-0010-advanced-features.md:558
-Proposals/ARO-0010-advanced-features.md:567
-Proposals/ARO-0010-advanced-features.md:576
-Proposals/ARO-0010-advanced-features.md:595
-Proposals/ARO-0010-advanced-features.md:683
-Proposals/ARO-0010-advanced-features.md:727
-Proposals/ARO-0010-advanced-features.md:756
-Proposals/ARO-0010-advanced-features.md:777
-Proposals/ARO-0011-html-xml-parsing.md:228
-Proposals/ARO-0011-html-xml-parsing.md:306
-Proposals/ARO-0011-html-xml-parsing.md:315
-Proposals/ARO-0014-domain-modeling.md:268
-Proposals/ARO-0014-domain-modeling.md:381
-Proposals/ARO-0014-domain-modeling.md:414
-Proposals/ARO-0014-domain-modeling.md:472
-Proposals/ARO-0014-domain-modeling.md:553
-Proposals/ARO-0014-domain-modeling.md:670
-Proposals/ARO-0014-domain-modeling.md:738
-Proposals/ARO-0014-domain-modeling.md:764
-Proposals/ARO-0016-interoperability.md:100
-Proposals/ARO-0016-interoperability.md:48
-Proposals/ARO-0016-interoperability.md:58
-Proposals/ARO-0018-query-language.md:166
-Proposals/ARO-0018-query-language.md:195
-Proposals/ARO-0018-query-language.md:236
-Proposals/ARO-0018-query-language.md:267
-Proposals/ARO-0018-query-language.md:287
-Proposals/ARO-0018-query-language.md:329
-Proposals/ARO-0018-query-language.md:42
-Proposals/ARO-0018-query-language.md:467
-Proposals/ARO-0018-query-language.md:59
-Proposals/ARO-0018-query-language.md:98
-Proposals/ARO-0019-standard-library.md:138
-Proposals/ARO-0019-standard-library.md:282
-Proposals/ARO-0022-state-guards.md:126
-Proposals/ARO-0022-state-guards.md:149
-Proposals/ARO-0022-state-guards.md:17
-Proposals/ARO-0022-state-guards.md:199
-Proposals/ARO-0035-configurable-runtime.md:102
-Proposals/ARO-0035-configurable-runtime.md:25
-Proposals/ARO-0035-configurable-runtime.md:40
-Proposals/ARO-0036-file-operations.md:155
-Proposals/ARO-0036-file-operations.md:194
-Proposals/ARO-0036-file-operations.md:21
-Proposals/ARO-0036-file-operations.md:219
-Proposals/ARO-0036-file-operations.md:302
-Proposals/ARO-0036-file-operations.md:57
-Proposals/ARO-0036-file-operations.md:79
-Proposals/ARO-0037-regex-split.md:34
-Proposals/ARO-0038-list-element-access.md:119
-Proposals/ARO-0038-list-element-access.md:62
-Proposals/ARO-0041-datetime-ranges.md:190
-Proposals/ARO-0041-datetime-ranges.md:339
-Proposals/ARO-0041-datetime-ranges.md:98
-Proposals/ARO-0042-set-operations.md:19
-Proposals/ARO-0043-sink-syntax.md:48
-Proposals/ARO-0045-package-manager.md:283
-Proposals/ARO-0045-package-manager.md:306
-Proposals/ARO-0045-package-manager.md:338
-Proposals/ARO-0048-websocket.md:110
-Proposals/ARO-0048-websocket.md:195
-Proposals/ARO-0048-websocket.md:297
-Proposals/ARO-0048-websocket.md:466
-Proposals/ARO-0050-template-engine.md:185
-Proposals/ARO-0050-template-engine.md:213
-Proposals/ARO-0050-template-engine.md:236
-Proposals/ARO-0050-template-engine.md:413
-Proposals/ARO-0051-streaming-execution.md:112
-Proposals/ARO-0051-streaming-execution.md:124
-Proposals/ARO-0051-streaming-execution.md:141
-Proposals/ARO-0051-streaming-execution.md:159
-Proposals/ARO-0051-streaming-execution.md:324
-Proposals/ARO-0052-unified-url-io.md:222
-Proposals/ARO-0052-unified-url-io.md:232
-Proposals/ARO-0052-unified-url-io.md:397
-Proposals/ARO-0056-numeric-literal-underscores.md:145
-Proposals/ARO-0056-numeric-literal-underscores.md:153
-Proposals/ARO-0060-raw-string-literals.md:121
-Proposals/ARO-0060-raw-string-literals.md:17
-Proposals/ARO-0060-raw-string-literals.md:35
-Proposals/ARO-0060-raw-string-literals.md:85
-Proposals/ARO-0062-dead-code-detection.md:101
-Proposals/ARO-0062-dead-code-detection.md:112
-Proposals/ARO-0062-dead-code-detection.md:132
-Proposals/ARO-0062-dead-code-detection.md:91
-Proposals/ARO-0067-pipeline-operator.md:105
-Proposals/ARO-0067-pipeline-operator.md:119
-Proposals/ARO-0067-pipeline-operator.md:136
-Proposals/ARO-0068-extract-within-case.md:85
-Proposals/ARO-0068-extract-within-case.md:94
-Proposals/ARO-0071-type-narrowing.md:208
-Proposals/ARO-0071-type-narrowing.md:222
-Proposals/ARO-0071-type-narrowing.md:235
-Proposals/ARO-0071-type-narrowing.md:34
-Proposals/ARO-0071-type-narrowing.md:48
-Proposals/ARO-0071-type-narrowing.md:62
-Proposals/ARO-0073-store-files.md:19
-Proposals/ARO-0081-user-defined-actions.md:101
-Proposals/ARO-0081-user-defined-actions.md:114
-Proposals/ARO-0081-user-defined-actions.md:124
-Proposals/ARO-0081-user-defined-actions.md:146
-Proposals/ARO-0081-user-defined-actions.md:52
-Proposals/ARO-0081-user-defined-actions.md:67
-Proposals/ARO-0081-user-defined-actions.md:86
-Proposals/ARO-0083-terminal-ui.md:107
-Proposals/ARO-0083-terminal-ui.md:114
-Proposals/ARO-0083-terminal-ui.md:123
-Proposals/ARO-0083-terminal-ui.md:128
-Proposals/ARO-0083-terminal-ui.md:138
-Proposals/ARO-0083-terminal-ui.md:153
-Proposals/ARO-0083-terminal-ui.md:170
-Proposals/ARO-0083-terminal-ui.md:185
-Proposals/ARO-0083-terminal-ui.md:402
-Proposals/ARO-0083-terminal-ui.md:600
-Proposals/ARO-0083-terminal-ui.md:649
-Proposals/ARO-0083-terminal-ui.md:694
-Proposals/ARO-0083-terminal-ui.md:803
-Proposals/ARO-0083-terminal-ui.md:833
-Proposals/ARO-0085-terminal-shadow-buffer.md:456
-Proposals/ARO-0085-terminal-shadow-buffer.md:474
-Proposals/ARO-0085-terminal-shadow-buffer.md:492
-Proposals/ARO-0086-automatic-pipeline-detection.md:161
-Proposals/ARO-0086-automatic-pipeline-detection.md:206
-Proposals/ARO-0086-automatic-pipeline-detection.md:239
-Proposals/ARO-0086-automatic-pipeline-detection.md:256
-Proposals/ARO-0086-automatic-pipeline-detection.md:76
-Proposals/ARO-0087-plugin-sdk.md:1471
-Proposals/ARO-0087-plugin-sdk.md:446
-Proposals/ARO-0089-ranges.md:123
-Proposals/ARO-0089-ranges.md:141
-Proposals/ARO-0089-ranges.md:159
-Proposals/ARO-0089-ranges.md:231
-Proposals/ARO-0089-ranges.md:290
-Proposals/ARO-0089-ranges.md:47
-Proposals/ARO-0089-ranges.md:88
+# Format: <file>:<digest of the block's text>  # <line it was at>
+# The digest is the key; the trailing comment is only a signpost, because a
+# line number changes whenever anything above the block does (GitLab #889).
+Examples/AuditLogDemo/Plugins/plugin-aro-auditlog/README.md:0fdd03f7c274  # line 28
+Examples/AuditLogDemo/Plugins/plugin-aro-auditlog/README.md:9b5792b79663  # line 65
+Examples/CSVProcessor/Plugins/plugin-rust-csv/README.md:20d402fa65e8  # line 58
+Examples/Computations/README.md:e6bb6b113d93  # line 16
+Examples/ConfigurableTimeout/README.md:87aab3cf0cc2  # line 14
+Examples/ConfigurableTimeout/README.md:a87d9786349e  # line 40
+Examples/DirectoryReplicatorEvents/README.md:40264700770b  # line 16
+Examples/DirectoryReplicatorEvents/README.md:4d3467f48817  # line 27
+Examples/DirectoryReplicatorEvents/README.md:a2cf33b31724  # line 45
+Examples/MarkdownRenderer/Plugins/plugin-python-markdown/README.md:aa6a7183dfb1  # line 68
+Examples/RepositoryObserver/README.md:d68aa656578b  # line 25
+Examples/SQLiteExample/README.md:a96935ce249a  # line 54
+Examples/TerminalUI/README.md:f96ae849a849  # line 82
+Examples/URLClient/README.md:164944cd28ea  # line 29
+Proposals/ARO-0001-language-fundamentals.md:44564eae74d9  # line 337
+Proposals/ARO-0001-language-fundamentals.md:147d7d01ee70  # line 344
+Proposals/ARO-0001-language-fundamentals.md:c6cee324e970  # line 546
+Proposals/ARO-0001-language-fundamentals.md:25892fdf275f  # line 825
+Proposals/ARO-0001-language-fundamentals.md:f29b3b253d14  # line 857
+Proposals/ARO-0001-language-fundamentals.md:32b7eff82b23  # line 863
+Proposals/ARO-0001-language-fundamentals.md:85ba7051d02a  # line 965
+Proposals/ARO-0001-language-fundamentals.md:2f5b6152ebc7  # line 983
+Proposals/ARO-0001-language-fundamentals.md:da33eec8325b  # line 1027
+Proposals/ARO-0001-language-fundamentals.md:85dbf6c7079d  # line 1093
+Proposals/ARO-0002-control-flow.md:9c5c51280df0  # line 44
+Proposals/ARO-0002-control-flow.md:e70a604e3ccf  # line 213
+Proposals/ARO-0002-control-flow.md:d380fa447b5f  # line 264
+Proposals/ARO-0002-control-flow.md:f63e9ef7c398  # line 280
+Proposals/ARO-0002-control-flow.md:e5f2f2e18ce1  # line 419
+Proposals/ARO-0002-control-flow.md:9099542de83d  # line 438
+Proposals/ARO-0002-control-flow.md:eb2c987bbce4  # line 516
+Proposals/ARO-0002-control-flow.md:94bda41a684c  # line 570
+Proposals/ARO-0002-control-flow.md:43777a938010  # line 585
+Proposals/ARO-0002-control-flow.md:e7b07b60ec37  # line 633
+Proposals/ARO-0002-control-flow.md:6190fd595b42  # line 645
+Proposals/ARO-0002-control-flow.md:7e064ed44a39  # line 655
+Proposals/ARO-0002-control-flow.md:02e40c63797c  # line 665
+Proposals/ARO-0002-control-flow.md:abfc4314a64e  # line 675
+Proposals/ARO-0002-control-flow.md:6eb439a027d1  # line 720
+Proposals/ARO-0002-control-flow.md:fea7cea31a9a  # line 819
+Proposals/ARO-0002-control-flow.md:5d1a5e881506  # line 987
+Proposals/ARO-0003-type-system.md:3c6f33211603  # line 321
+Proposals/ARO-0004-actions.md:36c0a0ec3a37  # line 524
+Proposals/ARO-0004-actions.md:a03012363a86  # line 904
+Proposals/ARO-0004-actions.md:7e4147a73f95  # line 1022
+Proposals/ARO-0005-application-architecture.md:5e2ec8cb83c8  # line 150
+Proposals/ARO-0005-application-architecture.md:26889e516288  # line 229
+Proposals/ARO-0005-application-architecture.md:ccb14075c087  # line 264
+Proposals/ARO-0005-application-architecture.md:7789b840c7ed  # line 326
+Proposals/ARO-0005-application-architecture.md:43d226d689d8  # line 487
+Proposals/ARO-0005-application-architecture.md:a15e4d6a98ad  # line 511
+Proposals/ARO-0006-error-philosophy.md:4e6905827c10  # line 158
+Proposals/ARO-0006-error-philosophy.md:b291b6979ee8  # line 233
+Proposals/ARO-0006-error-philosophy.md:f250a3f1c931  # line 295
+Proposals/ARO-0006-error-philosophy.md:85df6d262ac5  # line 360
+Proposals/ARO-0006-error-philosophy.md:81cd085a0a87  # line 409
+Proposals/ARO-0007-events-reactive.md:163b61615612  # line 161
+Proposals/ARO-0007-events-reactive.md:eace124e9ee8  # line 507
+Proposals/ARO-0007-events-reactive.md:085b75b8c3b5  # line 725
+Proposals/ARO-0007-events-reactive.md:b12ea8d3e21d  # line 871
+Proposals/ARO-0008-io-services.md:9e33f3f52cfc  # line 336
+Proposals/ARO-0008-io-services.md:d79762e280b7  # line 616
+Proposals/ARO-0008-io-services.md:17c01374cf78  # line 686
+Proposals/ARO-0008-io-services.md:3ea9bcbd77d4  # line 752
+Proposals/ARO-0008-io-services.md:8ff466671714  # line 903
+Proposals/ARO-0008-io-services.md:0104c58df068  # line 979
+Proposals/ARO-0008-io-services.md:5ea89b436036  # line 993
+Proposals/ARO-0008-io-services.md:cf09e263dfa6  # line 1027
+Proposals/ARO-0008-io-services.md:1104fba90def  # line 1178
+Proposals/ARO-0008-io-services.md:229cce00589f  # line 1231
+Proposals/ARO-0008-io-services.md:7364b1d17603  # line 1241
+Proposals/ARO-0008-io-services.md:e613f3061c71  # line 1254
+Proposals/ARO-0009-native-compilation.md:dc697e6ae41d  # line 655
+Proposals/ARO-0010-advanced-features.md:ee085da48b47  # line 39
+Proposals/ARO-0010-advanced-features.md:b9dbef25352a  # line 272
+Proposals/ARO-0010-advanced-features.md:472fee46475e  # line 289
+Proposals/ARO-0010-advanced-features.md:66847041a6bb  # line 345
+Proposals/ARO-0010-advanced-features.md:843cb44d53b7  # line 424
+Proposals/ARO-0010-advanced-features.md:2d5715927a81  # line 457
+Proposals/ARO-0010-advanced-features.md:f951e47e790a  # line 476
+Proposals/ARO-0010-advanced-features.md:5fdb8bce03d5  # line 498
+Proposals/ARO-0010-advanced-features.md:b1e3b27feb81  # line 531
+Proposals/ARO-0010-advanced-features.md:f50cee4d53b7  # line 539
+Proposals/ARO-0010-advanced-features.md:f610b5fc8e0a  # line 558
+Proposals/ARO-0010-advanced-features.md:5e86b26a5513  # line 567
+Proposals/ARO-0010-advanced-features.md:e5de56d8a892  # line 576
+Proposals/ARO-0010-advanced-features.md:5c1ae83574ff  # line 595
+Proposals/ARO-0010-advanced-features.md:571c929397ff  # line 683
+Proposals/ARO-0010-advanced-features.md:6e946b4dd1bd  # line 727
+Proposals/ARO-0010-advanced-features.md:169474009094  # line 756
+Proposals/ARO-0010-advanced-features.md:b2bc67bf089c  # line 777
+Proposals/ARO-0011-html-xml-parsing.md:e785635553ee  # line 364
+Proposals/ARO-0011-html-xml-parsing.md:65256d78152c  # line 373
+Proposals/ARO-0014-domain-modeling.md:2319b9388aec  # line 268
+Proposals/ARO-0014-domain-modeling.md:48f21263b956  # line 381
+Proposals/ARO-0014-domain-modeling.md:d483de64c524  # line 414
+Proposals/ARO-0014-domain-modeling.md:2c9e5a08622a  # line 472
+Proposals/ARO-0014-domain-modeling.md:135835002451  # line 553
+Proposals/ARO-0014-domain-modeling.md:b0478dff1a20  # line 670
+Proposals/ARO-0014-domain-modeling.md:f6d8040d4b5e  # line 738
+Proposals/ARO-0014-domain-modeling.md:b7565101f285  # line 764
+Proposals/ARO-0016-interoperability.md:487745e520e8  # line 48
+Proposals/ARO-0016-interoperability.md:cb001daec70c  # line 58
+Proposals/ARO-0016-interoperability.md:39305454e144  # line 100
+Proposals/ARO-0018-query-language.md:6b4e48d6c25a  # line 42
+Proposals/ARO-0018-query-language.md:f585705119de  # line 59
+Proposals/ARO-0018-query-language.md:8f014b406adf  # line 98
+Proposals/ARO-0018-query-language.md:0c119aeb878d  # line 166
+Proposals/ARO-0018-query-language.md:b2cab5d33702  # line 195
+Proposals/ARO-0018-query-language.md:6c74e0bffe05  # line 236
+Proposals/ARO-0018-query-language.md:c30f7b00ff26  # line 267
+Proposals/ARO-0018-query-language.md:bc93fa8f5706  # line 287
+Proposals/ARO-0018-query-language.md:4ba3ec38e338  # line 329
+Proposals/ARO-0018-query-language.md:d3f620db34d6  # line 467
+Proposals/ARO-0019-standard-library.md:8bfc4aea7452  # line 138
+Proposals/ARO-0019-standard-library.md:61f513f6dcfa  # line 353
+Proposals/ARO-0022-state-guards.md:f9291a238a59  # line 17
+Proposals/ARO-0022-state-guards.md:e197fe1f2211  # line 126
+Proposals/ARO-0022-state-guards.md:00b6c2d606b5  # line 149
+Proposals/ARO-0022-state-guards.md:0aadf3699fe6  # line 199
+Proposals/ARO-0035-configurable-runtime.md:ad23a3299621  # line 25
+Proposals/ARO-0035-configurable-runtime.md:d521b3cd4c02  # line 40
+Proposals/ARO-0035-configurable-runtime.md:c578658246b1  # line 102
+Proposals/ARO-0036-file-operations.md:7eba2bef2c11  # line 21
+Proposals/ARO-0036-file-operations.md:e519dbdfa231  # line 57
+Proposals/ARO-0036-file-operations.md:2156cbad1a74  # line 79
+Proposals/ARO-0036-file-operations.md:efa4a19b1a24  # line 174
+Proposals/ARO-0036-file-operations.md:41f44f4f913b  # line 213
+Proposals/ARO-0036-file-operations.md:0053f6ce64d6  # line 238
+Proposals/ARO-0036-file-operations.md:d178c20fd71b  # line 321
+Proposals/ARO-0037-regex-split.md:6d497fc4f592  # line 34
+Proposals/ARO-0038-list-element-access.md:f731199c06e7  # line 62
+Proposals/ARO-0038-list-element-access.md:9b2fb977b647  # line 119
+Proposals/ARO-0041-datetime-ranges.md:c4a91a94b63e  # line 98
+Proposals/ARO-0041-datetime-ranges.md:99c285374557  # line 190
+Proposals/ARO-0041-datetime-ranges.md:e231ac562500  # line 339
+Proposals/ARO-0042-set-operations.md:d404ba75d9ec  # line 19
+Proposals/ARO-0043-sink-syntax.md:3ee5341ba9d9  # line 48
+Proposals/ARO-0045-package-manager.md:e0b5ff2a2e82  # line 298
+Proposals/ARO-0045-package-manager.md:1fb121d9de78  # line 321
+Proposals/ARO-0045-package-manager.md:3e9747a37f4a  # line 353
+Proposals/ARO-0048-websocket.md:2877f8ec707b  # line 110
+Proposals/ARO-0048-websocket.md:c83086c7eadd  # line 195
+Proposals/ARO-0048-websocket.md:196717363afd  # line 297
+Proposals/ARO-0048-websocket.md:ee089fad4129  # line 466
+Proposals/ARO-0050-template-engine.md:d10b70965528  # line 185
+Proposals/ARO-0050-template-engine.md:fc1505e0df94  # line 213
+Proposals/ARO-0050-template-engine.md:1cc491736d2b  # line 236
+Proposals/ARO-0050-template-engine.md:3416d01d64ee  # line 413
+Proposals/ARO-0051-streaming-execution.md:5ab61e8fee31  # line 112
+Proposals/ARO-0051-streaming-execution.md:0cc9c45172b4  # line 124
+Proposals/ARO-0051-streaming-execution.md:efcf17c25cc9  # line 141
+Proposals/ARO-0051-streaming-execution.md:1b598ab0bf24  # line 159
+Proposals/ARO-0051-streaming-execution.md:31b7c2787324  # line 324
+Proposals/ARO-0052-unified-url-io.md:0252c1806d77  # line 222
+Proposals/ARO-0052-unified-url-io.md:685d9709bfad  # line 232
+Proposals/ARO-0052-unified-url-io.md:0e97759bf912  # line 397
+Proposals/ARO-0056-numeric-literal-underscores.md:f754a16e1cc5  # line 145
+Proposals/ARO-0056-numeric-literal-underscores.md:6ef250b8c4cf  # line 153
+Proposals/ARO-0060-raw-string-literals.md:bfe8f75e3044  # line 17
+Proposals/ARO-0060-raw-string-literals.md:f2ff47d5329d  # line 35
+Proposals/ARO-0060-raw-string-literals.md:347160a20956  # line 85
+Proposals/ARO-0060-raw-string-literals.md:ff406b2ef2a6  # line 121
+Proposals/ARO-0062-dead-code-detection.md:61becdba7e24  # line 91
+Proposals/ARO-0062-dead-code-detection.md:fef6a76f03bb  # line 101
+Proposals/ARO-0062-dead-code-detection.md:fa30ef74cabb  # line 112
+Proposals/ARO-0062-dead-code-detection.md:9bc637f27145  # line 132
+Proposals/ARO-0067-pipeline-operator.md:c8bc10a0510d  # line 105
+Proposals/ARO-0067-pipeline-operator.md:4bd79ec77c7f  # line 119
+Proposals/ARO-0067-pipeline-operator.md:5b382ab1bbe3  # line 136
+Proposals/ARO-0068-extract-within-case.md:cd322945d051  # line 85
+Proposals/ARO-0068-extract-within-case.md:28a868ad4a7c  # line 94
+Proposals/ARO-0071-type-narrowing.md:9d4ee9e04035  # line 34
+Proposals/ARO-0071-type-narrowing.md:a244b3ae06cf  # line 48
+Proposals/ARO-0071-type-narrowing.md:166f93ae9192  # line 62
+Proposals/ARO-0071-type-narrowing.md:6ed67cca79a0  # line 208
+Proposals/ARO-0071-type-narrowing.md:5831c463fc03  # line 222
+Proposals/ARO-0071-type-narrowing.md:ee38e4ba8309  # line 235
+Proposals/ARO-0073-store-files.md:61ed35c8df28  # line 19
+Proposals/ARO-0081-user-defined-actions.md:8382da578c10  # line 52
+Proposals/ARO-0081-user-defined-actions.md:e77f5b4935f6  # line 67
+Proposals/ARO-0081-user-defined-actions.md:231acc16b6f7  # line 86
+Proposals/ARO-0081-user-defined-actions.md:1f84e8f44a43  # line 101
+Proposals/ARO-0081-user-defined-actions.md:fbcb0aa8220a  # line 114
+Proposals/ARO-0081-user-defined-actions.md:db8dd50c25b4  # line 124
+Proposals/ARO-0081-user-defined-actions.md:f59a5e3f17e7  # line 146
+Proposals/ARO-0083-terminal-ui.md:5f5143960100  # line 107
+Proposals/ARO-0083-terminal-ui.md:961a5ef6e01c  # line 114
+Proposals/ARO-0083-terminal-ui.md:3dccd37634b7  # line 123
+Proposals/ARO-0083-terminal-ui.md:2d0ecdf8677c  # line 128
+Proposals/ARO-0083-terminal-ui.md:5f8bbcdda523  # line 138
+Proposals/ARO-0083-terminal-ui.md:99cf02075f79  # line 153
+Proposals/ARO-0083-terminal-ui.md:529ec6ad1be0  # line 170
+Proposals/ARO-0083-terminal-ui.md:3c7f14a91f53  # line 185
+Proposals/ARO-0083-terminal-ui.md:7e30ffd277a6  # line 402
+Proposals/ARO-0083-terminal-ui.md:f38ed10551e7  # line 607
+Proposals/ARO-0083-terminal-ui.md:06bdf88626e2  # line 656
+Proposals/ARO-0083-terminal-ui.md:3c0e386f7fdb  # line 701
+Proposals/ARO-0083-terminal-ui.md:c07410d36654  # line 810
+Proposals/ARO-0083-terminal-ui.md:58dcdacb2e4e  # line 840
+Proposals/ARO-0085-terminal-shadow-buffer.md:c6acc755a6b2  # line 456
+Proposals/ARO-0085-terminal-shadow-buffer.md:400f0fc6d5ac  # line 474
+Proposals/ARO-0085-terminal-shadow-buffer.md:69472f1140e7  # line 492
+Proposals/ARO-0086-automatic-pipeline-detection.md:d4fe253f72eb  # line 76
+Proposals/ARO-0086-automatic-pipeline-detection.md:a87f4b74e619  # line 161
+Proposals/ARO-0086-automatic-pipeline-detection.md:28bc1471339a  # line 206
+Proposals/ARO-0086-automatic-pipeline-detection.md:eaa528b3af11  # line 239
+Proposals/ARO-0086-automatic-pipeline-detection.md:7bee59811f74  # line 256
+Proposals/ARO-0087-plugin-sdk.md:913834cd697b  # line 446
+Proposals/ARO-0087-plugin-sdk.md:ad0e51caf8eb  # line 1471
+Proposals/ARO-0089-ranges.md:8f4922744b6d  # line 47
+Proposals/ARO-0089-ranges.md:6f5d71f19269  # line 88
+Proposals/ARO-0089-ranges.md:43355c63337f  # line 123
+Proposals/ARO-0089-ranges.md:4ca0dd405004  # line 141
+Proposals/ARO-0089-ranges.md:a8a09db5af2e  # line 159
+Proposals/ARO-0089-ranges.md:87e98e16a6eb  # line 231
+Proposals/ARO-0089-ranges.md:5335d52280fb  # line 290

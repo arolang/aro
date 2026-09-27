@@ -1,4 +1,4 @@
-# Generated: Tue Feb 17 12:36:40 2026
+# Generated: Wed Sep 23 00:47:11 2026
 # Type: console
 # Command: aro run ./Examples/StreamingDemo
 ---
@@ -127,4 +127,4 @@ Key streaming benefits demonstrated:
 - Multi-stage filtering: pipeline processes incrementally
 - Reduce operations: O(1) memory with streaming accumulators
 - Aggregation fusion: multiple reduces on same source = single pass
-demo
+[OK] demo

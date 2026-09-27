@@ -12,7 +12,7 @@ import ARORuntime
 struct AsTypeConversionTests {
 
     private func run(_ statements: String...) async throws -> REPLSession {
-        let session = REPLSession(suppressLogPrefix: true)
+        let session = REPLSession()
         for statement in statements {
             let result = try await session.executeStatement(statement)
             #expect(result.isSuccess, "failed: \(statement) → \(result)")

@@ -21,7 +21,7 @@ struct ComputeFormatPatternTests {
 
     /// Formats the issue's fixed instant with `pattern`, or with none.
     private func formatted(_ pattern: String?) async -> String? {
-        let session = REPLSession(suppressLogPrefix: true)
+        let session = REPLSession()
         let engine = REPLCellEngine(session: session)
         _ = await engine.executeCell(
             #"Compute the <d: date> from "2026-01-15T10:30:00Z"."#)

@@ -167,7 +167,7 @@ When your application emits a matching event, the handler executes automatically
 
 **Output:**
 ```
-[Log User Events] [AUDIT] UserCreated: User created
+[AUDIT] UserCreated: User created
 ```
 
 #### Installing Pure ARO Plugins

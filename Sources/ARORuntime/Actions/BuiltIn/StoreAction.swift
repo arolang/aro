@@ -136,6 +136,7 @@ public struct StoreAction: ActionImplementation {
            InMemoryRepositoryStorage.isRepositoryName(repoName) {
             // Drain stream by storing each element as it arrives
             let storage = context.service(RepositoryStorageService.self) ?? context.container.repositoryStorage
+            let partition = try context.repositoryPartition(of: repoName)
             var count = 0
             var lastStoreResult: RepositoryStoreResult?
 
@@ -143,7 +144,8 @@ public struct StoreAction: ActionImplementation {
                 lastStoreResult = await storage.storeWithChangeInfo(
                     value: item,
                     in: repoName,
-                    businessActivity: context.businessActivity
+                    businessActivity: context.businessActivity,
+                    caller: partition
                 )
                 count += 1
             }
@@ -181,13 +183,15 @@ public struct StoreAction: ActionImplementation {
 
             // Store each item individually and emit events only for actual changes
             let storage = context.service(RepositoryStorageService.self) ?? context.container.repositoryStorage
+            let partition = try context.repositoryPartition(of: repoName)
 
             var lastStoreResult: RepositoryStoreResult?
             for item in itemsToStore {
                 let storeResult = await storage.storeWithChangeInfo(
                     value: item,
                     in: repoName,
-                    businessActivity: context.businessActivity
+                    businessActivity: context.businessActivity,
+                    caller: partition
                 )
                 lastStoreResult = storeResult
 

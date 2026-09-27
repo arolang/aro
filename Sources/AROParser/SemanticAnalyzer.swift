@@ -218,43 +218,23 @@ public struct AnalyzedProgram: Sendable {
         var domain: [AnalyzedFeatureSet] = []
 
         for fs in featureSets {
-            let activity = fs.featureSet.businessActivity
-
-            if activity.contains(" Watch:") {
-                watch.append(fs)
-            }
-            if activity.contains("StateObserver") || activity.contains("StateTransition Handler") {
-                state.append(fs)
-            }
-            if activity.contains("KeyPress Handler") {
-                keyPress.append(fs)
-            }
-
-            let isSocket = activity.contains("Socket Event Handler")
-            let isWS = activity.contains("WebSocket Event Handler")
-            let isFile = activity.contains("File Event Handler")
-            let isNotification = activity.contains("NotificationSent Handler")
-
-            if isSocket { socket.append(fs) }
-            if isWS { ws.append(fs) }
-            if isFile { file.append(fs) }
-            if isNotification { notification.append(fs) }
-
-            if activity.contains(" Observer") && activity.contains("-repository") {
-                repoObs.append(fs)
-            }
-            if activity.hasSuffix(" Evicted Handler") && activity.contains("-repository") {
-                eviction.append(fs)
-            }
-
-            // Domain handlers: have " Handler" but aren't special handler types
-            if activity.contains(" Handler") &&
-               !isSocket && !isWS && !isFile &&
-               !activity.contains("KeyPress Handler") &&
-               !activity.contains("StateTransition Handler") &&
-               !activity.contains("StateObserver") &&
-               !activity.contains("Application-End") {
-                domain.append(fs)
+            // One classifier, in AROParser (GitLab #724). This loop used to ask
+            // its own substring questions, and `contains("Socket Event Handler")`
+            // is true of `"WebSocket Event Handler"` — so every WebSocket handler
+            // was filed as a socket handler as well as a WebSocket one.
+            switch ActivityKind.parse(fs.featureSet.businessActivity) {
+            case .watch:                 watch.append(fs)
+            case .stateTransition,
+                 .stateObserver:         state.append(fs)
+            case .keyPress:              keyPress.append(fs)
+            case .socketEvent:           socket.append(fs)
+            case .webSocketEvent:        ws.append(fs)
+            case .fileEvent:             file.append(fs)
+            case .notification:          notification.append(fs)
+            case .repositoryObserver:    repoObs.append(fs)
+            case .repositoryEviction:    eviction.append(fs)
+            case .domainEvent:           domain.append(fs)
+            case .applicationEnd, .userAction, .plain: break
             }
         }
 
@@ -301,12 +281,17 @@ public final class SemanticAnalyzer {
     ///   caller has not scanned the application — a single-file compile — and
     ///   the unknown-action diagnostic says so instead of claiming the
     ///   application declares none.
+    /// - Parameter preboundSymbols: names already bound outside this source —
+    ///   a REPL session's variables when a single cell is compiled on its own
+    ///   (GitLab #689). Empty for an ordinary compile.
     public func analyze(
         _ program: Program,
         externallyHandledEvents: Set<String> = [],
-        declaredUserActions: UserActionRegistry? = nil
+        declaredUserActions: UserActionRegistry? = nil,
+        preboundSymbols: Set<String> = []
     ) -> AnalyzedProgram {
-        let dataFlow = DataFlowAnalyzer(diagnostics: diagnostics)
+        let dataFlow = DataFlowAnalyzer(diagnostics: diagnostics,
+                                        preboundSymbols: preboundSymbols)
         let codeQuality = CodeQualityValidator(diagnostics: diagnostics)
         let collectionOps = CollectionOpValidator(diagnostics: diagnostics)
         let responseStatus = ResponseStatusValidator(diagnostics: diagnostics)

@@ -58,6 +58,8 @@ public struct StartAction: ActionImplementation {
         // 3. Default to 8080
         var port = 8080
         var websocketPath: String? = nil
+        var websocketRequiresSession = false
+        var websocketOrigins: [String] = []
 
         // Priority 1: Check _with_ binding (ARO-0042: with clause)
         if let withValue = context.resolveAny("_with_") {
@@ -79,6 +81,15 @@ public struct StartAction: ActionImplementation {
                 // Extract websocket path if specified
                 if let wsPath = withConfig["websocket"] as? String {
                     websocketPath = wsPath
+                }
+                // ARO-0094 §8.1: a session-authenticated WebSocket. Declared
+                // on the server rather than in the contract, because the
+                // upgrade is an HTTP request but not an OpenAPI operation.
+                if let security = withConfig["security"] as? String, !security.isEmpty {
+                    websocketRequiresSession = true
+                }
+                if let origins = withConfig["origins"] as? [any Sendable] {
+                    websocketOrigins = origins.compactMap { $0 as? String }
                 }
                 // Fallback to OpenAPI port if no port specified
                 if withConfig["port"] == nil,
@@ -140,6 +151,21 @@ public struct StartAction: ActionImplementation {
             // Configure WebSocket if path is specified
             if let wsPath = websocketPath {
                 try await httpServerService.configureWebSocket(path: wsPath)
+                #if !os(Windows)
+                if let wsServer = (httpServerService as? AROHTTPServer)?.getWebSocketServer() {
+                    wsServer.configureSecurity(requiresSession: websocketRequiresSession,
+                                               allowedOrigins: websocketOrigins)
+                }
+                #endif
+                // A cookie-authenticated socket with no origin list accepts an
+                // upgrade from nowhere, which is the safe reading of an
+                // unanswered security question but a confusing one to debug.
+                if websocketRequiresSession && websocketOrigins.isEmpty {
+                    FileHandle.standardError.write(Data((
+                        "[ARO] Warning: the WebSocket at \(wsPath) requires a session but declares no "
+                        + "origins, so every upgrade will be refused. Add "
+                        + "origins: [\"https://your.site\"] (ARO-0094 §8.2).\n").utf8))
+                }
             }
             do {
                 try await httpServerService.start(port: port)
@@ -895,17 +921,12 @@ public final class KeepaliveSignalHandler: @unchecked Sendable {
         // which also executes Application-End handlers.
         guard !RuntimeSignalHandler.shared.isActive else { return }
 
-        signal(SIGINT) { _ in
+        // Ctrl-C and SIGTERM on POSIX; the console control events on Windows,
+        // which delivers neither — so `Keepalive` never unblocked there and
+        // `Application-End` never ran (GitLab #685).
+        ShutdownSignals.install {
             ShutdownCoordinator.shared.signalShutdown()
             // Safety exit: gives Application-End handlers time to run
-            DispatchQueue.global().asyncAfter(deadline: .now() + 5.0) {
-                fflush(nil)
-                exit(0)
-            }
-        }
-
-        signal(SIGTERM) { _ in
-            ShutdownCoordinator.shared.signalShutdown()
             DispatchQueue.global().asyncAfter(deadline: .now() + 5.0) {
                 fflush(nil)
                 exit(0)
@@ -1170,6 +1191,27 @@ public final class NativeSocketBroadcaster: @unchecked Sendable {
         return data.withUnsafeBytes { buffer in
             guard let ptr = buffer.baseAddress else { return -1 }
             return Int(aro_native_socket_broadcast(ptr.assumingMemoryBound(to: UInt8.self), data.count))
+        }
+    }
+
+    /// Send data to one connection. `false` when the native server does not
+    /// know that connection — or when there is no native server, which is the
+    /// answer in every interpreted process.
+    ///
+    /// `Send` reaches for this because a compiled binary deliberately registers
+    /// no `SocketServerService` (see `AROCContextHandle.init`), so the service
+    /// lookup that serves the interpreter finds nothing and used to fall
+    /// through to "emit an event and report success" — which is why a compiled
+    /// server's `Send the <welcome> to the <client>.` went nowhere and said it
+    /// had worked (GitLab #881). Broadcast already had this wrapper; send did
+    /// not.
+    public func send(data: Data, to connectionId: String) -> Bool {
+        return connectionId.withCString { idPtr in
+            data.withUnsafeBytes { buffer in
+                guard let ptr = buffer.baseAddress else { return false }
+                return aro_native_socket_send(
+                    idPtr, ptr.assumingMemoryBound(to: UInt8.self), data.count) == 0
+            }
         }
     }
 }

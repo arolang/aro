@@ -67,11 +67,26 @@ public struct StoreFileLoader: Sendable {
         let stem = fileURL.deletingPathExtension().lastPathComponent
         let repositoryName = "\(stem)-repository"
 
-        // Check POSIX other-write bit to determine writability
+        // Read and parse YAML content
+        let content = try String(contentsOf: fileURL, encoding: .utf8)
+
         let isWritable: Bool
         #if os(Windows)
-        // Windows: fall back to file manager writability check
-        isWritable = fm.isWritableFile(atPath: fileURL.path)
+        // ARO-0073 §3 makes persistence opt-in through the POSIX other-write
+        // bit. Windows has no such bit, and the fallback here asked
+        // `isWritableFile`, which is true for any file the current user owns —
+        // so every `.store` was writable and a seed file the author meant to
+        // be read-only was silently rewritten at shutdown. The contract was
+        // inverted, not merely approximated (GitLab #684).
+        //
+        // The opt-in Windows gets instead is an explicit marker in the file.
+        // ARO-0073 rejected a YAML header for POSIX because permissions were
+        // already there; on Windows there is nothing to prefer it to, and the
+        // alternative is no opt-in at all. The marker is a comment, so the
+        // file stays valid YAML and stays portable: carried to a POSIX host it
+        // is simply not consulted, and the store is read-only until someone
+        // runs `chmod o+w`. That is the safe direction for a file to drift in.
+        isWritable = Self.declaresWindowsWritability(content)
         #else
         let attributes = try fm.attributesOfItem(atPath: fileURL.path)
         if let permissions = attributes[.posixPermissions] as? Int {
@@ -81,9 +96,6 @@ public struct StoreFileLoader: Sendable {
             isWritable = false
         }
         #endif
-
-        // Read and parse YAML content
-        let content = try String(contentsOf: fileURL, encoding: .utf8)
         let entries = parseYAMLEntries(content, filePath: fileURL)
 
         // Clean up stale .tmp file from previous crash if present
@@ -98,6 +110,36 @@ public struct StoreFileLoader: Sendable {
             isWritable: isWritable,
             entries: entries
         )
+    }
+
+    /// Whether a `.store` file opts in to write-back on Windows.
+    ///
+    /// The marker is `# aro-store: writable`, and it must appear in the
+    /// leading comment block — before the first entry — so that it cannot be
+    /// smuggled in as part of the data. Matching is case-insensitive and
+    /// tolerant of spacing, because the only thing worse than a marker is a
+    /// marker that looks right and does nothing.
+    ///
+    /// Read-only is the default, including for a file with no marker, an
+    /// unreadable one, or one whose marker appears after data has started.
+    /// Internal rather than private so the rule is testable on every platform
+    /// — the branch that uses it only compiles on Windows (GitLab #684).
+    static func declaresWindowsWritability(_ content: String) -> Bool {
+        for rawLine in content.split(separator: "\n", omittingEmptySubsequences: false) {
+            let line = rawLine.trimmingCharacters(in: .whitespaces)
+            if line.isEmpty { continue }
+            guard line.hasPrefix("#") else {
+                // Data has started; a marker below it is not a header.
+                return false
+            }
+            let directive = line.dropFirst()
+                .trimmingCharacters(in: .whitespaces)
+                .lowercased()
+            guard directive.hasPrefix("aro-store:") else { continue }
+            let value = directive.dropFirst("aro-store:".count).trimmingCharacters(in: .whitespaces)
+            if value == "writable" { return true }
+        }
+        return false
     }
 
     /// Parse YAML content into an array of dictionary entries

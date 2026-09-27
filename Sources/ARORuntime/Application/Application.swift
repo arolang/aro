@@ -153,19 +153,19 @@ public final class Application: @unchecked Sendable {
         self.templateService = ts
         await runtime.register(service: ts as TemplateService)
 
-        // Register terminal service (ARO-0052)
-        #if !os(Windows)
-        if isatty(STDOUT_FILENO) != 0 {
+        // Register terminal service (ARO-0052).
+        //
+        // One question on every platform: is stdout a terminal? Windows used
+        // to be asked something else — whether `WT_SESSION` was set — so
+        // `Render`, `Show`, `Clear`, `Prompt` and `Select` were simply absent
+        // in cmd.exe and PowerShell, and present in a Windows Terminal tab
+        // whose output was piped to a file (GitLab #699). `TTYDetector` asks
+        // `GetFileType(GetStdHandle(…))` there, which is what `isatty` asks
+        // here.
+        if TTYDetector.stdoutIsTTY {
             let terminalService = TerminalService()
             await runtime.register(service: terminalService)
         }
-        #else
-        // Windows: only register if Windows Terminal
-        if ProcessInfo.processInfo.environment["WT_SESSION"] != nil {
-            let terminalService = TerminalService()
-            await runtime.register(service: terminalService)
-        }
-        #endif
 
         // Register keyboard service for key press events (ARO-0052)
         // The service internally checks isatty(STDIN_FILENO) before starting
@@ -191,6 +191,8 @@ public final class Application: @unchecked Sendable {
             let writableStores = storeFiles.filter { $0.isWritable }
             if !writableStores.isEmpty {
                 let flushService = StoreFlushService(storage: InMemoryRepositoryStorage.shared)
+                // Where `Commit the <r> to the <stores>.` finds it (GitLab #863).
+                StoreFlushRegistry.current = flushService
                 await flushService.register(stores: storeFiles)
                 self.storeFlushService = flushService
 
@@ -251,6 +253,18 @@ public final class Application: @unchecked Sendable {
         await runtime.register(service: service)
     }
 
+    /// Bind the entry point's declared positional arguments (ARO-0047 §Positional
+    /// Arguments, GitLab #857).
+    ///
+    /// The names come from the `Application-Start` header; the values were
+    /// parsed out of `argv` before the application was built. `ParameterStorage`
+    /// joins the two on read, so this may run either side of the parse.
+    private func declarePositionalParameters(of program: AnalyzedProgram) {
+        guard let entry = program.featureSets.first(where: { $0.featureSet.name == entryPoint }),
+              !entry.featureSet.positionalParameters.isEmpty else { return }
+        ParameterStorage.shared.declarePositionals(entry.featureSet.positionalParameters)
+    }
+
     // MARK: - Execution
 
     /// Run the application
@@ -264,6 +278,12 @@ public final class Application: @unchecked Sendable {
         guard let mainProgram = mergedProgram() else {
             throw ApplicationError.noPrograms
         }
+
+        // ARO-0047: the entry point's `takes` clause names its positional
+        // command-line arguments (GitLab #857). Declared here, once the
+        // programs are merged and before the entry point runs, so
+        // `<parameter: url>` resolves against argv the same way a flag does.
+        declarePositionalParameters(of: mainProgram)
 
         // Validate OpenAPI contract against feature sets before opening port
         if let spec = openAPISpec {
@@ -477,6 +497,21 @@ public final class Application: @unchecked Sendable {
                 }
             }
 
+            // Who is calling (ARO-0094 §4.1). The cookie is validated against
+            // the sessions repository on every request — signature, membership
+            // and both expiries — before a single statement runs, so a
+            // session-scoped repository cannot be reached with a forged or
+            // stale cookie. A request without a valid one simply has no
+            // session, and touching a session-scoped repository then fails
+            // rather than falling back to the application-wide one.
+            let caller: CallerIdentity
+            if case .success(let sessionId) = await SessionService.shared.resolve(cookieHeader: rawCookieHeader) {
+                caller = .session(id: sessionId, connection: nil)
+            } else {
+                caller = .none
+            }
+            let pendingCookie = PendingSessionCookie()
+
             // Execute the feature set. Re-establish the debugger
             // TaskLocals captured at handler-setup time so the
             // statement boundary checkpoint in FeatureSetExecutor
@@ -484,10 +519,20 @@ public final class Application: @unchecked Sendable {
             do {
                 let response = try await Debug.$controller.withValue(capturedDebugController) {
                     try await Debug.$currentSourceFile.withValue(capturedSourceFile) {
-                        try await self.executeFeatureSet(featureSet, request: request, pathParams: match.pathParameters, headerParams: headerParams, cookieParams: cookieParams, effectiveParameters: match.effectiveParameters)
+                        try await self.executeFeatureSet(featureSet, request: request, pathParams: match.pathParameters, headerParams: headerParams, cookieParams: cookieParams, effectiveParameters: match.effectiveParameters, caller: caller, pendingCookie: pendingCookie)
                     }
                 }
                 var httpResponse = self.convertToHTTPResponse(response, requestPath: request.path)
+
+                // An `Attach … to the <caller>` inside the feature set minted
+                // or rotated a session; this is where it reaches the browser.
+                if let setCookie = pendingCookie.value {
+                    var headers = httpResponse.headers
+                    headers["Set-Cookie"] = setCookie
+                    httpResponse = HTTPResponse(statusCode: httpResponse.statusCode,
+                                                headers: headers,
+                                                body: httpResponse.body)
+                }
 
                 // Validate response body against OpenAPI response schema (GitLab #180)
                 if let body = httpResponse.body,
@@ -548,15 +593,25 @@ public final class Application: @unchecked Sendable {
         pathParams: [String: String],
         headerParams: [String: String] = [:],
         cookieParams: [String: String] = [:],
-        effectiveParameters: [Parameter] = []
+        effectiveParameters: [Parameter] = [],
+        caller: CallerIdentity = .none,
+        pendingCookie: PendingSessionCookie? = nil
     ) async throws -> Response {
         // Create execution context for this request
         let context = RuntimeContext(
             featureSetName: analyzedFeatureSet.featureSet.name,
             businessActivity: analyzedFeatureSet.featureSet.businessActivity,
             eventBus: RuntimeContainer.default.eventBus,
-            container: RuntimeContainer.default
+            container: RuntimeContainer.default,
+            caller: caller
         )
+
+        // Where `Attach … to the <caller>` leaves the cookie it minted
+        // (ARO-0094 §6.1). Per-request, so two logins at once cannot hand each
+        // other's session to the wrong browser.
+        if let pendingCookie {
+            context.register(pendingCookie)
+        }
 
         // Register repository storage service for persistent in-memory storage
         context.register(RuntimeContainer.default.repositoryStorage as RepositoryStorageService)
@@ -673,6 +728,32 @@ public final class Application: @unchecked Sendable {
 
         // Bind cookie parameters (declared as in: cookie in the OpenAPI spec)
         context.bind("cookieParameters", value: cookieParams)
+
+        // The caller's session, as a record (ARO-0094 §9). This is what makes
+        // `Extract the <id> from the <session: id>.` work — the spelling the
+        // proposal's own logout example uses, and the only way an ARO program
+        // can name its own session without the runtime inventing a magic
+        // variable. `<session>` is already a declared system object, so this
+        // fills a name the language had rather than adding one.
+        //
+        // The record is the row from the sessions repository when there is
+        // one, so `<session: user>` reaches whatever the application put
+        // there. A request with no valid cookie binds an empty record rather
+        // than nothing, so reading a field is an absent value and not an
+        // undefined-variable error — the same call ARO makes for a `Retrieve`
+        // that matches nothing (GitLab #835).
+        if case .session(let sessionId, _) = caller {
+            let rows = await RuntimeContainer.default.repositoryStorage.retrieve(
+                from: SessionRepositories.sessions,
+                businessActivity: "session",
+                caller: "",
+                where: "id", equals: sessionId)
+            let record = rows.compactMap { $0 as? [String: any Sendable] }.first
+                ?? ["id": sessionId]
+            context.bind("session", value: record)
+        } else {
+            context.bind("session", value: [String: any Sendable]())
+        }
 
         // Also bind body directly for convenience
         if let parsedBody = bodyValue as? [String: any Sendable] {

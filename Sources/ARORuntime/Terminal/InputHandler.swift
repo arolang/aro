@@ -6,6 +6,10 @@ import Darwin
 import Glibc
 #endif
 
+#if os(Windows)
+import WinSDK
+#endif
+
 /// Handles keyboard input for terminal interactions
 public struct InputHandler: Sendable {
     public init() {}
@@ -83,9 +87,36 @@ public struct InputHandler: Sendable {
 
         return input
         #else
-        // Windows: just use regular readLine for now
-        // TODO: Implement Windows-specific hidden input
-        return Swift.readLine() ?? ""
+        // Windows has no termios; echo is a console *mode* flag. Clearing
+        // `ENABLE_ECHO_INPUT` is the exact counterpart of clearing `ECHO`.
+        //
+        // This branch used to be `return Swift.readLine()` under a TODO, which
+        // means `Prompt the <password: hidden>` printed the password as it was
+        // typed — the one failure in this file that is not a missing feature
+        // but a wrong answer to a question about secrecy (GitLab #699).
+        let handle = GetStdHandle(STD_INPUT_HANDLE)
+        guard handle != INVALID_HANDLE_VALUE else {
+            // No console to turn echo off on. Reading anyway would echo; the
+            // caller asked for hidden, so refuse rather than leak.
+            return ""
+        }
+
+        var mode: DWORD = 0
+        guard GetConsoleMode(handle, &mode) else {
+            // Redirected stdin — a pipe or a file, which does not echo at all,
+            // so reading is safe and is what the POSIX path effectively does
+            // when `tcsetattr` fails.
+            return Swift.readLine() ?? ""
+        }
+
+        SetConsoleMode(handle, mode & ~DWORD(ENABLE_ECHO_INPUT))
+        let input = Swift.readLine() ?? ""
+        SetConsoleMode(handle, mode)
+
+        // The newline was not echoed either.
+        print("")
+
+        return input
         #endif
     }
 

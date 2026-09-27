@@ -75,7 +75,6 @@ struct TokenKindTests {
         #expect(TokenKind.is.description == "is")
         #expect(TokenKind.exists.description == "exists")
         #expect(TokenKind.defined.description == "defined")
-        #expect(TokenKind.null.description == "null")
         #expect(TokenKind.empty.description == "empty")
         #expect(TokenKind.contains.description == "contains")
         #expect(TokenKind.matches.description == "matches")
@@ -197,20 +196,6 @@ struct TokenKindTests {
         #expect(TokenKind.percent.isMultiplicativeOperator == true)
         #expect(TokenKind.plus.isMultiplicativeOperator == false)
         #expect(TokenKind.minus.isMultiplicativeOperator == false)
-    }
-
-    @Test("isStatementKeyword works correctly")
-    func testIsStatementKeyword() {
-        #expect(TokenKind.if.isStatementKeyword == true)
-        #expect(TokenKind.match.isStatementKeyword == true)
-        #expect(TokenKind.for.isStatementKeyword == true)
-        #expect(TokenKind.parallel.isStatementKeyword == true)
-        #expect(TokenKind.guard.isStatementKeyword == true)
-        #expect(TokenKind.defer.isStatementKeyword == true)
-        #expect(TokenKind.assert.isStatementKeyword == true)
-        #expect(TokenKind.precondition.isStatementKeyword == true)
-        #expect(TokenKind.publish.isStatementKeyword == false)
-        #expect(TokenKind.identifier("test").isStatementKeyword == false)
     }
 }
 

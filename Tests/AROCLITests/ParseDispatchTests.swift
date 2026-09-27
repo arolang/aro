@@ -19,7 +19,7 @@ import ARORuntime
 struct ParseDispatchTests {
 
     private func run(_ statements: String...) async throws -> (REPLSession, [REPLResult]) {
-        let session = REPLSession(suppressLogPrefix: true)
+        let session = REPLSession()
         var results: [REPLResult] = []
         for statement in statements {
             results.append(try await session.executeStatement(statement))

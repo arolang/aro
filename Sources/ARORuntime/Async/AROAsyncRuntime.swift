@@ -234,13 +234,9 @@ public final class AROAsyncRuntime: @unchecked Sendable {
     // MARK: - Signal Handling
 
     private func setupSignalHandlers() {
-        // Set up SIGINT handler (Ctrl+C)
-        signal(SIGINT) { _ in
-            AROAsyncRuntime.shared.requestShutdown()
-        }
-
-        // Set up SIGTERM handler
-        signal(SIGTERM) { _ in
+        // Ctrl-C and SIGTERM on POSIX; the console control events on Windows,
+        // which delivers neither (GitLab #685).
+        ShutdownSignals.install {
             AROAsyncRuntime.shared.requestShutdown()
         }
     }

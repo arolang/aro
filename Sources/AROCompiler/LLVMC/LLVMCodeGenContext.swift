@@ -17,7 +17,6 @@ public enum LLVMCodeGenError: Error, CustomStringConvertible {
     case moduleVerificationFailed(message: String)
     case llvmInternalError(message: String)
     case noEntryPoint
-    case multipleEntryPoints
 
     public var description: String {
         switch self {
@@ -47,8 +46,6 @@ public enum LLVMCodeGenError: Error, CustomStringConvertible {
             return "LLVM internal error: \(msg)"
         case .noEntryPoint:
             return "No Application-Start feature set found"
-        case .multipleEntryPoints:
-            return "Multiple Application-Start feature sets found"
         }
     }
 

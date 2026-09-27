@@ -1856,6 +1856,23 @@ jobs:
           path: Book/AROByHallucination/output/ARO-by-Hallucination.pdf
           retention-days: 30
 
+      # The Short Studies used to ship as a PDF checked into
+      # Book/TheShortStudies/output and built by no pipeline, so the file in
+      # the repository was the only copy and it aged (GitLab #847). Its script
+      # is build.sh, not build-pdf.sh.
+      - name: Build ARO Short Studies PDF
+        run: |
+          cd Book/TheShortStudies
+          chmod +x build.sh
+          ./build.sh
+
+      - name: Upload ARO Short Studies PDF
+        uses: actions/upload-artifact@v4
+        with:
+          name: aro-short-studies
+          path: Book/TheShortStudies/output/ARO-Short-Studies.pdf
+          retention-days: 30
+
   # ===========================================================================
   # Create Release (only on tags)
   # ===========================================================================
@@ -1939,6 +1956,7 @@ jobs:
             artifacts/aro-solaro-platform/ARO-Solaro-Platform.pdf \
             artifacts/aro-for-data-engineers/ARO-For-Data-Engineers.pdf \
             artifacts/aro-by-hallucination/ARO-by-Hallucination.pdf \
+            artifacts/aro-short-studies/ARO-Short-Studies.pdf \
             artifacts/aro-kernel/aro_kernel-py3-none-any.whl; do
             if [ -f "$f" ]; then
               FILES="${FILES}${f}\n"
@@ -1988,6 +2006,7 @@ jobs:
             artifacts/aro-solaro-platform/ARO-Solaro-Platform.pdf
             artifacts/aro-for-data-engineers/ARO-For-Data-Engineers.pdf
             artifacts/aro-by-hallucination/ARO-by-Hallucination.pdf
+            artifacts/aro-short-studies/ARO-Short-Studies.pdf
             artifacts/aro-kernel/aro_kernel-py3-none-any.whl
           fail_on_unmatched_files: false
           body: |
@@ -2010,6 +2029,7 @@ jobs:
             | SOLARO — The ARO Development Platform | [ARO-Solaro-Platform.pdf](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/ARO-Solaro-Platform.pdf) |
             | ARO for Data Engineers | [ARO-For-Data-Engineers.pdf](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/ARO-For-Data-Engineers.pdf) |
             | ARO by Hallucination | [ARO-by-Hallucination.pdf](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/ARO-by-Hallucination.pdf) |
+            | ARO Short Studies | [ARO-Short-Studies.pdf](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/ARO-Short-Studies.pdf) |
 
             ### Jupyter kernel
 

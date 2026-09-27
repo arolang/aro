@@ -49,10 +49,15 @@ public final class Compiler {
     ///   `UserActionRegistry.declared(inFiles:)` before the compile loop.
     ///   `nil` means "one file, no application context", and the unknown-action
     ///   diagnostic then says so rather than claiming nothing is declared.
+    /// - Parameter preboundSymbols: names already bound outside this source.
+    ///   A REPL or notebook cell is compiled alone, wrapped in a throwaway
+    ///   feature set, while its values live in the session (GitLab #689).
     public func compile(
         _ source: String,
         externallyHandledEvents: Set<String> = [],
-        declaredUserActions: UserActionRegistry? = nil
+        declaredUserActions: UserActionRegistry? = nil,
+        preboundSymbols: Set<String> = [],
+        declaredRepositoryScopes: [String: String] = [:]
     ) -> CompilationResult {
         // Clear diagnostics from previous compilations
         diagnostics.clear()
@@ -70,7 +75,24 @@ public final class Compiler {
             let analyzedProgram = analyzer.analyze(
                 program,
                 externallyHandledEvents: externallyHandledEvents,
-                declaredUserActions: declaredUserActions)
+                declaredUserActions: declaredUserActions,
+                preboundSymbols: preboundSymbols)
+
+            // ARO-0094 §7.2. The scopes come from the whole application
+            // because `Declare` lives in Application-Start while the
+            // statements it governs are elsewhere; a caller that has not
+            // collected them passes none and this is a no-op.
+            RepositoryScopeAnalyzer.checkDeclarations(program,
+                                                      applicationScopes: declaredRepositoryScopes,
+                                                      diagnostics: diagnostics)
+            RepositoryScopeAnalyzer.check(program,
+                                          scopes: declaredRepositoryScopes,
+                                          diagnostics: diagnostics)
+
+            // A socket or WebSocket handler whose name names no event
+            // (GitLab #632). It now subscribes to all of them rather than to
+            // none, which is safe but rarely what was meant.
+            HandlerNameAnalyzer.check(program, diagnostics: diagnostics)
             
             return CompilationResult(
                 program: program,

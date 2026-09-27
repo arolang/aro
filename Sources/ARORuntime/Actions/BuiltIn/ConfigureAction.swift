@@ -29,6 +29,12 @@ public struct ConfigurableSetting: Sendable {
     /// `http-server` names the server, a `*-repository` name names a repository.
     public enum Category: String, Sendable {
         case httpServer = "http-server"
+        case httpClient = "http-client"
+        /// The `.store` files behind seeded repositories (ARO-0073).
+        case stores
+        /// The application itself — the limits that apply across all of it
+        /// (ARO-0088 §10a, GitLab #862).
+        case application
         case repository
     }
 
@@ -59,6 +65,33 @@ public enum ConfigurableSettings {
             keys: ["max-body", "max-request-body", "maxBody"],
             canonicalKey: "max-body",
             expects: "a size like \"1MB\", \"512KB\", or a byte count"
+        ),
+        // Application-wide limits (ARO-0088 §10a, GitLab #862). A ceiling and
+        // a rate are different limits and both can be set: one request at a
+        // time still exceeds a per-minute quota.
+        ConfigurableSetting(
+            category: .application,
+            keys: ["concurrency"],
+            canonicalKey: "concurrency",
+            expects: "a whole number of concurrent units of work, or 0 for no ceiling"
+        ),
+        ConfigurableSetting(
+            category: .httpClient,
+            keys: ["concurrency"],
+            canonicalKey: "concurrency",
+            expects: "a whole number of concurrent requests, or 0 for no ceiling"
+        ),
+        ConfigurableSetting(
+            category: .httpClient,
+            keys: ["rate", "rate-limit"],
+            canonicalKey: "rate",
+            expects: "a rate like \"10/s\", \"100/minute\" or \"5/2s\""
+        ),
+        ConfigurableSetting(
+            category: .stores,
+            keys: ["write-back", "writeback"],
+            canonicalKey: "write-back",
+            expects: "\"auto\" (write as changes land) or \"manual\" (write only on Commit)"
         ),
         ConfigurableSetting(
             category: .repository,
@@ -128,10 +161,336 @@ public enum ConfigurableSettings {
         return nil
     }
 
+    /// Whether the statement configures a file — `Configure the <r> for the
+    /// <file: "./run.sh"> with { permissions: "755" }.` (ARO-0036 §10,
+    /// GitLab #861). Reaches the file service, so it needs `await`.
+    ///
+    /// The path is the *object*, matching `Stat`, `Exists` and `Delete`, and
+    /// not the result — which is what keeps this out of the way of
+    /// `Configure the <category: key>`, where the category is the result.
+    static func isFileSetting(object: ObjectDescriptor) -> Bool {
+        (object.base == "file" || object.base == "directory") && !object.specifiers.isEmpty
+    }
+
+    /// `Configure the <mode> for the <file: "./run.sh"> with { permissions: "755" }.`
+    ///
+    /// Binds `{ path, permissions, octal, previous }` — the previous mode
+    /// because a chmod cannot be read back once it has happened, and a program
+    /// that changes a mode usually wants to report what it changed.
+    static func applyFileSetting(
+        result: ResultDescriptor,
+        object: ObjectDescriptor,
+        context: ExecutionContext
+    ) async throws -> any Sendable {
+        let path = try context.resolveString(
+            base: object.base,
+            specifiers: object.specifiers,
+            excluding: ["file", "directory"],
+            field: "a file or directory path",
+            action: "Configure"
+        )
+
+        let settings = context.resolveAny("_with_") ?? context.resolveAny("_literal_")
+        guard let fields = settings as? [String: any Sendable] else {
+            throw ActionError.missingRequiredField(
+                field: "with { permissions: \"755\" }", action: "Configure the <file: …>")
+        }
+        guard let raw = fields["permissions"] ?? fields["mode"] else {
+            let known = fields.keys.sorted().joined(separator: ", ")
+            throw ActionError.invalidInput(
+                "Configure the <\(object.base): …>: the only file setting is 'permissions'",
+                received: known.isEmpty ? "{}" : known)
+        }
+        let text = raw as? String ?? String(describing: raw)
+        guard let mode = FileMode.parse(text) else {
+            throw ActionError.invalidInput(
+                "Configure the <\(object.base): …> with { permissions: … }: \(FileMode.expected)",
+                received: text)
+        }
+
+        guard let fileService = context.service(FileSystemService.self) else {
+            throw ActionError.missingService("FileSystemService")
+        }
+        let previous = try await fileService.setPermissions(path: path, mode: mode)
+
+        var record: [String: any Sendable] = [
+            "path": path,
+            "permissions": mode.symbolic,
+            "octal": mode.octal
+        ]
+        if let previous {
+            record["previous"] = previous.symbolic
+        }
+        context.bind(result.base, value: record, allowRebind: true)
+        return record
+    }
+
+    /// `Configure the <application: concurrency> with 8.` and
+    /// `Configure the <http-client: rate> with "10/s".` (ARO-0088 §10a,
+    /// GitLab #862).
+    ///
+    /// Returns `nil` when the statement is not one of these, so the caller
+    /// falls through to the entity-update path.
+    static func applyLimitSetting(
+        result: ResultDescriptor,
+        object: ObjectDescriptor,
+        context: ExecutionContext
+    ) throws -> (any Sendable)? {
+        guard let category = ConfigurableSetting.Category(rawValue: result.base),
+              category == .application || category == .httpClient else { return nil }
+
+        let value = context.resolveAny("_literal_")
+            ?? context.resolveAny("_with_")
+            ?? context.resolveAny(object.base)
+            ?? object.base
+
+        // `Configure the <http-client> with { concurrency: 2, rate: "10/s" }.`
+        //
+        // Two statements naming the same category is a rebind, and the parser
+        // says so and points here (GitLab #506) — so the object form has to
+        // work, or the hint sends people somewhere that does not.
+        guard let key = result.specifiers.first else {
+            guard let fields = value as? [String: any Sendable] else { return nil }
+            var applied: [String: any Sendable] = [:]
+            for (field, fieldValue) in fields {
+                guard let one = try applyLimit(category: category, key: field, raw: fieldValue) else {
+                    throw ActionError.invalidInput(
+                        "Configure the <\(result.base)>: '\(field)' is not a setting "
+                        + "(\(keys(for: category).sorted().joined(separator: ", ")))",
+                        received: field)
+                }
+                applied.merge(one) { _, new in new }
+            }
+            return applied.isEmpty ? nil : applied
+        }
+
+        return try applyLimit(category: category, key: key, raw: value)
+    }
+
+    /// `Configure the <session> with { idle: "30m", absolute: "12h",
+    ///  cookie: "aro_session", same-site: "Strict", secure: false }.`
+    /// (ARO-0094 §8.2)
+    ///
+    /// Every field is optional and anything omitted keeps its default, which
+    /// is the conservative one: a 30-minute idle window, a 12-hour ceiling,
+    /// `SameSite=Lax`, and TLS required. `secure: false` is the one that has
+    /// to be written out, because it is the one that is only ever right on a
+    /// developer's machine.
+    static func applySessionSetting(key: String?,
+                                    object: ObjectDescriptor,
+                                    context: ExecutionContext) async throws -> any Sendable {
+        let raw = context.resolveAny("_with_")
+            ?? context.resolveAny("_literal_")
+            ?? context.resolveAny(object.base)
+
+        // One setting at a time, the way every other Configure reads
+        // (`Configure the <application: concurrency> with 4.`), or the whole
+        // policy in one object when that is less to write.
+        let fields: [String: any Sendable]
+        if let key {
+            fields = [key: raw]
+        } else if let object = raw as? [String: any Sendable] {
+            fields = object
+        } else {
+            throw ActionError.missingRequiredField(
+                field: "with { idle, absolute, cookie, same-site, secure, origins }",
+                action: "Configure the <session>")
+        }
+
+        let known = ["idle", "absolute", "cookie", "same-site", "sameSite", "secure", "origins"]
+        for name in fields.keys where !known.contains(name) {
+            throw ActionError.invalidInput(
+                "Configure the <session>: '\(name)' is not a session setting "
+                + "(idle, absolute, cookie, same-site, secure, origins)",
+                received: name)
+        }
+
+        var policy = await SessionService.shared.currentPolicy()
+        if let name = fields["cookie"] as? String, !name.isEmpty { policy.cookieName = name }
+        if let idle = duration(from: fields["idle"]) { policy.idleTimeout = idle }
+        if let absolute = duration(from: fields["absolute"]) { policy.absoluteTimeout = absolute }
+        if let sameSite = fields["same-site"] as? String ?? fields["sameSite"] as? String {
+            policy.sameSite = sameSite
+        }
+        if let secure = fields["secure"] as? Bool { policy.requiresSecureTransport = secure }
+        if let origins = fields["origins"] as? [any Sendable] {
+            policy.allowedOrigins = origins.compactMap { $0 as? String }
+        }
+        await SessionService.shared.configure(policy)
+
+        return ["cookie": policy.cookieName,
+                "idle": policy.idleTimeout,
+                "absolute": policy.absoluteTimeout,
+                "same-site": policy.sameSite,
+                "secure": policy.requiresSecureTransport] as [String: any Sendable]
+    }
+
+    /// Seconds from a number, or from `"30m"` / `"12h"` / `"7d"`.
+    private static func duration(from raw: (any Sendable)?) -> TimeInterval? {
+        if let seconds = raw as? Int { return TimeInterval(seconds) }
+        if let seconds = raw as? Double { return seconds }
+        guard let text = (raw as? String)?.trimmingCharacters(in: .whitespaces), !text.isEmpty else {
+            return nil
+        }
+        let units: [Character: TimeInterval] = ["s": 1, "m": 60, "h": 3600, "d": 86400]
+        if let unit = text.last, let multiplier = units[unit],
+           let value = Double(text.dropLast()) {
+            return value * multiplier
+        }
+        return Double(text)
+    }
+
+    /// Apply one limit. `nil` when `key` names no setting in `category`.
+    private static func applyLimit(
+        category: ConfigurableSetting.Category,
+        key: String,
+        raw: any Sendable
+    ) throws -> [String: any Sendable]? {
+        guard let setting = setting(category: category, key: key) else { return nil }
+
+        switch setting.canonicalKey {
+        case "concurrency":
+            guard let count = wholeNumber(from: raw), count >= 0 else {
+                throw ActionError.invalidInput(
+                    "Configure the <\(category.rawValue): \(key)>: \(setting.expects)",
+                    received: String(describing: raw))
+            }
+            if category == .application {
+                ApplicationLimits.applicationConcurrency = count
+            } else {
+                ApplicationLimits.httpConcurrency = count
+            }
+            return ["concurrency": count]
+
+        case "rate":
+            let text = raw as? String ?? String(describing: raw)
+            guard let spec = RateSpec.parse(text) else {
+                throw ActionError.invalidInput(
+                    "Configure the <\(category.rawValue): \(key)>: \(setting.expects)",
+                    received: text)
+            }
+            ApplicationLimits.httpRate = spec
+            return ["rate": text,
+                    "permits": spec.permits,
+                    "interval": spec.interval]
+
+        default:
+            return nil
+        }
+    }
+
+    /// A whole number written as an Int, a Double, or a numeric string.
+    static func wholeNumber(from value: any Sendable) -> Int? {
+        if let n = value as? Int { return n }
+        if let n = value as? Double, n == n.rounded() { return Int(n) }
+        if let text = value as? String { return Int(text.trimmingCharacters(in: .whitespaces)) }
+        return nil
+    }
+
+    /// Whether the statement configures store write-back — reaches an actor.
+    static func isStoreSetting(result: ResultDescriptor) -> Bool {
+        result.base == ConfigurableSetting.Category.stores.rawValue
+            && result.specifiers.first != nil
+    }
+
+    /// `Configure the <stores: write-back> with "manual".` (ARO-0073 §5,
+    /// GitLab #863) — stop writing on every mutation and write on `Commit`.
+    static func applyStoreSetting(
+        result: ResultDescriptor,
+        object: ObjectDescriptor,
+        context: ExecutionContext
+    ) async throws -> any Sendable {
+        guard let key = result.specifiers.first,
+              let setting = setting(category: .stores, key: key) else {
+            return try EntityUpdate.apply(result: result, object: object, context: context)
+        }
+        let raw = context.resolveAny("_literal_")
+            ?? context.resolveAny("_with_")
+            ?? context.resolveAny(object.base)
+            ?? object.base
+        let text = (raw as? String ?? String(describing: raw)).lowercased()
+        guard let mode = StoreWriteBackMode(rawValue: text) else {
+            throw ActionError.invalidInput(
+                "Configure the <stores: \(key)>: \(setting.expects)",
+                received: text)
+        }
+        await StoreFlushRegistry.current?.setWriteBackMode(mode)
+        return ["write-back": mode.rawValue] as [String: any Sendable]
+    }
+
     /// Whether the statement configures a repository — `<x-repository: ttl>`.
     /// Storage is an actor, so applying it needs `await`.
     static func isRepositorySetting(result: ResultDescriptor) -> Bool {
-        InMemoryRepositoryStorage.isRepositoryName(result.base) && result.specifiers.first != nil
+        InMemoryRepositoryStorage.isRepositoryName(result.base)
+    }
+
+    /// The properties a `Configure … with { … }` carries, when it carries an
+    /// object rather than naming one setting in the result slot.
+    ///
+    /// Both spellings exist because `Configure` binds its subject, so two
+    /// statements naming one repository are an immutable rebind (ARO-0035, and
+    /// the hint says as much). Setting two properties therefore has to be one
+    /// statement: `Configure the <cart-repository> with { scope: "session",
+    /// ttl: 3600 }.`
+    static func repositoryProperties(context: ExecutionContext) -> [String: any Sendable]? {
+        let raw = context.resolveAny("_with_")
+            ?? context.resolveAny("_expression_")
+            ?? context.resolveAny("_literal_")
+        return raw as? [String: any Sendable]
+    }
+
+    /// Apply one repository property. Returns the value as stored, so the
+    /// caller can bind what was actually applied rather than what was written.
+    ///
+    /// `scope` (ARO-0094) is the one that is not a storage tuning knob: it
+    /// decides *whose* rows a statement reads, so getting it wrong is a data
+    /// leak rather than a performance problem. It is registered, not stored,
+    /// and a second declaration that disagrees is refused rather than taken.
+    static func applyRepositoryProperty(
+        repository: String,
+        field: String,
+        value: any Sendable,
+        context: ExecutionContext
+    ) async throws -> any Sendable {
+        switch field {
+        case "scope":
+            let text = value as? String ?? String(describing: value)
+            guard let scope = RepositoryScope.parse(text) else {
+                throw ActionError.invalidInput(
+                    RepositoryScopeError.unknownScope(repository: repository, raw: text).description,
+                    received: text)
+            }
+            if case .failure(let error) = RepositoryScopeRegistry.shared.declare(repository, scope: scope) {
+                throw ActionError.invalidInput(error.description, received: scope.rawValue)
+            }
+            return scope.rawValue
+
+        case "ttl", "maxSize":
+            let storage = context.service(RepositoryStorageService.self)
+                ?? context.container.repositoryStorage
+            var ttl: TimeInterval? = nil
+            var maxSize: Int? = nil
+            if let existing = context.resolveAny(repository) as? [String: any Sendable] {
+                if let t = existing["ttl"] as? TimeInterval { ttl = t }
+                else if let t = existing["ttl"] as? Double { ttl = t }
+                else if let t = existing["ttl"] as? Int { ttl = TimeInterval(t) }
+                if let m = existing["maxSize"] as? Int { maxSize = m }
+                else if let m = existing["maxSize"] as? Double { maxSize = Int(m) }
+            }
+            if field == "ttl" {
+                if let v = value as? Double { ttl = v } else if let v = value as? Int { ttl = TimeInterval(v) }
+            } else {
+                if let v = value as? Int { maxSize = v } else if let v = value as? Double { maxSize = Int(v) }
+            }
+            await storage.configure(repository: repository, ttl: ttl, maxSize: maxSize)
+            return value
+
+        default:
+            throw ActionError.invalidInput(
+                "Configure the <\(repository)>: '\(field)' is not a repository setting "
+                + "(scope, ttl, maxSize)",
+                received: field)
+        }
     }
 
     /// `Configure the <cache-repository: ttl> with 60.`
@@ -146,16 +505,51 @@ public enum ConfigurableSettings {
     ) async throws -> any Sendable {
         let entity: any Sendable = context.resolveAny(result.base) ?? [String: any Sendable]()
 
+        // `_with_` and `_expression_` as well as `_literal_`: `Configure the
+        // <cart-repository: scope> with "session".` puts the value in
+        // different places depending on how it was written and which mode is
+        // running — the interpreter binds both names, a compiled binary binds
+        // only `_expression_` (ARO-0094).
         let updateValue: any Sendable
         if let literal = context.resolveAny("_literal_") {
             updateValue = literal
+        } else if let with = context.resolveAny("_with_") {
+            updateValue = with
+        } else if let expression = context.resolveAny("_expression_") {
+            updateValue = expression
         } else if let resolved = context.resolveAny(object.base) {
             updateValue = resolved
         } else {
             updateValue = object.base
         }
 
+        // The object form sets every named property in one statement.
+        if result.specifiers.isEmpty {
+            guard let properties = repositoryProperties(context: context) else { return entity }
+            var applied: [String: any Sendable] = [:]
+            for (key, value) in properties {
+                applied[key] = try await applyRepositoryProperty(
+                    repository: result.base, field: key, value: value, context: context)
+            }
+            context.bind(result.base, value: applied, allowRebind: true)
+            return applied
+        }
+
         guard let fieldName = result.specifiers.first else { return entity }
+
+        // Scope is not a storage setting — it is registered, and read again by
+        // every repository statement (ARO-0094). Handled before the TTL/maxSize
+        // pair so it does not fall through to a `storage.configure` that would
+        // have nothing to say.
+        if fieldName == "scope" {
+            let applied = try await applyRepositoryProperty(
+                repository: result.base, field: fieldName, value: updateValue, context: context)
+            var configDict = context.resolveAny(result.base) as? [String: any Sendable] ?? [:]
+            configDict[fieldName] = applied
+            context.bind(result.base, value: configDict, allowRebind: true)
+            return configDict
+        }
+
         let storage = context.service(RepositoryStorageService.self) ?? context.container.repositoryStorage
 
         var currentTTL: TimeInterval? = nil
@@ -221,12 +615,21 @@ public struct ConfigureAction: SynchronousAction {
     ) throws -> any Sendable {
         try validatePreposition(object.preposition)
 
-        // Repository configuration reaches storage, which is an actor.
-        if ConfigurableSettings.isRepositorySetting(result: result) {
+        // Repository configuration reaches storage, which is an actor; store
+        // write-back reaches the flush service, and a file permission change
+        // reaches the file service. All three need `await`.
+        if ConfigurableSettings.isRepositorySetting(result: result)
+            || ConfigurableSettings.isStoreSetting(result: result)
+            || ConfigurableSettings.isFileSetting(object: object) {
             throw NeedsAsyncExecution()
         }
 
         if let applied = try ConfigurableSettings.applyHTTPServerSetting(
+            result: result, object: object, context: context) {
+            return applied
+        }
+
+        if let applied = try ConfigurableSettings.applyLimitSetting(
             result: result, object: object, context: context) {
             return applied
         }
@@ -244,10 +647,25 @@ public struct ConfigureAction: SynchronousAction {
         // Decided before the synchronous body runs rather than by letting it
         // throw `NeedsAsyncExecution` and starting over — the sync path is
         // still the one the compiled runtime takes directly.
+        if ConfigurableSettings.isFileSetting(object: object) {
+            try validatePreposition(object.preposition)
+            return try await ConfigurableSettings.applyFileSetting(
+                result: result, object: object, context: context)
+        }
         if ConfigurableSettings.isRepositorySetting(result: result) {
             try validatePreposition(object.preposition)
             return try await ConfigurableSettings.applyRepositorySetting(
                 result: result, object: object, context: context)
+        }
+        if ConfigurableSettings.isStoreSetting(result: result) {
+            try validatePreposition(object.preposition)
+            return try await ConfigurableSettings.applyStoreSetting(
+                result: result, object: object, context: context)
+        }
+        if result.base == "session" {
+            try validatePreposition(object.preposition)
+            return try await ConfigurableSettings.applySessionSetting(
+                key: result.specifiers.first, object: object, context: context)
         }
         return try executeSynchronously(result: result, object: object, context: context)
     }

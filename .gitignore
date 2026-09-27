@@ -3,12 +3,34 @@
 /node_modules
 /Website/node_modules
 /Website/dist
+# Compiled example binaries. `aro build ./Examples/X` writes `Examples/X/X`,
+# and gitignore cannot express "a file named after its own directory", so each
+# one is listed. The list goes stale silently — a 29 MB executable was tracked
+# for months because two entries were missing (GitLab #817, #850). Until
+# `aro build` emits into `.build/`, check with:
+#
+#   for d in Examples/*/; do n=$(basename "$d"); \
+#     git check-ignore -q "$d$n" || echo "missing: $n"; done
+#
 /Examples/HelloWorld/HelloWorld
+/Examples/EventReplay/EventReplay
+/Examples/FileUpload/FileUpload
+/Examples/ModulesExample/ModulesExample
+/Examples/RepoBackup/RepoBackup
 /Examples/DeleteResult/DeleteResult
+/Examples/PositionalArguments/PositionalArguments
+/Examples/CaptureGroups/CaptureGroups
+/Examples/ApplicationLimits/ApplicationLimits
+/Examples/HTMLAttributes/HTMLAttributes
 /Examples/TimezoneDemo/TimezoneDemo
 /Examples/WebhookReceiver/WebhookReceiver
+/Examples/GuardsAndDefaults/GuardsAndDefaults
 /Vendor/
 /worktree/
+/Examples/PathOperations/PathOperations
+/Examples/PathOperations/build-stamp.txt
+/Examples/URLUtilities/URLUtilities
+/Examples/Comparisons/Comparisons
 .DS_Store
 /.swiftpm
 /Editor/intellij-aro/gradlew.bat
@@ -42,7 +64,6 @@
 /Examples/ModulesExample/ModuleA/ModuleA
 /Examples/ModulesExample/ModuleB/ModuleB
 /Examples/ModulesExample/Combined/Combined
-/Book/TheLanguageGuide/output
 /Examples/Computations/Computations
 /Examples/ZipService/ZipService
 /Examples/ZipService/plugins/libZipPlugin.dylib
@@ -84,8 +105,6 @@ testrun.log
 /Examples/EventExample/EventExample
 /Examples/DirectoryReplicator/DirectoryReplicator
 /Examples/DateRangeDemo/DateRangeDemo
-/Book/AROByExample/output
-/Book/AROForDataEngineers/output
 /Examples/ConfigurableTimeout/ConfigurableTimeout
 /Examples/SocketClient/SocketClient
 /Examples/ReceiveData/ReceiveData
@@ -122,11 +141,13 @@ testrun.log
 /Examples/EchoSocket/EchoSocket
 /Examples/DirectoryReplicatorEvents/DirectoryReplicatorEvents
 /Examples/AssertDemo/AssertDemo
-/Book/ThePluginGuide/output
-/Book/TheEssentialPrimer/output
-# Every book build now renders from a stamped copy of its sources rather than
-# from the checked-in markdown, so the copy is build output like the PDF.
-/Book/*/output/staged/
+# A book's rendered output is build output, wherever it lands. Three books
+# used to keep theirs in version control while the other six ignored it, so
+# what a reader downloaded was whatever pandoc and TeX Live the last person to
+# run build-pdf.sh happened to have, frozen at whenever they ran it. The
+# release pipeline builds the books from source and attaches them, which is
+# the copy that should exist (GitLab #847).
+/Book/*/output/
 /Book/TheConstructionStudies/processed/
 **/__pycache__/
 **/*.pyc
@@ -224,3 +245,10 @@ Train/script/output/
 /Tests/IntegrationTestsRunner/bronze/
 /Tests/IntegrationTestsRunner/silver/
 /Tests/IntegrationTestsRunner/gold/
+
+# Artefacts examples leave in the repository root when run from it
+# (DirectoryReplicator writes foo/ and baz/, StreamingDemo writes
+# events.jsonl). GitLab #817.
+/foo/
+/baz/
+/events.jsonl

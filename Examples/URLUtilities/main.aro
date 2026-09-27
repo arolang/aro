@@ -1,0 +1,43 @@
+(* URL utilities — ARO-0019 §3.1a
+ *
+ * `url-encode` and `url-decode` escape inside a URL. These four do things TO
+ * one: resolve, strip, canonicalise, take apart. Built from Split and
+ * concatenation they are wrong for `../`, for a protocol-relative link, and
+ * for a fragment on a relative one.
+ *)
+
+(Application-Start: URL Utilities) {
+    Create the <page-url> with "https://example.com/docs/guide/page.html?x=1#top".
+
+    (* The three cases concatenation gets wrong. *)
+    Compute the <climbed: url-resolve> from "../other/x.html" with { base: <page-url> }.
+    Log "climbed: ${<climbed>}" to the <console>.
+
+    Compute the <cdn: url-resolve> from "//cdn.example.org/lib.js" with { base: <page-url> }.
+    Log "protocol-relative: ${<cdn>}" to the <console>.
+
+    Compute the <anchor: url-resolve> from "#section" with { base: <page-url> }.
+    Log "fragment-only: ${<anchor>}" to the <console>.
+
+    (* An absolute link passes through, so a crawler never has to ask which
+     * kind each link is. *)
+    Compute the <already: url-resolve> from "https://other.test/z" with { base: <page-url> }.
+    Log "absolute: ${<already>}" to the <console>.
+
+    (* Two URLs differing only in the fragment are the same request. *)
+    Compute the <clean: url-defragment> from <page-url>.
+    Log "defragmented: ${<clean>}" to the <console>.
+
+    (* One address, one spelling: scheme and host lowered, default port gone,
+     * . and .. removed. The path's case and the query's order are left alone,
+     * because changing either changes what the URL means. *)
+    Compute the <canonical: url-normalize> from "HTTPS://Example.COM:443/a/./b/../c".
+    Log "normalized: ${<canonical>}" to the <console>.
+
+    (* Absent parts are absent, not empty. *)
+    Compute the <parts: url-parts> from <page-url>.
+    Log "scheme=${<parts: scheme>} host=${<parts: host>}" to the <console>.
+    Log "path=${<parts: path>} query=${<parts: query>} fragment=${<parts: fragment>}" to the <console>.
+
+    Return an <OK: status> for the <startup>.
+}

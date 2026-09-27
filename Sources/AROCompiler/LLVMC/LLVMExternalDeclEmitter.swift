@@ -20,6 +20,7 @@ public final class LLVMExternalDeclEmitter {
     private var _runtimeAwaitPendingEvents: Function?
     private var _runtimeRegisterHandler: Function?
     private var _parseArguments: Function?
+    private var _declarePositionalParameters: Function?
     private var _hasKeepAlive: Function?
     private var _registerRepositoryObserver: Function?
     private var _registerRepositoryObserverWithGuard: Function?
@@ -31,6 +32,8 @@ public final class LLVMExternalDeclEmitter {
     private var _contextCreate: Function?
     private var _contextCreateNamed: Function?
     private var _contextCreateChild: Function?
+    private var _contextRequireEnvironment: Function?
+    private var _contextHasResponse: Function?
     private var _contextDestroy: Function?
     private var _contextPrintResponse: Function?
     private var _contextHasError: Function?
@@ -151,6 +154,12 @@ public final class LLVMExternalDeclEmitter {
             types.voidFunctionType(parameters: [i32, ptr])
         )
 
+        // void @aro_declare_positional_parameters(ptr) - ARO-0047, GitLab #857
+        _declarePositionalParameters = ctx.module.declareFunction(
+            "aro_declare_positional_parameters",
+            types.voidFunctionType(parameters: [ptr])
+        )
+
         // i32 @aro_has_keep_alive() - Check for --keep-alive flag
         _hasKeepAlive = ctx.module.declareFunction(
             "aro_has_keep_alive",
@@ -208,10 +217,22 @@ public final class LLVMExternalDeclEmitter {
             types.functionType(parameters: [ptr], returning: ptr)
         )
 
-        // ptr @aro_context_create_named(ptr, ptr)
+        // ptr @aro_context_create_named(ptr name, ptr activity) — GitLab #692
         _contextCreateNamed = ctx.module.declareFunction(
             "aro_context_create_named",
-            types.functionType(parameters: [ptr, ptr], returning: ptr)
+            types.functionType(parameters: [ptr, ptr, ptr], returning: ptr)
+        )
+
+        // i32 @aro_context_has_response(ptr) - GitLab #665
+        _contextHasResponse = ctx.module.declareFunction(
+            "aro_context_has_response",
+            types.functionType(parameters: [ptr], returning: i32)
+        )
+
+        // void @aro_context_require_environment(ptr, ptr) - GitLab #854
+        _contextRequireEnvironment = ctx.module.declareFunction(
+            "aro_context_require_environment",
+            types.voidFunctionType(parameters: [ptr, ptr])
         )
 
         // ptr @aro_context_create_child(ptr, ptr)
@@ -588,6 +609,7 @@ public final class LLVMExternalDeclEmitter {
     public var runtimeAwaitPendingEvents: Function { _runtimeAwaitPendingEvents! }
     public var runtimeRegisterHandler: Function { _runtimeRegisterHandler! }
     public var parseArguments: Function { _parseArguments! }
+    public var declarePositionalParameters: Function { _declarePositionalParameters! }
     public var hasKeepAlive: Function { _hasKeepAlive! }
     public var registerRepositoryObserver: Function { _registerRepositoryObserver! }
     public var registerRepositoryObserverWithGuard: Function { _registerRepositoryObserverWithGuard! }
@@ -598,6 +620,8 @@ public final class LLVMExternalDeclEmitter {
     public var logWarning: Function { _logWarning! }
     public var contextCreate: Function { _contextCreate! }
     public var contextCreateNamed: Function { _contextCreateNamed! }
+    public var contextRequireEnvironment: Function { _contextRequireEnvironment! }
+    public var contextHasResponse: Function { _contextHasResponse! }
     public var contextCreateChild: Function { _contextCreateChild! }
     public var contextDestroy: Function { _contextDestroy! }
     public var contextPrintResponse: Function { _contextPrintResponse! }

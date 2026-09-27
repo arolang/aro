@@ -74,15 +74,15 @@ aro run Examples/DirectoryReplicatorEvents
 
 **Output:**
 ```
-[Application-Start] Scanning template directory...
-[Application-Start] Found 3 directories
-[Application-Start] Storing directories to repository...
-[Audit Directory Changes] [AUDIT] directory-repository: created
-[Process Directory Entry] Created: foo
-[Audit Directory Changes] [AUDIT] directory-repository: created
-[Process Directory Entry] Created: foo/bar
-[Audit Directory Changes] [AUDIT] directory-repository: created
-[Process Directory Entry] Created: baz
+Scanning template directory...
+Found 3 directories
+Storing directories to repository...
+[AUDIT] directory-repository: created
+Created: foo
+[AUDIT] directory-repository: created
+Created: foo/bar
+[AUDIT] directory-repository: created
+Created: baz
 [OK] replication
 ```
 

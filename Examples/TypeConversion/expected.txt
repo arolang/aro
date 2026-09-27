@@ -22,4 +22,4 @@ Object as JSON:
 Integer 100 as double:
 100
 All conversions complete!
-demo
+[OK] demo

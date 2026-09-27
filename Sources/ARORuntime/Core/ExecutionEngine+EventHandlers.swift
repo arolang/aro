@@ -55,9 +55,28 @@ extension ExecutionEngine {
         for analyzedFS in socketHandlers {
             let featureSetName = analyzedFS.featureSet.name
             let lowercaseName = featureSetName.lowercased()
-            // Determine which event type this handler should respond to.
-            // Check "disconnect" before "connect" since "disconnect" contains "connect".
-            if lowercaseName.contains("disconnect") {
+            // Which event does this handler want?
+            //
+            // The same hole File handlers had (GitLab #570, #571, fixed below):
+            // a name matching none of the keywords fell off the end of the
+            // chain and subscribed to *nothing*. `(Echo Input: Socket Event
+            // Handler)` compiled, passed `aro check`, and never ran, with no
+            // output at any log level to say so (GitLab #632).
+            //
+            // "disconnect" is tested before "connect" because it contains it —
+            // but that ordering also meant `(Log Connection Data: …)` bound
+            // only to connect and never saw a packet. Each keyword is now
+            // independent, and a name with none of them subscribes to all
+            // three: that is what such a name asks for, and it cannot break a
+            // working program, because the alternative was firing never.
+            let wantsDisconnect = lowercaseName.contains("disconnect")
+            let wantsConnect = lowercaseName.contains("connect") && !wantsDisconnect
+            let wantsData = lowercaseName.contains("data")
+                || lowercaseName.contains("message")
+                || lowercaseName.contains("received")
+            let named = wantsDisconnect || wantsConnect || wantsData
+
+            if wantsDisconnect || !named {
                 // Subscribe to ClientDisconnectedEvent
                 // Matches: "Handle Client Disconnected", "Handle Socket Disconnect", etc.
                 eventBus.subscribe(to: ClientDisconnectedEvent.self) { [weak self] event in
@@ -65,6 +84,8 @@ extension ExecutionEngine {
                     await self.executeSocketHandler(
                         analyzedFS,
                         baseContext: baseContext,
+                        connectionId: event.connectionId,
+                        transport: "socket",
                         eventData: [
                             "event": SocketDisconnectInfo(
                                 connectionId: event.connectionId,
@@ -73,7 +94,8 @@ extension ExecutionEngine {
                         ]
                     )
                 }
-            } else if lowercaseName.contains("connect") {
+            }
+            if wantsConnect || !named {
                 // Subscribe to ClientConnectedEvent
                 // Matches: "Handle Client Connected", "Handle Socket Connect", etc.
                 eventBus.subscribe(to: ClientConnectedEvent.self) { [weak self] event in
@@ -81,6 +103,8 @@ extension ExecutionEngine {
                     await self.executeSocketHandler(
                         analyzedFS,
                         baseContext: baseContext,
+                        connectionId: event.connectionId,
+                        transport: "socket",
                         eventData: [
                             "connection": SocketConnection(
                                 id: event.connectionId,
@@ -89,7 +113,8 @@ extension ExecutionEngine {
                         ]
                     )
                 }
-            } else if lowercaseName.contains("data") || lowercaseName.contains("message") || lowercaseName.contains("received") {
+            }
+            if wantsData || !named {
                 // Subscribe to DataReceivedEvent
                 // Matches: "Handle Data Received", "Handle Socket Message", etc.
                 eventBus.subscribe(to: DataReceivedEvent.self) { [weak self] event in
@@ -97,6 +122,8 @@ extension ExecutionEngine {
                     await self.executeSocketHandler(
                         analyzedFS,
                         baseContext: baseContext,
+                        connectionId: event.connectionId,
+                        transport: "socket",
                         eventData: [
                             "packet": SocketPacket(
                                 connectionId: event.connectionId,
@@ -123,10 +150,11 @@ extension ExecutionEngine {
     private func executeInChildContext(
         _ analyzedFS: AnalyzedFeatureSet,
         baseContext: RuntimeContext,
+        caller: CallerIdentity? = nil,
         prepare: (RuntimeContext) async -> Bool
     ) async {
         let deps = handlerDependencies
-        let handlerContext = deps.makeContext(for: analyzedFS, parent: baseContext)
+        let handlerContext = deps.makeContext(for: analyzedFS, parent: baseContext, caller: caller)
 
         guard await prepare(handlerContext) else { return }
 
@@ -142,9 +170,26 @@ extension ExecutionEngine {
     private func executeSocketHandler(
         _ analyzedFS: AnalyzedFeatureSet,
         baseContext: RuntimeContext,
+        connectionId: String? = nil,
+        transport: String = "socket",
         eventData: [String: any Sendable]
     ) async {
-        await executeInChildContext(analyzedFS, baseContext: baseContext) { handlerContext in
+        // ARO-0094 §4.2/§4.3: the handler runs as whoever the connection is.
+        // A WebSocket that presented a valid cookie at upgrade, or a socket
+        // promoted by `Attach`, is a session; anything else is a bare
+        // connection, which identifies nobody and must not reach a
+        // session-scoped repository.
+        var caller: CallerIdentity?
+        if let connectionId {
+            caller = await SessionService.shared.caller(forConnection: connectionId)
+        }
+
+        await executeInChildContext(analyzedFS, baseContext: baseContext, caller: caller) { handlerContext in
+            if let connectionId {
+                // So `Attach … to the <connection>` knows which connection it
+                // is promoting, rather than taking an id as an argument.
+                handlerContext.register(ConnectionIdentity(id: connectionId, transport: transport))
+            }
             for (key, value) in eventData {
                 handlerContext.bind(key, value: value)
             }
@@ -160,14 +205,23 @@ extension ExecutionEngine {
             let featureSetName = analyzedFS.featureSet.name
             let lowercaseName = featureSetName.lowercased()
 
-            // Determine which event type this handler should respond to
-            if lowercaseName.contains("message") {
+            // Which event does this handler want? Same rule as sockets above
+            // (GitLab #632): a name with no keyword subscribes to all three
+            // rather than to nothing.
+            let wantsDisconnect = lowercaseName.contains("disconnect")
+            let wantsConnect = lowercaseName.contains("connect") && !wantsDisconnect
+            let wantsMessage = lowercaseName.contains("message")
+            let named = wantsDisconnect || wantsConnect || wantsMessage
+
+            if wantsMessage || !named {
                 // Subscribe to WebSocketMessageEvent
                 eventBus.subscribe(to: WebSocketMessageEvent.self) { [weak self] event in
                     guard let self = self else { return }
                     await self.executeSocketHandler(
                         analyzedFS,
                         baseContext: baseContext,
+                        connectionId: event.connectionId,
+                        transport: "websocket",
                         eventData: [
                             "event": [
                                 "connectionId": event.connectionId,
@@ -176,13 +230,16 @@ extension ExecutionEngine {
                         ]
                     )
                 }
-            } else if lowercaseName.contains("connect") && !lowercaseName.contains("disconnect") {
+            }
+            if wantsConnect || !named {
                 // Subscribe to WebSocketConnectedEvent
                 eventBus.subscribe(to: WebSocketConnectedEvent.self) { [weak self] event in
                     guard let self = self else { return }
                     await self.executeSocketHandler(
                         analyzedFS,
                         baseContext: baseContext,
+                        connectionId: event.connectionId,
+                        transport: "websocket",
                         eventData: [
                             "event": [
                                 "connectionId": event.connectionId,
@@ -192,13 +249,16 @@ extension ExecutionEngine {
                         ]
                     )
                 }
-            } else if lowercaseName.contains("disconnect") {
+            }
+            if wantsDisconnect || !named {
                 // Subscribe to WebSocketDisconnectedEvent
                 eventBus.subscribe(to: WebSocketDisconnectedEvent.self) { [weak self] event in
                     guard let self = self else { return }
                     await self.executeSocketHandler(
                         analyzedFS,
                         baseContext: baseContext,
+                        connectionId: event.connectionId,
+                        transport: "websocket",
                         eventData: [
                             "event": [
                                 "connectionId": event.connectionId,

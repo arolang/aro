@@ -10,6 +10,7 @@ Covers:
   - Convergence detection for the iterative loop      (issue #420)
   - Per-task regression detection across rounds       (issue #421)
   - Min-max per-task checkpoint selection             (issue #392)
+  - Disk-safe adapter fusing
 """
 
 import json
@@ -335,6 +336,191 @@ def load_json(path, default=None):
             return json.load(f)
     except Exception:
         return default
+
+
+# ── Fusing an adapter into a full model ──────────────────────────────────────
+# `mlx_lm fuse` writes a complete copy of the base model — ~57 GB for the 30B
+# bf16 Qwen3 — shard by shard, and only writes config.json at the very end. A
+# disk that fills mid-write gives
+#
+#     RuntimeError: [write] Unable to write 402653184 bytes to file.
+#
+# after the fuse has already spent several minutes, and leaves the half-written
+# shards behind: tens of GB that no selector will ever use (they look for
+# config.json) and nobody thinks to delete. The next run then starts with even
+# less room. `fuse_adapter` below checks the space BEFORE the fuse and removes
+# the partial output AFTER a failure, so a too-small disk costs a second, not
+# an hour, and never accumulates.
+
+FUSE_HEADROOM = 0.03    # +3% over the measured weight bytes: index/tokenizer
+                        # files and filesystem overhead
+
+
+def _weight_bytes(model_dir):
+    """Total bytes of the .safetensors shards in a model directory.
+
+    Returns 0 when the path is not a local directory (a bare HF repo id, say),
+    which callers read as "cannot estimate — skip the preflight".
+    """
+    d = Path(str(model_dir))
+    if not d.is_dir():
+        return 0
+    return sum(f.stat().st_size for f in d.glob('*.safetensors') if f.is_file())
+
+
+def free_bytes(path):
+    """Free bytes on the filesystem holding `path` (nearest existing parent)."""
+    import shutil as _shutil
+    p = Path(str(path)).resolve()
+    while not p.exists() and p.parent != p:
+        p = p.parent
+    return _shutil.disk_usage(p).free
+
+
+def fused_model_is_complete(save_path):
+    """True when `save_path` holds a fully written model.
+
+    mlx-lm writes the shards first and config.json last, so config.json alone
+    is a decent completeness marker — but a shard that failed mid-write can
+    still leave the file short, so every shard named in the index must exist
+    too.
+    """
+    d = Path(str(save_path))
+    if not (d / 'config.json').exists():
+        return False
+    index = d / 'model.safetensors.index.json'
+    if index.exists():
+        try:
+            with open(index) as f:
+                weight_map = json.load(f).get('weight_map', {})
+        except (OSError, ValueError):
+            return False
+        for shard in set(weight_map.values()):
+            f = d / shard
+            if not f.exists() or f.stat().st_size == 0:
+                return False
+        return True
+    return any(d.glob('*.safetensors'))
+
+
+def describe_fuse_space(model_path, save_path):
+    """(need_bytes, free_bytes, ok) for fusing `model_path` into `save_path`.
+
+    `need` is 0 when the source size cannot be measured; `ok` is then True —
+    an unmeasurable source is not a reason to refuse to try.
+    """
+    need = int(_weight_bytes(model_path) * (1 + FUSE_HEADROOM))
+    free = free_bytes(Path(str(save_path)).parent)
+    return need, free, (need == 0 or free >= need)
+
+
+def fuse_adapter(model_path, adapter_path, save_path, python=None,
+                 extra_args=(), log=print, check_space=True):
+    """Fuse a LoRA adapter into a full model, safely on a finite disk.
+
+    Removes any existing output first (its bytes count toward the space the
+    new copy needs), refuses up front when the filesystem cannot hold the
+    result, and deletes a partial output when the fuse fails, so a failure
+    leaves the disk as it found it.
+
+    Returns the save path. Raises RuntimeError with the GB numbers on a
+    space failure, so the message says what to free rather than which byte
+    count could not be written.
+    """
+    import shutil as _shutil
+    import subprocess as _subprocess
+    import sys as _sys
+
+    python = python or _sys.executable
+    model_path, adapter_path = str(model_path), str(adapter_path)
+    save = Path(str(save_path))
+
+    # An existing output — complete or half-written — is about to be replaced.
+    # Delete it first: its bytes are space the new copy can use.
+    if save.exists():
+        freed = sum(f.stat().st_size for f in save.rglob('*') if f.is_file())
+        state = 'complete' if fused_model_is_complete(save) else 'PARTIAL'
+        log(f'Removing existing {state} output at {save} '
+            f'({freed / 1e9:.1f} GB reclaimed)')
+        _shutil.rmtree(save, ignore_errors=True)
+
+    need, free, ok = describe_fuse_space(model_path, save)
+    if need:
+        log(f'Fuse needs ~{need / 1e9:.1f} GB, {free / 1e9:.1f} GB free '
+            f'on {save.parent}')
+    if check_space and not ok:
+        import platform as _platform
+        # macOS keeps the blocks of recently deleted files in Time Machine
+        # local snapshots, where they count as used rather than free until the
+        # snapshot ages out. Deleting a 60 GB model can therefore appear to
+        # free nothing; `tmutil listlocalsnapshots /` shows whether that is
+        # what is happening.
+        snapshot_note = (
+            ' On macOS, space freed by deleting large files stays in Time '
+            'Machine local snapshots until they expire \u2014 check '
+            '`tmutil listlocalsnapshots /`; that space is purgeable and this '
+            'check does not count it.'
+            if _platform.system() == 'Darwin' else '')
+        raise RuntimeError(
+            f'Not enough disk space to fuse: need ~{need / 1e9:.1f} GB for '
+            f'{save}, only {free / 1e9:.1f} GB free. Free at least '
+            f'{(need - free) / 1e9:.1f} GB — old fused models under '
+            f'{save.parent.parent} and intermediate *_adapters.safetensors '
+            f'checkpoints are the usual candidates — or pass '
+            f'check_space=False to try anyway.{snapshot_note}')
+
+    cmd = [python, '-m', 'mlx_lm', 'fuse',
+           '--model', model_path,
+           '--adapter-path', adapter_path,
+           '--save-path', str(save), *extra_args]
+    log(' '.join(cmd))
+    rc = _subprocess.run(cmd).returncode
+
+    if rc != 0 or not fused_model_is_complete(save):
+        partial = 0
+        if save.exists():
+            partial = sum(f.stat().st_size for f in save.rglob('*') if f.is_file())
+            _shutil.rmtree(save, ignore_errors=True)
+        now_free = free_bytes(save.parent)
+        detail = (f'exit code {rc}' if rc != 0
+                  else 'exit code 0 but the output is incomplete')
+        hint = ''
+        if need and now_free < need:
+            hint = (f' The filesystem has {now_free / 1e9:.1f} GB free and the '
+                    f'fuse needs ~{need / 1e9:.1f} GB — out of disk.')
+        raise RuntimeError(
+            f'Fuse failed ({detail}); removed {partial / 1e9:.1f} GB of '
+            f'partial output at {save}.{hint}')
+
+    total = sum(f.stat().st_size for f in save.rglob('*') if f.is_file())
+    log(f'Fused model saved to {save} ({total / 1e9:.1f} GB)')
+    return save
+
+
+def prune_adapter_checkpoints(adapter_dir, keep=0, log=print):
+    """Delete intermediate NNNNNNN_adapters.safetensors checkpoints.
+
+    Call only once the adapter has been fused or the best checkpoint promoted
+    to adapters.safetensors — `find_resume_checkpoint` reads these files, so
+    pruning them forfeits resume for that run. `keep` retains the N highest
+    iteration numbers. Returns the bytes reclaimed.
+    """
+    d = Path(str(adapter_dir))
+    ckpts = []
+    for f in d.glob('*_adapters.safetensors'):
+        m = _CKPT_RE.match(f.name)
+        if m:
+            ckpts.append((int(m.group(1)), f))
+    ckpts.sort()
+    doomed = ckpts[:-keep] if keep else ckpts
+    freed = 0
+    for _, f in doomed:
+        freed += f.stat().st_size
+        f.unlink()
+    if freed:
+        log(f'Pruned {len(doomed)} adapter checkpoint(s) from {d} '
+            f'({freed / 1e9:.1f} GB reclaimed)')
+    return freed
 
 
 # ── Training-meta contamination denylist (aro ask self-reference bug) ────────

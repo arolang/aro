@@ -1,0 +1,5 @@
+# Test hints for PathOperations (ARO-0036 §9/§10, GitLab #861)
+# The example creates and removes its own marker file.
+mode: both
+occurrence-check: true
+skip-on-windows: POSIX permissions are not a Windows concept (ARO-0036 §10.3)

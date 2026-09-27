@@ -57,25 +57,25 @@ aro build ./Examples/ExternalService
 ## Example Output
 
 ```
-[Application-Start] === External Service Demo ===
-[Application-Start] Demonstrating stateful service calls...
-[Application-Start]
-[Application-Start] Step 1: Increment counter
-[Application-Start] Current count:
-[Application-Start] 1
-[Application-Start]
-[Application-Start] Step 2: Increment counter again
-[Application-Start] Current count:
-[Application-Start] 2
-[Application-Start]
-[Application-Start] Step 3: Get current count
-[Application-Start] Current count:
-[Application-Start] 2
-[Application-Start]
-[Application-Start] State persisted across calls: 0 -> 1 -> 2
-[Application-Start] This demonstrates why Call exists!
+=== External Service Demo ===
+Demonstrating stateful service calls...
+
+Step 1: Increment counter
+Current count:
+1
+
+Step 2: Increment counter again
+Current count:
+2
+
+Step 3: Get current count
+Current count:
+2
+
+State persisted across calls: 0 -> 1 -> 2
+This demonstrates why Call exists!
 [OK] startup
-[Application-End] External service demo completed.
+External service demo completed.
 [OK] shutdown
 ```
 

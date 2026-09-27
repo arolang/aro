@@ -28,7 +28,7 @@ struct WhereChainingTests {
 
     @Test("The issue's repro: and-chained Filter binds, no 'Undefined variable'")
     func andChainedFilter() async {
-        let session = REPLSession(suppressLogPrefix: true)
+        let session = REPLSession()
         let engine = REPLCellEngine(session: session)
 
         _ = await engine.executeCell(Self.orders)
@@ -40,7 +40,7 @@ struct WhereChainingTests {
 
     @Test("or keeps every row matching either side")
     func orChainedFilter() async {
-        let session = REPLSession(suppressLogPrefix: true)
+        let session = REPLSession()
         let engine = REPLCellEngine(session: session)
 
         _ = await engine.executeCell(Self.orders)
@@ -52,7 +52,7 @@ struct WhereChainingTests {
 
     @Test("Parentheses override and-over-or precedence")
     func parenthesizedFilter() async {
-        let session = REPLSession(suppressLogPrefix: true)
+        let session = REPLSession()
         let engine = REPLCellEngine(session: session)
 
         _ = await engine.executeCell(Self.orders)
@@ -65,7 +65,7 @@ struct WhereChainingTests {
 
     @Test("and binds tighter than or")
     func precedenceMatchesARO0018() async {
-        let session = REPLSession(suppressLogPrefix: true)
+        let session = REPLSession()
         let engine = REPLCellEngine(session: session)
 
         _ = await engine.executeCell(Self.orders)
@@ -79,7 +79,7 @@ struct WhereChainingTests {
 
     @Test("An and-chain equals the same predicates as chained Filters")
     func chainedFilterEquivalence() async {
-        let session = REPLSession(suppressLogPrefix: true)
+        let session = REPLSession()
         let engine = REPLCellEngine(session: session)
 
         _ = await engine.executeCell(Self.orders)
@@ -98,7 +98,7 @@ struct WhereChainingTests {
 
     @Test("between filters an inclusive range")
     func betweenFilter() async {
-        let session = REPLSession(suppressLogPrefix: true)
+        let session = REPLSession()
         let engine = REPLCellEngine(session: session)
 
         _ = await engine.executeCell(Self.orders)
@@ -110,7 +110,7 @@ struct WhereChainingTests {
 
     @Test("Repository Retrieve shares the condition tree")
     func repositoryRetrieveChains() async {
-        let session = REPLSession(suppressLogPrefix: true)
+        let session = REPLSession()
         let engine = REPLCellEngine(session: session)
 
         _ = await engine.executeCell(
@@ -134,7 +134,7 @@ struct WhereChainingTests {
 
     @Test("A malformed where clause is a parse error, not 'Undefined variable'")
     func malformedWhereFailsTheParse() async {
-        let session = REPLSession(suppressLogPrefix: true)
+        let session = REPLSession()
         let engine = REPLCellEngine(session: session)
 
         _ = await engine.executeCell(Self.orders)

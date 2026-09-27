@@ -36,20 +36,36 @@ RUN if [ "$TARGETARCH" = "arm64" ]; then \
 RUN printf 'Acquire::Retries "8";\nAcquire::http::Timeout "30";\nAcquire::https::Timeout "30";\n' \
       > /etc/apt/apt.conf.d/99-aro-retries
 
-# Install build dependencies including LLVM 20
+# Install build dependencies including LLVM 20.
+#
+# The LLVM apt repository is added by hand rather than through
+# `apt.llvm.org/llvm.sh`, and that is the whole fix for the arm64 build.
+# `llvm.sh` calls `add-apt-repository`, which lives in
+# `software-properties-common`, which pulls in the systemd/dbus chain. Those
+# packages' postinst scripts try to take over `/etc/resolv.conf` and to talk to
+# a system message bus, and inside a container under QEMU emulation both fail:
+#
+#   ln: failed to create symbolic link '/etc/resolv.conf': Device or resource busy
+#   Failed to open connection to "system" message bus
+#
+# apt then exits 2 and the whole layer fails. Adding the repository is three
+# lines of keyring and sources.list, needs neither package, and does exactly
+# what `llvm.sh` would have done.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libcurl4-openssl-dev \
     libssl-dev \
+    ca-certificates \
     wget \
     gnupg \
     pkg-config \
     git \
-    lsb-release \
-    software-properties-common \
     libzstd-dev \
     libgit2-dev \
     libzmq3-dev \
-    && wget -qO- https://apt.llvm.org/llvm.sh | bash -s 20 \
+    && wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key \
+         | gpg --dearmor -o /usr/share/keyrings/llvm-archive-keyring.gpg \
+    && echo "deb [signed-by=/usr/share/keyrings/llvm-archive-keyring.gpg] http://apt.llvm.org/jammy/ llvm-toolchain-jammy-20 main" > /etc/apt/sources.list.d/llvm-20.list \
+    && apt-get update \
     && apt-get install -y --no-install-recommends llvm-20-dev clang-20 \
     && ln -sf /usr/bin/llc-20 /usr/bin/llc \
     && ln -sf /usr/bin/clang-20 /usr/bin/clang \

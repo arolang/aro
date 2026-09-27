@@ -39,7 +39,7 @@ public enum ActionCatalog {
         // Response actions
         "return", "throw", "emit", "send", "log", "store", "write", "publish",
         // Server actions
-        "start", "listen", "route", "watch", "stop", "keepalive", "broadcast",
+        "start", "listen", "stop", "keepalive", "broadcast",
         "connect",
         // External call
         "call",
@@ -50,7 +50,7 @@ public enum ActionCatalog {
         // System exec (ARO-0010)
         "exec", "shell",
         // Repository
-        "delete", "merge", "combine", "join", "concat", "close",
+        "delete", "merge", "combine", "join", "close",
         // String (ARO-0037)
         "split",
         // File operations (ARO-0036)
@@ -58,6 +58,8 @@ public enum ActionCatalog {
         "copy", "move", "rename", "append",
         // Configuration
         "configure",
+        // Repository scope (ARO-0094)
+        "attach",
         // Notifications
         "notify", "alert", "signal",
         // SSE / WebSocket streaming

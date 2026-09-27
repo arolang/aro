@@ -31,11 +31,17 @@ This proposal documents the root causes, the required code changes, and the upda
 | HTTP POST `/broadcast` | ✅ Works | ✅ Works |
 | Socket echo (data → echo) | ✅ Works | ✅ Works |
 | Socket broadcast via HTTP | ✅ Works | ✅ Works |
-| Socket connect welcome message | ❌ Never fires | ✅ Works |
-| Socket disconnect log | ❌ Never fires | ✅ Works |
-| File created handler | ❓ Needs verification | ✅ Works |
-| File modified handler | ❓ Needs verification | ✅ Works |
-| File deleted handler | ❓ Needs verification | ✅ Works |
+| Socket connect welcome message | ✅ Works (#881) | ✅ Works |
+| Socket disconnect log | ✅ Works (#881) | ✅ Works |
+| File created handler | ✅ Works (#693) | ✅ Works |
+| File modified handler | ✅ Works (#693) | ✅ Works |
+| File deleted handler | ✅ Works (#693) | ✅ Works |
+| File events come from the watched directory | ❌ Watches the working directory (#882) | ✅ Works |
+
+The socket echo was "✅ Works" for the wrong reason until #881: the bridge
+broadcast every datagram it received, so `EchoSocket` echoed without its
+`Handle Data Received` ever running — and any program that did not want a
+broadcast got one anyway. The handler does the echoing now.
 
 ---
 

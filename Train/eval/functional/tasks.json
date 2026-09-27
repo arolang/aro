@@ -1,55 +1,62 @@
 {
-  "_doc": "Functional benchmark for GitLab #813. Each task is graded by RUNNING the generated program, not by parsing it. `grade_by` is 'execution_output' (the program must run and print the expected output, compared the way Tests/IntegrationTestsRunner compares an example against its expected.txt) or 'aro_test' (the generated application must pass the Given/When/Then file in `test`, which asserts values rather than printing). `reference` is a solution verified against the toolchain; `python3 Train/script/functional_eval.py --reference` re-verifies every one of them and is the guard against the benchmark rotting.",
-  "_version": "1-2026-09-21",
+  "_doc": "Functional benchmark for GitLab #813. Each task is graded by RUNNING the generated program, not by parsing it. `grade_by` is 'execution_output' (the program must run and print the expected output, compared the way Tests/IntegrationTestsRunner compares an example against its expected.txt) or 'aro_test' (the generated application must pass the Given/When/Then file in `test`, which asserts values rather than printing). `reference` is a solution verified against the toolchain; `python3 Train/script/functional_eval.py --reference` re-verifies every one of them and is the guard against the benchmark rotting.\n\nEach task also carries a `job`: 'write' (produce a program from a description), 'fix' (repair a broken one) or 'question' (answer a question about ARO in prose). These are the three things `aro ask` has to do, and `summarise()` reports a pass rate per job — a base model that writes well and cannot debug is a different result from one that debugs well and cannot write (GitLab #794). A 'question' task is graded by `grade_by: doc_qa` against a `must_include` / `must_not_include` rubric: no judge model, reproducible, and aimed squarely at the confident wrong answer.",
+  "_version": "2-2026-09-26",
   "tasks": [
     {
       "id": "log-hello",
       "prompt": "Write a complete ARO application whose Application-Start logs exactly `Hello, ARO.` to the console.",
       "grade_by": "execution_output",
       "expected_output": "Hello, ARO.",
-      "reference": "(Application-Start: Greeting) {\n    Log \"Hello, ARO.\" to the <console>.\n    Return an <OK: status> for the <startup>.\n}\n"
+      "reference": "(Application-Start: Greeting) {\n    Log \"Hello, ARO.\" to the <console>.\n    Return an <OK: status> for the <startup>.\n}\n",
+      "job": "write"
     },
     {
       "id": "arithmetic-total",
       "prompt": "Write a complete ARO application that computes 7 * 6 and logs the result to the console, then returns OK.",
       "grade_by": "execution_output",
       "expected_output": "42",
-      "reference": "(Application-Start: Arithmetic) {\n    Compute the <total> from 7 * 6.\n    Log <total> to the <console>.\n    Return an <OK: status> for the <startup>.\n}\n"
+      "reference": "(Application-Start: Arithmetic) {\n    Compute the <total> from 7 * 6.\n    Log <total> to the <console>.\n    Return an <OK: status> for the <startup>.\n}\n",
+      "job": "write"
     },
     {
       "id": "string-uppercase",
       "prompt": "Write a complete ARO application that uppercases the string \"aro\" and logs it to the console.",
       "grade_by": "execution_output",
       "expected_output": "ARO",
-      "reference": "(Application-Start: Shout) {\n    Create the <word> with \"aro\".\n    Compute the <loud: uppercase> from <word>.\n    Log <loud> to the <console>.\n    Return an <OK: status> for the <startup>.\n}\n"
+      "reference": "(Application-Start: Shout) {\n    Create the <word> with \"aro\".\n    Compute the <loud: uppercase> from <word>.\n    Log <loud> to the <console>.\n    Return an <OK: status> for the <startup>.\n}\n",
+      "job": "write"
     },
     {
       "id": "collection-sum",
       "prompt": "Write a complete ARO application that sums the list [10, 20, 30, 40] and logs the total to the console.",
       "grade_by": "execution_output",
       "expected_output": "100",
-      "reference": "(Application-Start: Totals) {\n    Create the <amounts> with [10, 20, 30, 40].\n    Compute the <total: sum> from <amounts>.\n    Log <total> to the <console>.\n    Return an <OK: status> for the <startup>.\n}\n"
+      "reference": "(Application-Start: Totals) {\n    Create the <amounts> with [10, 20, 30, 40].\n    Compute the <total: sum> from <amounts>.\n    Log <total> to the <console>.\n    Return an <OK: status> for the <startup>.\n}\n",
+      "job": "write"
     },
     {
       "id": "collection-average",
       "prompt": "Write a complete ARO application that computes the average of [10, 20, 30] and logs it to the console.",
       "grade_by": "execution_output",
       "expected_output": "20",
-      "reference": "(Application-Start: Averages) {\n    Create the <scores> with [10, 20, 30].\n    Compute the <mean: avg> from <scores>.\n    Log <mean> to the <console>.\n    Return an <OK: status> for the <startup>.\n}\n"
+      "reference": "(Application-Start: Averages) {\n    Create the <scores> with [10, 20, 30].\n    Compute the <mean: avg> from <scores>.\n    Log <mean> to the <console>.\n    Return an <OK: status> for the <startup>.\n}\n",
+      "job": "write"
     },
     {
       "id": "iteration-names",
       "prompt": "Write a complete ARO application that logs each of the names Alice, Bob and Carol on its own line, in that order, using a for each loop.",
       "grade_by": "execution_output",
       "expected_output": "Alice\nBob\nCarol",
-      "reference": "(Application-Start: Roll Call) {\n    Create the <names> with [\"Alice\", \"Bob\", \"Carol\"].\n    for each <name> in <names> {\n        Log <name> to the <console>.\n    }\n    Return an <OK: status> for the <startup>.\n}\n"
+      "reference": "(Application-Start: Roll Call) {\n    Create the <names> with [\"Alice\", \"Bob\", \"Carol\"].\n    for each <name> in <names> {\n        Log <name> to the <console>.\n    }\n    Return an <OK: status> for the <startup>.\n}\n",
+      "job": "write"
     },
     {
       "id": "guard-when",
       "prompt": "Write a complete ARO application that creates a score of 80 and logs the word `pass` to the console only when the score is 50 or more.",
       "grade_by": "execution_output",
       "expected_output": "pass",
-      "reference": "(Application-Start: Grading) {\n    Create the <score> with 80.\n    Log \"pass\" to the <console> when <score> >= 50.\n    Return an <OK: status> for the <startup>.\n}\n"
+      "reference": "(Application-Start: Grading) {\n    Create the <score> with 80.\n    Log \"pass\" to the <console> when <score> >= 50.\n    Return an <OK: status> for the <startup>.\n}\n",
+      "job": "write"
     },
     {
       "id": "file-line-count",
@@ -59,77 +66,185 @@
         "sample.txt": "alpha\nbeta\ngamma\n"
       },
       "expected_output": "3",
-      "reference": "(Application-Start: Line Count) {\n    Read the <content: raw> from \"./sample.txt\".\n    Compute the <lines: lines> from <content>.\n    Compute the <count: length> from <lines>.\n    Log <count> to the <console>.\n    Return an <OK: status> for the <startup>.\n}\n"
+      "reference": "(Application-Start: Line Count) {\n    Read the <content: raw> from \"./sample.txt\".\n    Compute the <lines: lines> from <content>.\n    Compute the <count: length> from <lines>.\n    Log <count> to the <console>.\n    Return an <OK: status> for the <startup>.\n}\n",
+      "job": "write"
     },
     {
       "id": "user-defined-action",
       "prompt": "Write a complete ARO application with a user-defined action called Double that takes a number and returns it doubled as the field `doubled`, and an Application-Start that calls it with 21 and logs the result.",
       "grade_by": "execution_output",
       "expected_output": "42",
-      "reference": "(Double: Action takes <number>) {\n    Extract the <n> from the <input: number>.\n    Compute the <doubled> from <n> * 2.\n    Return an <OK: status> with { doubled: <doubled> }.\n}\n\n(Application-Start: Doubler) {\n    Application.Double the <r> from 21.\n    Extract the <value> from the <r: doubled>.\n    Log <value> to the <console>.\n    Return an <OK: status> for the <startup>.\n}\n"
+      "reference": "(Double: Action takes <number>) {\n    Extract the <n> from the <input: number>.\n    Compute the <doubled> from <n> * 2.\n    Return an <OK: status> with { doubled: <doubled> }.\n}\n\n(Application-Start: Doubler) {\n    Application.Double the <r> from 21.\n    Extract the <value> from the <r: doubled>.\n    Log <value> to the <console>.\n    Return an <OK: status> for the <startup>.\n}\n",
+      "job": "write"
     },
     {
       "id": "unique-tags",
       "prompt": "Write a complete ARO application that removes duplicates from the list [\"red\", \"blue\", \"red\", \"green\"] and logs how many distinct values remain.",
       "grade_by": "execution_output",
       "expected_output": "3",
-      "reference": "(Application-Start: Tags) {\n    Create the <all-tags> with [\"red\", \"blue\", \"red\", \"green\"].\n    Compute the <tags: unique> from <all-tags>.\n    Compute the <count: length> from <tags>.\n    Log <count> to the <console>.\n    Return an <OK: status> for the <startup>.\n}\n"
+      "reference": "(Application-Start: Tags) {\n    Create the <all-tags> with [\"red\", \"blue\", \"red\", \"green\"].\n    Compute the <tags: unique> from <all-tags>.\n    Compute the <count: length> from <tags>.\n    Log <count> to the <console>.\n    Return an <OK: status> for the <startup>.\n}\n",
+      "job": "write"
     },
     {
       "id": "join-csv",
       "prompt": "Write a complete ARO application that joins the list [\"a\", \"b\", \"c\"] into one string separated by \", \" and logs it.",
       "grade_by": "execution_output",
       "expected_output": "a, b, c",
-      "reference": "(Application-Start: Joining) {\n    Create the <items> with [\"a\", \"b\", \"c\"].\n    Compute the <line: join> from <items> with { separator: \", \" }.\n    Log <line> to the <console>.\n    Return an <OK: status> for the <startup>.\n}\n"
+      "reference": "(Application-Start: Joining) {\n    Create the <items> with [\"a\", \"b\", \"c\"].\n    Compute the <line: join> from <items> with { separator: \", \" }.\n    Log <line> to the <console>.\n    Return an <OK: status> for the <startup>.\n}\n",
+      "job": "write"
     },
     {
       "id": "filter-adults",
       "prompt": "Write a complete ARO application with a list of people, each an object with name and age, and log the name of every person aged 18 or over, one per line. Use Alice aged 30, Bob aged 12 and Carol aged 18.",
       "grade_by": "execution_output",
       "expected_output": "Alice\nCarol",
-      "reference": "(Application-Start: Adults) {\n    Create the <people> with [{ name: \"Alice\", age: 30 }, { name: \"Bob\", age: 12 }, { name: \"Carol\", age: 18 }].\n    Filter the <adults> from the <people> where <age> >= 18.\n    for each <person> in <adults> {\n        Log <person: name> to the <console>.\n    }\n    Return an <OK: status> for the <startup>.\n}\n"
+      "reference": "(Application-Start: Adults) {\n    Create the <people> with [{ name: \"Alice\", age: 30 }, { name: \"Bob\", age: 12 }, { name: \"Carol\", age: 18 }].\n    Filter the <adults> from the <people> where <age> >= 18.\n    for each <person> in <adults> {\n        Log <person: name> to the <console>.\n    }\n    Return an <OK: status> for the <startup>.\n}\n",
+      "job": "write"
     },
     {
       "id": "test-string-length",
       "prompt": "Write an ARO application with a feature set named `get-length` in the business activity `String Utils` that computes the length of a variable named `text` and returns it. Also include an Application-Start that returns OK.",
       "grade_by": "aro_test",
       "test": "(length-of-hello: String Utils Test) {\n    Given the <text> with \"hello\".\n    When the <len> from the <get-length>.\n    Then the <len> with 5.\n}\n\n(length-of-blank: String Utils Test) {\n    Given the <text> with \"\".\n    When the <len> from the <get-length>.\n    Then the <len> with 0.\n}\n",
-      "reference": "(Application-Start: String Utils Demo) {\n    Return an <OK: status> for the <startup>.\n}\n\n(get-length: String Utils) {\n    Compute the <len: length> from <text>.\n    Return an <OK: status> with <len>.\n}\n"
+      "reference": "(Application-Start: String Utils Demo) {\n    Return an <OK: status> for the <startup>.\n}\n\n(get-length: String Utils) {\n    Compute the <len: length> from <text>.\n    Return an <OK: status> with <len>.\n}\n",
+      "job": "write"
     },
     {
       "id": "test-cart-total",
       "prompt": "Write an ARO application with a feature set named `cart-total` in the business activity `Cart` that sums a list variable named `prices` into a result named `total` and returns it. Include an Application-Start that returns OK.",
       "grade_by": "aro_test",
       "test": "(sums-prices: Cart Test) {\n    Given the <prices> with [1, 2, 3].\n    When the <total> from the <cart-total>.\n    Then the <total> with 6.\n}\n\n(no-items: Cart Test) {\n    Given the <prices> with [].\n    When the <total> from the <cart-total>.\n    Then the <total> with 0.\n}\n",
-      "reference": "(Application-Start: Cart Demo) {\n    Return an <OK: status> for the <startup>.\n}\n\n(cart-total: Cart) {\n    Compute the <total: sum> from <prices>.\n    Return an <OK: status> with <total>.\n}\n"
+      "reference": "(Application-Start: Cart Demo) {\n    Return an <OK: status> for the <startup>.\n}\n\n(cart-total: Cart) {\n    Compute the <total: sum> from <prices>.\n    Return an <OK: status> with <total>.\n}\n",
+      "job": "write"
     },
     {
       "id": "repository-store-and-read",
       "prompt": "Write a complete ARO application that stores two users in the user-repository and then logs how many users it holds.",
       "grade_by": "execution_output",
       "expected_output": "2",
-      "reference": "(Application-Start: Users) {\n    Store the <first> to the <user-repository> with { id: 1, name: \"Alice\" }.\n    Store the <second> to the <user-repository> with { id: 2, name: \"Bob\" }.\n    Retrieve the <users> from the <user-repository>.\n    Compute the <count: length> from <users>.\n    Log <count> to the <console>.\n    Return an <OK: status> for the <startup>.\n}\n"
+      "reference": "(Application-Start: Users) {\n    Store the <first> to the <user-repository> with { id: 1, name: \"Alice\" }.\n    Store the <second> to the <user-repository> with { id: 2, name: \"Bob\" }.\n    Retrieve the <users> from the <user-repository>.\n    Compute the <count: length> from <users>.\n    Log <count> to the <console>.\n    Return an <OK: status> for the <startup>.\n}\n",
+      "job": "write"
     },
     {
       "id": "event-handler",
       "prompt": "Write a complete ARO application that emits an OrderPlaced event carrying an order, with a handler feature set that logs `order received` when the event arrives.",
       "grade_by": "execution_output",
       "expected_output": "order received",
-      "reference": "(Application-Start: Orders) {\n    Create the <order> with { id: 7 }.\n    Emit an <OrderPlaced: event> with <order>.\n    Return an <OK: status> for the <startup>.\n}\n\n(Handle Order: OrderPlaced Handler) {\n    Log \"order received\" to the <console>.\n    Return an <OK: status> for the <notification>.\n}\n"
+      "reference": "(Application-Start: Orders) {\n    Create the <order> with { id: 7 }.\n    Emit an <OrderPlaced: event> with <order>.\n    Return an <OK: status> for the <startup>.\n}\n\n(Handle Order: OrderPlaced Handler) {\n    Log \"order received\" to the <console>.\n    Return an <OK: status> for the <notification>.\n}\n",
+      "job": "write"
     },
     {
       "id": "sorted-scores",
       "prompt": "Write a complete ARO application that sorts the list [3, 1, 2] and logs each value on its own line, smallest first.",
       "grade_by": "execution_output",
       "expected_output": "1\n2\n3",
-      "reference": "(Application-Start: Sorting) {\n    Create the <values> with [3, 1, 2].\n    Sort the <sorted> for the <values>.\n    for each <v> in <sorted> {\n        Log <v> to the <console>.\n    }\n    Return an <OK: status> for the <startup>.\n}\n"
+      "reference": "(Application-Start: Sorting) {\n    Create the <values> with [3, 1, 2].\n    Sort the <sorted> for the <values>.\n    for each <v> in <sorted> {\n        Log <v> to the <console>.\n    }\n    Return an <OK: status> for the <startup>.\n}\n",
+      "job": "write"
     },
     {
       "id": "test-discount",
       "prompt": "Write an ARO application with a feature set named `apply-discount` in the business activity `Pricing` that multiplies a variable named `price` by 0.9 and returns the result as `discounted`. Include an Application-Start that returns OK.",
       "grade_by": "aro_test",
       "test": "(ten-percent-off: Pricing Test) {\n    Given the <price> with 100.\n    When the <discounted> from the <apply-discount>.\n    Then the <discounted> with 90.\n}\n",
-      "reference": "(Application-Start: Pricing Demo) {\n    Return an <OK: status> for the <startup>.\n}\n\n(apply-discount: Pricing) {\n    Compute the <discounted> from <price> * 0.9.\n    Return an <OK: status> with <discounted>.\n}\n"
+      "reference": "(Application-Start: Pricing Demo) {\n    Return an <OK: status> for the <startup>.\n}\n\n(apply-discount: Pricing) {\n    Compute the <discounted> from <price> * 0.9.\n    Return an <OK: status> with <discounted>.\n}\n",
+      "job": "write"
+    },
+    {
+      "id": "fix-missing-period",
+      "job": "fix",
+      "grade_by": "execution_output",
+      "prompt": "This ARO program does not compile. Fix it and return the whole corrected program.\n\n(Application-Start: Greeting) {\n    Log \"Hello, ARO.\" to the <console>\n    Return an <OK: status> for the <startup>.\n}",
+      "expected_output": "Hello, ARO.",
+      "reference": "(Application-Start: Greeting) {\n    Log \"Hello, ARO.\" to the <console>.\n    Return an <OK: status> for the <startup>.\n}\n"
+    },
+    {
+      "id": "fix-rebind-immutable",
+      "job": "fix",
+      "grade_by": "execution_output",
+      "prompt": "This ARO program fails because ARO variables are immutable. Fix it and return the whole corrected program. It must print 20.\n\n(Application-Start: Doubling) {\n    Compute the <total> from 5 * 2.\n    Compute the <total> from <total> * 2.\n    Log <total> to the <console>.\n    Return an <OK: status> for the <startup>.\n}",
+      "expected_output": "20",
+      "reference": "(Application-Start: Doubling) {\n    Compute the <total> from 5 * 2.\n    Compute the <doubled> from <total> * 2.\n    Log <doubled> to the <console>.\n    Return an <OK: status> for the <startup>.\n}\n"
+    },
+    {
+      "id": "fix-unknown-qualifier",
+      "job": "fix",
+      "grade_by": "execution_output",
+      "prompt": "This ARO program uses a Compute qualifier that does not exist. Fix it and return the whole corrected program. It must print the number of lines, 3.\n\n(Application-Start: Counting) {\n    Create the <text> with \"a\\nb\\nc\".\n    Compute the <n: linecount> from <text>.\n    Log <n> to the <console>.\n    Return an <OK: status> for the <startup>.\n}",
+      "expected_output": "3",
+      "reference": "(Application-Start: Counting) {\n    Create the <text> with \"a\\nb\\nc\".\n    Compute the <ls: lines> from <text>.\n    Compute the <n: length> from <ls>.\n    Log <n> to the <console>.\n    Return an <OK: status> for the <startup>.\n}\n"
+    },
+    {
+      "id": "q-publish-scope",
+      "job": "question",
+      "grade_by": "doc_qa",
+      "prompt": "In ARO, how do you make a variable produced in one feature set visible to another, and what limits that visibility?",
+      "must_include": [
+        "publish",
+        "business activity"
+      ],
+      "must_not_include": [
+        "global to the whole application",
+        "visible everywhere"
+      ],
+      "reference": "Use `Publish as <alias> <variable>.`. A published variable is visible to other feature sets that share the same business activity — not to the whole application."
+    },
+    {
+      "id": "q-retrieve-miss",
+      "job": "question",
+      "grade_by": "doc_qa",
+      "prompt": "What happens in ARO when a Retrieve from a repository matches no rows? Does the statement fail?",
+      "must_include": [
+        "empty"
+      ],
+      "must_not_include": [
+        "throws an error",
+        "fails the statement",
+        "raises"
+      ],
+      "reference": "It does not fail. A Retrieve that matches nothing binds an empty list; with a where clause matching exactly one row it binds that record. Guard on the result — the statement will not fail for you."
+    },
+    {
+      "id": "q-entry-point",
+      "job": "question",
+      "grade_by": "doc_qa",
+      "prompt": "How many Application-Start feature sets may an ARO application have, and what happens otherwise?",
+      "must_include": [
+        "exactly one"
+      ],
+      "must_not_include": [
+        "as many as you like",
+        "optional"
+      ],
+      "reference": "Exactly one Application-Start feature set per application. Zero or several is an error reported at load time."
+    },
+    {
+      "id": "q-happy-path",
+      "job": "question",
+      "grade_by": "doc_qa",
+      "prompt": "Explain ARO's error philosophy. Does an ARO program contain error-handling branches?",
+      "must_include": [
+        "happy"
+      ],
+      "must_not_include": [
+        "try",
+        "catch"
+      ],
+      "reference": "ARO code contains only the happy path. The runtime reconstructs a failed statement with its values, so there are no error-handling branches to write."
+    },
+    {
+      "id": "q-http-contract",
+      "job": "question",
+      "grade_by": "doc_qa",
+      "prompt": "What is required for an ARO application to serve HTTP routes, and how is a route connected to the code that handles it?",
+      "must_include": [
+        "openapi",
+        "operationid"
+      ],
+      "must_not_include": [
+        "annotation",
+        "decorator"
+      ],
+      "reference": "An openapi.yaml contract is required — without one the HTTP server does not start. Each route's operationId names the feature set that handles it."
     }
   ]
 }

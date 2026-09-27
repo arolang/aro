@@ -23,8 +23,22 @@ public struct DataFlowAnalyzer {
 
     private let diagnostics: DiagnosticCollector
 
-    public init(diagnostics: DiagnosticCollector) {
+    /// Names that are already bound outside the source being analyzed.
+    ///
+    /// A REPL or notebook cell is compiled on its own, wrapped in a throwaway
+    /// feature set, while the values it refers to live in the session. Reading
+    /// such a name is only a warning, so every other statement worked — but
+    /// `Publish` *errors* on an undefined variable, so `Publish as <x> <w>.`
+    /// failed for a `<w>` bound in an earlier cell, which is precisely the
+    /// cross-cell operation `Publish` exists for (GitLab #689).
+    ///
+    /// Empty for an ordinary compile, where a name not defined in the source
+    /// genuinely is not defined.
+    private let preboundSymbols: Set<String>
+
+    public init(diagnostics: DiagnosticCollector, preboundSymbols: Set<String> = []) {
         self.diagnostics = diagnostics
+        self.preboundSymbols = preboundSymbols
     }
 
     // MARK: - Feature Set Analysis
@@ -32,7 +46,14 @@ public struct DataFlowAnalyzer {
     /// Analyzes a single feature set, returning symbol table, data flows, dependencies, and exports
     public func analyzeFeatureSet(_ featureSet: FeatureSet) -> AnalyzedFeatureSet {
         let builder = SymbolTableBuilder(
-            scopeId: "fs-\(featureSet.name.hashValue)",
+            // The name, not its `hashValue` (GitLab #667). Swift seeds
+            // `hashValue` per process, so the same feature set got a different
+            // scope id on every run — and anything that compares or persists
+            // one across runs (debug recordings, LSP snapshots, `aro diff`
+            // output) saw two unrelated scopes where there was one. A feature
+            // set's name is already unique within an application, which is
+            // what the id needs to be.
+            scopeId: "fs-\(featureSet.name)",
             scopeName: featureSet.name
         )
 
@@ -261,9 +282,39 @@ public struct DataFlowAnalyzer {
             )
         }
 
+        /// A pipeline is its stages (GitLab #666).
+        ///
+        /// This returned an empty result, so every `|>` stage was invisible:
+        /// the results they bind were never defined in the symbol table, and a
+        /// later `Compute … from <stage-result>` warned "used before
+        /// definition" about a variable the pipeline had just produced. The
+        /// variables a pipeline *reads* were equally invisible, so a genuinely
+        /// undefined name inside one went unreported.
+        ///
+        /// Each stage is an ordinary `AROStatement`, analysed in order exactly
+        /// as it would be outside a pipeline — the stages run in sequence and
+        /// each sees what the previous one bound.
+        func visit(_ node: PipelineStatement) -> Result {
+            var inputs: Set<String> = []
+            var outputs: Set<String> = []
+            var sideEffects: [String] = []
+            var dependencies: Set<String> = []
+            for stage in node.stages {
+                let (stageInfo, stageDependencies) = analyzer.analyzeAROStatement(
+                    stage, builder: builder,
+                    definedSymbols: &definedSymbols, inMutableScope: inMutableScope
+                )
+                inputs.formUnion(stageInfo.inputs)
+                outputs.formUnion(stageInfo.outputs)
+                sideEffects.append(contentsOf: stageInfo.sideEffects)
+                dependencies.formUnion(stageDependencies)
+            }
+            return (DataFlowInfo(inputs: inputs, outputs: outputs, sideEffects: sideEffects),
+                    dependencies)
+        }
+
         // Fallback nodes — the old `as?`-chain matched none of these and so
         // returned the empty default. Keep that behaviour explicit.
-        func visit(_ node: PipelineStatement) -> Result { (DataFlowInfo(), []) }
         func visit(_ node: ErrorStatement) -> Result { (DataFlowInfo(), []) }
     }
 
@@ -565,8 +616,13 @@ public struct DataFlowAnalyzer {
     /// `Append the <line> to the <file>.` — the slot names what to write. The
     /// first five have always been handled; `append` was missing, which made
     /// its own documented primary form a rebinding error (GitLab #580).
+    ///
+    /// `Attach the <session> to the <connection>.` (ARO-0094 §6.1) is the same
+    /// shape: the session is retrieved from the sessions repository on the line
+    /// above, and the slot names *which* session to attach. Binding there would
+    /// make the proposal's own promotion example a rebinding error.
     static let resultIsContentVerbs: Set<String> = [
-        "store", "write", "emit", "save", "persist", "send", "append",
+        "store", "write", "emit", "save", "persist", "send", "append", "attach",
     ]
 
     // MARK: - Immutability Check
@@ -637,7 +693,8 @@ public struct DataFlowAnalyzer {
         definedSymbols: Set<String>
     ) -> (DataFlowInfo, Set<String>) {
 
-        if !definedSymbols.contains(statement.internalVariable) {
+        if !definedSymbols.contains(statement.internalVariable),
+           !preboundSymbols.contains(statement.internalVariable) {
             diagnostics.error(
                 "Cannot publish undefined variable '\(statement.internalVariable)'",
                 at: statement.span.start
@@ -1354,7 +1411,14 @@ public struct DataFlowAnalyzer {
             "log", "emit", "send", "notify", "publish", "store",
             "schedule", "start", "stop", "listen", "keepalive",
             "render", "show", "repaint", "clear",
-            "broadcast", "close", "connect"
+            "broadcast", "close", "connect",
+            // ARO-0094 / GitLab #886. `Configure the <session: secure> with
+            // false.` and `Configure the <cart-repository: scope> with
+            // "session".` settle framework state and produce nothing anyone
+            // reads, so "defined but never used" is noise on a statement that
+            // did exactly its job. Same reason `configure` is in
+            // `ActionRoleCatalog.mustRunForEffect`.
+            "configure"
         ]
         return sideEffectVerbs.contains(v)
     }

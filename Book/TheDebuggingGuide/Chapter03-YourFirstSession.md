@@ -74,7 +74,7 @@ Type `c`:
 
 ```
 (aro-dbg) c
-[Application-Start] Hello, ARO World!
+Hello, ARO World!
 
 Program ended cleanly.
 ```
@@ -114,7 +114,7 @@ The entry pause still fires — that one is unconditional. Type `c` and we go to
 (aro-dbg) p
   <greeting> : String = Hello, ARO World!
 (aro-dbg) c
-[Application-Start] Hello, ARO World!
+Hello, ARO World!
 
 Program ended cleanly.
 ```

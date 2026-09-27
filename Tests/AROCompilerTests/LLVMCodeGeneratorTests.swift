@@ -26,8 +26,7 @@ final class LLVMCodeGeneratorTests: XCTestCase {
             .invalidExpression(description: "test", span: span),
             .moduleVerificationFailed(message: "test"),
             .llvmInternalError(message: "test"),
-            .noEntryPoint,
-            .multipleEntryPoints
+            .noEntryPoint
         ]
 
         for error in errors {
@@ -139,28 +138,6 @@ final class LLVMCodeGeneratorTests: XCTestCase {
         XCTAssertEqual(LLVMTypeMapper.prepositionValue(.at), 10)
     }
 
-    func testV2ErrorReporter() throws {
-        let source = """
-        (Application-Start: Test) {
-            <Log> "Hello" to the <console>.
-        }
-        """
-
-        let reporter = LLVMErrorReporter(source: source, fileName: "test.aro")
-
-        let span = SourceSpan(
-            start: SourceLocation(line: 2, column: 5, offset: 30),
-            end: SourceLocation(line: 2, column: 10, offset: 35)
-        )
-
-        let error = LLVMCodeGenError.undefinedSymbol(name: "unknown", span: span)
-        let formatted = reporter.format(error)
-
-        XCTAssertTrue(formatted.contains("test.aro:2:5"))
-        XCTAssertTrue(formatted.contains("error:"))
-        XCTAssertTrue(formatted.contains("unknown"))
-    }
-
     func testV2ExternalDeclEmitter() throws {
         let ctx = LLVMCodeGenContext(moduleName: "test")
         let types = LLVMTypeMapper(context: ctx)
@@ -264,12 +241,69 @@ final class LLVMCodeGeneratorTests: XCTestCase {
             ObjectIdentifier(PublishStatement.self),
             ObjectIdentifier(RequireStatement.self),
             ObjectIdentifier(PipelineStatement.self),
+            // GitLab #655: `when <cond> { … }`, the guarded block of #516.
+            // It was absent here and absent from the generator, so this test
+            // asserted the gap rather than catching it — the documented
+            // spelling compiled under `aro run` and failed under `aro build`.
+            ObjectIdentifier(WhenStatement.self),
         ]
         XCTAssertEqual(
             LLVMCodeGenerator.supportedStatementTypeIdentifiers,
             expected,
             "LLVMCodeGenerator.statementHandlers drifted from the expected set of supported Statement subtypes"
         )
+    }
+
+    /// Every documented statement form actually generates code (GitLab #655).
+    ///
+    /// The set test above compares type identities, which is a list somebody
+    /// maintains — and when `WhenStatement` was missing from both the
+    /// generator and the list, the two agreed and the test passed while
+    /// `aro build` rejected a construct the Language Guide teaches.
+    ///
+    /// This one compiles source instead. A form the generator cannot handle
+    /// makes `generate` record "is not supported in compiled mode", so the
+    /// failure is the same one a user would hit.
+    func testEveryDocumentedStatementFormGeneratesCode() throws {
+        let source = """
+        (Application-Start: Every Form) {
+            Create the <role> with "admin".
+            Create the <items> with [1, 2, 3].
+
+            when <role> == "admin" {
+                Log "guarded block" to the <console>.
+            }
+
+            match <role> {
+                case "admin" { Log "matched" to the <console>. }
+                otherwise { Log "other" to the <console>. }
+            }
+
+            for each <item> in <items> {
+                Log <item> to the <console>.
+            }
+
+            for <i> from 1 to 2 {
+                Log <i> to the <console>.
+            }
+
+            while <role> != "admin" {
+                Break.
+            }
+
+            Publish as <shared-role> <role>.
+            Require the <console> from the <framework>.
+
+            Return an <OK: status> for the <startup>.
+        }
+        """
+
+        let compiled = Compiler().compile(source)
+        XCTAssertFalse(compiled.hasErrors,
+                       "the source itself must parse: \(compiled.diagnostics)")
+
+        let result = try LLVMCodeGenerator().generate(program: compiled.analyzedProgram)
+        XCTAssertFalse(result.irText.isEmpty, "code generation produced no IR")
     }
 }
 

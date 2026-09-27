@@ -64,10 +64,18 @@ public func aro_runtime_register_handler(
                 // object directly, e.g. "packet", "connection") works unchanged.
                 // Binding the plain key last lets it override "event" if the payload
                 // itself contains an "event" key (e.g. socket.disconnected).
+                //
+                // That override needs `allowRebind`, or it is not an override: the
+                // plain bind of a payload key named "event" lands on the name just
+                // bound to the whole payload, and the immutability backstop rejects
+                // it. `socket.disconnected` carries exactly that shape, so its
+                // handler died with "Cannot rebind immutable variable 'event'" and,
+                // before that, read `<event: connectionId>` off the outer payload —
+                // which has no such key (GitLab #881).
                 contextHandle.context.bind("event", value: event.payload)
                 for (key, value) in event.payload {
                     contextHandle.context.bind("event:\(key)", value: value)
-                    contextHandle.context.bind(key, value: value)
+                    contextHandle.context.bind(key, value: value, allowRebind: true)
                 }
 
                 // Bind terminal capabilities so ARO handler code can use <terminal: columns>

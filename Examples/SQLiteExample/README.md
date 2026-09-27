@@ -74,10 +74,30 @@ CREATE TABLE users (
 - [ARO-0004: Actions](../../Proposals/ARO-0004-actions.md) - Call action
 - [ARO-0010: Advanced Features](../../Proposals/ARO-0010-advanced-features.md) - Plugin system
 
+## The first run compiles the plugin
+
+`Plugins/SQLitePlugin/` is a Swift package with no prebuilt library in the tree,
+so the **first** `aro run` builds it: `swift build -c release` resolves and
+fetches SQLite.swift and the ARO plugin SDK into
+`Plugins/SQLitePlugin/.build/checkouts`, which **needs network access** and takes
+a couple of minutes on a cold checkout. The runtime says so while it happens
+(GitLab #826):
+
+```
+[aro] Building plugin 'SQLitePlugin' (swift build -c release)… first run only; it may take a few minutes and needs network access.
+[aro] Built plugin 'SQLitePlugin' in 137.4s.
+```
+
+Later runs reuse `.build/` and start immediately. `ARO_QUIET_PLUGIN_BUILD=1`
+silences the notice; the example's `test.hint` allows 300 seconds for the first
+build. The other plugin examples only appear faster because a prebuilt library is
+already committed alongside them.
+
 ## Usage
 
 ```bash
 # The plugin is built by `aro run` on first use — no separate step
+# (see "The first run compiles the plugin" above)
 aro run ./Examples/SQLiteExample
 
 # Or compile to native binary

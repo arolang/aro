@@ -26,21 +26,32 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
 # ---------------------------------------------------------------------------
-# Audited files. Paths are relative to the repo root. Add files here as the
-# try? audit expands beyond the bridge layer (issue #322).
+# Audited scope. Directories, not a file list: the list was ten Bridge files
+# and reported "OK" while `ComputeAction`, `ResponseActions`, `EventBus` and
+# `ASTPrinter` carried unjustified `try?` the whole time (GitLab #651). A
+# directory cannot go stale as files are added, which a hand-kept list does
+# the moment someone forgets it exists.
+#
+# CLAUDE.md states the rule for the whole codebase; these are the trees that
+# hold it today. Widen as the rest is brought up to it.
 # ---------------------------------------------------------------------------
-AUDITED_FILES=(
-  "Sources/ARORuntime/Bridge/RuntimeCoreBridge.swift"
-  "Sources/ARORuntime/Bridge/RuntimeEventRecordingBridge.swift"
-  "Sources/ARORuntime/Bridge/RuntimeExecutionBridge.swift"
-  "Sources/ARORuntime/Bridge/RuntimeResponseFormatting.swift"
-  "Sources/ARORuntime/Bridge/ServiceBridge.swift"
-  "Sources/ARORuntime/Bridge/HTTPServerBridge.swift"
-  "Sources/ARORuntime/Bridge/HTTPClientBridge.swift"
-  "Sources/ARORuntime/Bridge/FileSystemBridge.swift"
-  "Sources/ARORuntime/Bridge/FileWatcherBridge.swift"
-  "Sources/ARORuntime/Bridge/SocketBridge.swift"
+AUDITED_DIRS=(
+  "Sources/ARORuntime/Bridge"
+  "Sources/ARORuntime/Actions/BuiltIn"
+  "Sources/ARORuntime/Core"
+  "Sources/AROParser"
 )
+
+AUDITED_FILES=()
+for dir in "${AUDITED_DIRS[@]}"; do
+  if [[ ! -d "${REPO_ROOT}/${dir}" ]]; then
+    echo "lint-unjustified-try: audited directory not found: ${dir}" >&2
+    exit 1
+  fi
+  while IFS= read -r f; do
+    AUDITED_FILES+=("${f#"${REPO_ROOT}/"}")
+  done < <(find "${REPO_ROOT}/${dir}" -name '*.swift' -type f | sort)
+done
 
 violations=0
 

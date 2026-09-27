@@ -118,21 +118,17 @@ Logging becomes more important when detailed runtime output is not available. In
 
 ## 27.8 Output Formatting
 
-Native binaries produce cleaner output than interpreted execution. This difference is intentional and reflects the different contexts in which each mode is used.
-When running with the interpreter using `aro run`, log messages include a feature set name prefix:
-```
-[Application-Start] Starting server...
-[Application-Start] Server ready on port 8080
-[listUsers] Processing request...
-```
-When running a compiled binary, the same log messages appear without the prefix:
+A compiled binary prints what `aro run` prints. Byte for byte:
 ```
 Starting server...
 Server ready on port 8080
 Processing request...
 ```
-The interpreter's prefix identifies which feature set produced each message. This visibility aids debugging during development—when something goes wrong, you can see exactly where messages originated. The prefix becomes unnecessary noise in production, where the focus shifts from debugging to clean operation.
-Response formatting remains unchanged between modes. The `[OK]` status prefix and response data appear identically in both cases, providing consistent machine-parseable output for scripts and monitoring tools.
+This is worth stating because it was not always true. The interpreter used to prefix every log line with the name of the feature set that produced it — `[Application-Start] Starting server...` — and the binary did not, so the same source produced two different transcripts and every "Example Output" block in the tree was wrong for one of them.
+
+Naming the source of a message is a debugging concern, so it belongs in the developer context, which `--debug` selects and which carries the feature set's name in a fuller form. The human context is what you pipe into another tool, and it should not have to be stripped first.
+
+Response formatting is likewise the same in both modes: the `[OK]` status prefix and the response data appear identically, which is what makes the output parseable by scripts and monitoring tools.
 ---
 
 ## 27.9 Development Workflow

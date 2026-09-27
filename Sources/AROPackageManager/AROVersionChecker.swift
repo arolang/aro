@@ -32,14 +32,17 @@ public enum AROVersionChecker {
         // A constraint may be a space-separated list of clauses — all must hold.
         let clauses = constraint.split(separator: " ").map { String($0).trimmingCharacters(in: .whitespaces) }
         return clauses.allSatisfy { clause in
-            satisfiesSingle(version: clean, clause: clause)
+            satisfiesSingle(version: clean, raw: version, clause: clause)
         }
     }
 
     // MARK: - Private
 
     /// Evaluate one constraint clause against a cleaned version.
-    private static func satisfiesSingle(version: String, clause: String) -> Bool {
+    ///
+    /// `raw` is the version as it was given. Only the exact-match branch looks at
+    /// it — see there.
+    private static func satisfiesSingle(version: String, raw: String, clause: String) -> Bool {
         if clause.hasPrefix(">=") {
             return compare(version, String(clause.dropFirst(2))) >= 0
         } else if clause.hasPrefix("<=") {
@@ -53,9 +56,16 @@ public enum AROVersionChecker {
         } else if clause.hasPrefix("~") {
             return isMinorCompatible(version, String(clause.dropFirst(1)))
         } else {
-            // Exact match (strip leading 'v' from constraint too)
+            // Exact match. The strings are compared as written first, because a
+            // dependency's `ref:` is not always a semver triple — it can be a
+            // pre-release ("1.0.0-beta"), a branch ("main") or a commit hash, and
+            // metadata-stripping reduces the two sides to different things
+            // ("1.0.0-beta" to "1.0.0", the clause untouched). The dependency
+            // resolver's own comparator did raw equality here before it was
+            // folded into this one (GitLab #734), and it must keep matching.
+            if raw == clause { return true }
             let normalized = clause.hasPrefix("v") ? String(clause.dropFirst(1)) : clause
-            return version == normalized
+            return raw == normalized || version == normalized
         }
     }
 

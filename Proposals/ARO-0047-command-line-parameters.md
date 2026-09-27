@@ -99,6 +99,105 @@ Values are automatically converted to appropriate types:
 | Boolean flag (no value) | `Bool` | `--verbose` → `true` |
 | Otherwise | `String` | `--url http://...` → `"http://..."` |
 
+### Positional Arguments
+
+A flag is not how a single-argument tool is invoked. `./crawler --url https://example.com`
+reads as configuration; `./crawler https://example.com` reads as the thing the
+program is for. Until GitLab #857 only the first was possible, and every CLI
+example in the books taught the workaround.
+
+An application declares the positionals it reads in its entry point's header,
+with the `takes` clause ARO-0081 already uses for user-defined actions:
+
+```aro
+(Application-Start: Crawler takes <url> <depth>) {
+    Extract the <site> from the <parameter: url>.
+    Extract the <levels> from the <parameter: depth>.
+    Return an <OK: status> for the <startup>.
+}
+```
+
+```bash
+aro run ./Crawler https://example.com 3
+./crawler https://example.com 3
+```
+
+One header form, two meanings, because the declaration is the same thing in
+both: the inputs this unit is called with. The names may be written
+juxtaposed or comma-separated — `takes <url> <depth>` and `takes <url>, <depth>`
+are the same header.
+
+A declared name is read exactly like a flag, through `<parameter: name>`. That
+is deliberate: a program should not have to care which spelling the caller used,
+and a tool that grows a `--url` flag later keeps working. **A flag wins over a
+positional of the same name** — `--url` is explicit, a position is inferred.
+
+Positionals are also readable as a whole, declared or not:
+
+```aro
+Extract the <files> from the <parameter: arguments>.   (* every positional, in order *)
+```
+
+`arguments` is a list of strings in command-line order, which is what a
+variadic tool wants — `./wc a.txt b.txt c.txt` cannot name its inputs in a
+header. Declared names are additionally type-coerced by the table above;
+`arguments` is not, because a list whose elements changed type individually
+would be worse than useless.
+
+A declared positional the caller did not supply is simply absent, and reading
+it fails the way any missing parameter does:
+
+```
+Could not extract the depth from the parameter: depth
+```
+
+#### Parsing rules
+
+| Argument | Read as |
+|----------|---------|
+| `--key value`, `--key=value`, `--flag`, `-f`, `-abc` | as the tables above |
+| anything else | a positional, appended in order |
+| `--` | end of flags; **everything** after it is positional |
+
+The `--` terminator is how a positional that begins with `-` is passed at all,
+and it is the answer to the one ambiguity in this grammar: `--key value`
+consumes the token after it, so
+
+```bash
+./crawler --verbose https://example.com     # verbose = "https://example.com", no positional
+./crawler --verbose=true https://example.com
+./crawler -- --verbose https://example.com  # two positionals
+```
+
+The first line is the trap. Nothing in `argv` says whether `--verbose` takes a
+value, and a declaration that settled it per flag is a bigger change than this
+one; `--key=value`, or `--`, says it unambiguously. The behaviour predates
+positionals and is unchanged by them.
+
+#### Compiled binaries
+
+Identical. The entry point's `takes` clause is baked into the binary at build
+time — the AST is gone by the time it runs — and the names reach
+`ParameterStorage` before `argv` is parsed. Names and values are stored apart
+and joined on read, so neither mode depends on the order the two arrive in.
+
+#### Why the header, and not `aro.yaml`
+
+Declaring positionals in a configuration file would be more consistent with
+how ARO treats HTTP (a contract in `openapi.yaml`, ARO-0003). It was rejected
+here because the two cases are not alike: an OpenAPI contract is a document
+other people build against, while a command line is read in one place by one
+program, and putting its declaration in a second file means the reader of
+`Extract the <url> from the <parameter: url>.` cannot see where `url` comes
+from. `takes` keeps the declaration next to the only code that reads it, and
+reuses a spelling ARO-0081 already taught.
+
+Indexed access — `<parameter: 1>` — was rejected for a narrower reason: a
+numeric specifier on a list already means something else in ARO. ARO-0038
+counts numeric indices **from the end**, so `<parameter: 1>` would be either
+the second argument or the second-from-last depending on which rule a reader
+had in mind, and one of those readers would be wrong.
+
 ### Error Handling
 
 Missing parameters follow ARO's happy-path philosophy:
@@ -215,6 +314,9 @@ aro run . -vf  # Both verbose and force enabled
 1. **ParameterStorage** - Thread-safe singleton storing parsed parameters
 2. **ParameterObject** - System object conforming to `SystemObject` protocol
 3. **ExtractAction** - Extended to handle `parameter` base identifier
+4. **`FeatureSet.positionalParameters`** - the entry point's `takes` clause,
+   read by `Application.run()` (interpreter) and baked in by
+   `LLVMCodeGenerator` via `aro_declare_positional_parameters` (compiled)
 
 ### CLI Integration
 
@@ -236,7 +338,14 @@ The LLVM-generated `main()` function passes `argc`/`argv` to a bridge function t
 aro run . --verbose -- --url http://example.com
 ```
 
-Rejected because it adds complexity for users. Since `aro run` has well-defined options, treating everything after the path as application arguments is simpler.
+Rejected **as a separator between `aro run`'s own options and the
+application's**: it adds complexity for users, and since `aro run` has
+well-defined options, treating everything after the path as application
+arguments is simpler.
+
+`--` does exist *inside* the application's own arguments, where it separates
+flags from positionals — see §Positional Arguments. The two are different
+boundaries and only the second earns the token.
 
 ### Prefix Syntax
 

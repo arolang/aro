@@ -603,7 +603,6 @@ public enum InstallerError: Error, CustomStringConvertible {
     case missingManifest(String)
     case noSourceInfo(String)
     case buildFailed(String)
-    case dependencyMissing(String)
     case incompatibleAROVersion(plugin: String, required: String, current: String)
 
     public var description: String {
@@ -618,8 +617,6 @@ public enum InstallerError: Error, CustomStringConvertible {
             return "Plugin '\(name)' has no source info (was it installed manually?)"
         case .buildFailed(let message):
             return "Build failed: \(message)"
-        case .dependencyMissing(let dep):
-            return "Missing dependency: \(dep)"
         case .incompatibleAROVersion(let plugin, let required, let current):
             return "Plugin '\(plugin)' requires ARO \(required), but current version is \(current)"
         }

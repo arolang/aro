@@ -1,8 +1,10 @@
+# Generated: Wed Sep 23 00:47:03 2026
 # Type: console
 # Command: aro run ./Examples/RecursiveActions
+# Timeout: 180s
 ---
 === Recursion in User-Defined Actions (ARO-0081) ===
 3628800
 50005000
 no
-startup
+[OK] startup

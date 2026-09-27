@@ -1,3 +1,7 @@
+# Generated: Wed Sep 23 00:46:59 2026
+# Type: console
+# Command: aro run ./Examples/MultilineString
+---
 Hello,
 ARO World!
 SELECT *
@@ -6,4 +10,4 @@ WHERE active = true
 Line one	with tab
 Line two with "quotes"
 39
-demo
+[OK] demo

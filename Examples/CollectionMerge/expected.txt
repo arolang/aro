@@ -1,4 +1,4 @@
-# Generated: Mon Feb 10 2026
+# Generated: Sat Sep 26 18:02:57 2026
 # Type: console
 # Command: aro run ./Examples/CollectionMerge
 ---
@@ -37,5 +37,4 @@ name: Bob
 verified: true
 
 All merges complete! Original variables unchanged.
-demo
-  value: Hello,
+[OK] demo

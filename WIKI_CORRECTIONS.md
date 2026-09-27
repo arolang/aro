@@ -1,20 +1,64 @@
 # Wiki Corrections
 
-The wiki is a separate git repository
-(`https://github.com/arolang/aro.wiki.git`), so corrections to existing pages
-cannot be committed here. This file is the patch: for each page, what it says,
-what is true, and the evidence. Someone with wiki push rights can apply it
-top to bottom.
+**Status: applied.** All ten corrections below are in the wiki as of wiki
+commit `c01c1ed`, *docs: correct the pages that disagree with the code
+(GitLab #835)* — fourteen pages edited, three added. This file is kept
+because it is the evidence: for each page, what it said, what is true, and
+where in `Sources/` that was checked.
 
-Three *new* pages are not in this file, because the repository already has a
-convention for whole wiki pages — `WIKI_<PAGE>.md` at the root, as
-`WIKI_ACTION_REFERENCE.md` and `WIKI_CONCURRENCY.md` do — and new pages fit it:
+The wiki is a separate git repository, so the edits could not travel in the
+same merge request as the code they describe. The GitHub copy
+(`https://github.com/arolang/aro.wiki.git`) mirrors the GitLab wiki and needs
+whatever sync produced its *sync from GitLab wiki* commits re-run to catch up.
 
-- `WIKI_CLI_REFERENCE.md` — every subcommand and flag, from `aro <cmd> --help`
-- `WIKI_ENVIRONMENT_VARIABLES.md` — every variable the code reads, with defaults
-- `WIKI_CONFIGURATION_KEYS.md` — what `Configure` actually accepts
+The three *new* pages were added from their repository originals, under the
+`Reference-` naming the wiki already uses, and linked from `_Sidebar.md`:
+
+- `WIKI_CLI_REFERENCE.md` -> **Reference-CLI**
+- `WIKI_ENVIRONMENT_VARIABLES.md` -> **Reference-Environment-Variables**
+- `WIKI_CONFIGURATION_KEYS.md` -> **Reference-Configuration-Keys**
 
 Tracked as GitLab #835.
+
+## What changed against this document while applying it
+
+Two of the ten read differently once the code was checked, and the wiki says
+what the code does rather than what this file predicted:
+
+- **Correction 3 (`Transform ... with`)** is neither "a modified copy" nor
+  "the `with` clause is ignored". `TransformAction.validPrepositions` is
+  `[.from, .into, .to]` — there is no `with` clause to ignore, and the
+  statement is rejected. What Transform does is a type conversion chosen by
+  its *result* qualifier (`string`, `int`, `double`, `bool`, `json`; anything
+  else is identity), or a template render when the object is
+  `<template: path>`. Every page that showed a patch form now shows `Merge`.
+- **Correction 6 (HTTP client)** is not "both, per platform". `RequestAction`
+  uses `URLSessionHTTPClient` on macOS *and* Linux (through
+  `FoundationNetworking` there), deliberately — the comment in the code says
+  the NIO client can block on a semaphore under a compiled binary's
+  sync-to-async bridging. `AROHTTPClient` (AsyncHTTPClient/NIO) serves
+  outbound OpenAPI callbacks. Windows has no client at all (#681).
+
+One correction was declined as wrong: **correction 7** asked to delete
+Language-Tour's claim that `Compute` with no qualifier returns its input
+unchanged. That claim is true — `resolveOperationName` falls back to
+`identity`. What is a check-time error is an *unknown* qualifier, which is a
+different sentence; the page now distinguishes the two.
+
+## Still open, and deliberately not touched
+
+- Guide-Actions' HTTP status table still says an unrecognised name "falls
+  through to 200 OK". `HTTPStatusCatalog` is the single source now and a
+  misspelling is a check warning (GitLab #830). Outside these ten.
+- Installation's Windows native-compilation section contradicts the README's
+  Platform Support table, where `aro build` is unsupported on Windows
+  (GitLab #613).
+- `Transform the <users: List> from ...` in Guide-Variables and
+  Guide-The-Basics: `List` is not a conversion, so those are identity. They
+  read as type hints in prose rather than as a `with` clause, so correction 3
+  does not reach them.
+- Issue links pointing at `git.ausdertechnik.de` remain on several pages that
+  predate this pass; readers cannot reach that host.
 
 ---
 

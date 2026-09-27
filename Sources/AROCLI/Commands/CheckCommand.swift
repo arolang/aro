@@ -144,11 +144,18 @@ struct SourceCheckSubcommand: ParsableCommand {
             ? UserActionRegistry.declared(inFiles: sourceFiles)
             : nil
 
+        // ARO-0094 §7.2: same seam again. Empty for a single named file, for
+        // the reason above — that file may be one of many in an application
+        // this invocation was never pointed at, and a repository that looks
+        // undeclared here may be declared next door.
+        let scopes = isDirectory ? repositoryScopes(in: sourceFiles) : [:]
+
         for sourceFile in sourceFiles {
             let (errors, warnings) = try checkFile(
                 sourceFile,
                 handledEvents: handledEvents,
-                declaredActions: declaredActions
+                declaredActions: declaredActions,
+                repositoryScopes: scopes
             )
             totalErrors += errors
             totalWarnings += warnings
@@ -675,6 +682,26 @@ struct SourceCheckSubcommand: ParsableCommand {
         if realErrors > 0 { throw ExitCode.failure }
     }
 
+    /// Repository scopes declared anywhere in the application (ARO-0094 §7.2).
+    ///
+    /// Cross-file for the same reason event handling is: `Declare` sits in
+    /// Application-Start and the statements it governs sit in the handler
+    /// files, so checking one file at a time would see uses with no
+    /// declarations and declarations with no uses.
+    private func repositoryScopes(in files: [URL]) -> [String: String] {
+        var declarations: [RepositoryScopeAnalyzer.Declaration] = []
+        for file in files {
+            guard let source = try? String(contentsOf: file, encoding: .utf8),
+                  let tokens = try? Lexer.tokenize(source),
+                  let program = try? Parser(tokens: tokens).parse()
+            else { continue }
+            declarations.append(contentsOf: RepositoryScopeAnalyzer.declarations(in: program))
+        }
+        // Conflicts are reported when the declaring file is checked, so the
+        // diagnostic lands on a line the developer can see.
+        return RepositoryScopeAnalyzer.resolve(declarations)
+    }
+
     /// Event types handled anywhere in the application.
     ///
     /// Parse-only: the business activity is on the feature-set header, so no
@@ -695,14 +722,16 @@ struct SourceCheckSubcommand: ParsableCommand {
     private func checkFile(
         _ file: URL,
         handledEvents: Set<String> = [],
-        declaredActions: UserActionRegistry? = nil
+        declaredActions: UserActionRegistry? = nil,
+        repositoryScopes: [String: String] = [:]
     ) throws -> (errors: Int, warnings: Int) {
         let source = try String(contentsOf: file, encoding: .utf8)
         let compiler = Compiler()
         let result = compiler.compile(
             source,
             externallyHandledEvents: handledEvents,
-            declaredUserActions: declaredActions
+            declaredUserActions: declaredActions,
+            declaredRepositoryScopes: repositoryScopes
         )
 
         let errors = result.diagnostics.filter { $0.severity == .error }

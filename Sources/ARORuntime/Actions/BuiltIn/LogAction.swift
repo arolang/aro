@@ -146,17 +146,31 @@ public struct LogAction: ActionImplementation {
         let formattedMessage: String
         switch context.outputContext {
         case .machine:
-            // JSON format for machine consumption
-            formattedMessage = "{\"level\":\"info\",\"source\":\"\(context.featureSetName)\",\"message\":\"\(message.replacingOccurrences(of: "\"", with: "\\\""))\"}"
+            // JSON, built by a JSON encoder (GitLab #641).
+            //
+            // Hand-escaping only `"` produced a line that was not JSON the
+            // moment a message contained a newline, a tab, a backslash or any
+            // control character — which log messages do, since they carry file
+            // contents and error text. The consumer of machine mode is a
+            // parser, so a line it cannot read is worse than no line: it
+            // usually takes the rest of the stream with it.
+            formattedMessage = Self.machineRecord(
+                source: context.featureSetName, message: message)
         case .human:
-            // Readable format for CLI/console
-            // Compiled binaries and stdin-pipe scripts get clean output
-            // without the feature set prefix.
-            if context.isCompiled || context.suppressLogPrefix {
-                formattedMessage = message
-            } else {
-                formattedMessage = "[\(context.featureSetName)] \(message)"
-            }
+            // Readable format for CLI/console: the message, and nothing else.
+            //
+            // This used to be `[\(featureSetName)] \(message)` unless the
+            // program was compiled or read from stdin, so `aro run` and the
+            // binary built from the same source printed different text — the
+            // interpreter prefixed every line and the binary prefixed none
+            // (GitLab #814). ARO-0009 promises the two modes agree, and every
+            // "Example Output" block in the tree was wrong for one of them.
+            //
+            // The prefix is diagnostic, so per ARO-0031 it belongs in the
+            // developer context, which already carries the feature set's name
+            // in a fuller form. The human context is what a user pipes into
+            // another tool, and it should not have to be stripped first.
+            formattedMessage = message
         case .developer:
             // Diagnostic format for testing/debugging
             formattedMessage = "LOG[\(target)] \(context.featureSetName): \(message)"
@@ -212,15 +226,13 @@ public struct LogAction: ActionImplementation {
         return count
     }
 
-    /// One line of streamed log output: the formatted value, prefixed with the
-    /// feature set's name unless the caller owns the line already (compiled
-    /// binaries and piped stdin).
+    /// One line of streamed log output: the formatted value, and nothing else.
+    ///
+    /// Streamed lines followed the same rule as single ones and change with
+    /// them (GitLab #814) — a stream logged interpreted and the same stream
+    /// logged compiled now produce the same bytes.
     private func line(for value: any Sendable, context: ExecutionContext) -> String {
-        let formatted = ResponseFormatter.formatValue(value, for: context.outputContext)
-        if context.isCompiled || context.suppressLogPrefix {
-            return formatted
-        }
-        return "[\(context.featureSetName)] \(formatted)"
+        ResponseFormatter.formatValue(value, for: context.outputContext)
     }
 
     /// Write one line to standard output.
@@ -228,6 +240,29 @@ public struct LogAction: ActionImplementation {
         if let data = (message + "\n").data(using: .utf8) {
             try FileHandle.standardOutput.write(contentsOf: data)
         }
+    }
+
+    /// One machine-mode log record, encoded rather than interpolated.
+    ///
+    /// `JSONSerialization` handles the escapes a hand-rolled string cannot:
+    /// control characters, backslashes, and the newlines that appear whenever
+    /// a message carries file contents. `sortedKeys` keeps the field order
+    /// stable so the output diffs cleanly.
+    static func machineRecord(source: String, message: String) -> String {
+        let record: [String: String] = [
+            "level": "info",
+            "source": source,
+            "message": message
+        ]
+        guard let data = try? JSONSerialization.data(
+                  withJSONObject: record, options: [.sortedKeys]),
+              let text = String(data: data, encoding: .utf8) else {
+            // Unreachable for a dictionary of strings; if it ever happens,
+            // an empty message is better than a malformed record, because the
+            // consumer is a parser.
+            return "{\"level\":\"info\",\"source\":\"\",\"message\":\"\"}"
+        }
+        return text
     }
 }
 
@@ -245,4 +280,5 @@ public enum LogLevel: String, Sendable {
 public struct LogResult: Sendable, Equatable {
     public let message: String
     public let target: String
+
 }

@@ -1,6 +1,11 @@
+# Generated: Sat Sep 26 18:03:03 2026
+# Type: console
+# Command: aro run ./Examples/ReceiveData
+---
 === Receive Data Demo ===
 Emitting MessageReceived event...
 Handler triggered!
 Received payload:
-Hello from event system!
+message: Hello from event system!
 Event processing complete!
+[OK] demo

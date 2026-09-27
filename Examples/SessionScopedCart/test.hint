@@ -1,0 +1,8 @@
+# Test hints for SessionScopedCart
+mode: interpreter
+# Driving this means being the same caller twice: log in, add to the cart, then
+# read the cart back and see the item. That needs HTTP::CookieJar, which the CI
+# image installs (docker/ci/Dockerfile) and the executor picks up automatically
+# — without it every request is a fresh caller, and an empty cart and a broken
+# feature look identical.
+skip-on-windows: HTTP server tests not supported on Windows CI

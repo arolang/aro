@@ -96,7 +96,12 @@ def main(argv=None):
             {'role': 'user', 'content': prompt},
         ])
         openapi, main_aro = extract_openapi_and_aro(output)
-        row = {'prompt': prompt[:200], 'has_code': bool(main_aro)}
+        # The completion itself, not only the verdict on it. A caller that
+        # grades something other than `aro check` — the three-job benchmark
+        # in `base_model_ab.py` grades prose answers too — needs the text
+        # (GitLab #794). Truncated generously rather than not kept at all.
+        row = {'prompt': prompt[:200], 'has_code': bool(main_aro),
+               'completion': output[:20000], 'aro': main_aro or ''}
 
         if main_aro:
             ok = aro_check_dir(main_aro, openapi)

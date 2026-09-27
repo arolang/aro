@@ -1,4 +1,8 @@
+# Generated: Wed Sep 23 00:47:09 2026
+# Type: console
+# Command: aro run ./Examples/StoreFileDemo
+---
 3
 2
 Widget
-startup
+[OK] startup

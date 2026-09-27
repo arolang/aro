@@ -1,4 +1,4 @@
-# Generated: Sun Mar  1 17:54:10 2026
+# Generated: Sat Sep 26 18:03:03 2026
 # Type: console
 # Command: aro run ./Examples/SinkSyntax
 ---
@@ -12,5 +12,4 @@ true
 [10, 20, 30]
 status: ok
 version: 1
-startup
-value: Hello, World!
+[OK] startup

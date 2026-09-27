@@ -1,0 +1,31 @@
+(* Compare — ARO-0001, GitLab #469
+ *
+ * Compare reads BOTH operands and binds a fresh result. The older
+ * two-operand spelling tried to rebind its own first operand and could never
+ * run under immutability.
+ *
+ * `<r: matches>` is the boolean; `<r: result>` is equal / less / greater.
+ *)
+
+(Application-Start: Comparisons) {
+    Create the <expected> with 10.
+    Create the <actual> with 10.
+    Create the <smaller> with 3.
+    Create the <bigger> with 42.
+
+    Compare the <same> from the <expected> against the <actual>.
+    Log "equal: ${<same: matches>} / ${<same: result>}" to the <console>.
+
+    Compare the <above> from the <expected> against the <smaller>.
+    Log "greater: ${<above: matches>} / ${<above: result>}" to the <console>.
+
+    Compare the <below> from the <expected> against the <bigger>.
+    Log "less: ${<below: matches>} / ${<below: result>}" to the <console>.
+
+    (* Strings compare too, and the result drives an ordinary guard. *)
+    Create the <role> with "admin".
+    Compare the <is-admin> from the <role> against "admin".
+    Log "admin access" to the <console> when <is-admin: matches>.
+
+    Return an <OK: status> for the <startup>.
+}

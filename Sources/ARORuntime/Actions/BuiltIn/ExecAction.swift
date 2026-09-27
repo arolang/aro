@@ -111,13 +111,42 @@ public struct ExecConfig: Sendable {
     /// Whether to capture stderr in output (default: true)
     public let captureStderr: Bool
 
+    /// The host's command interpreter, and the flag that makes it read a
+    /// command from its argument.
+    ///
+    /// This file had no `#if os(Windows)` in it at all, so `Exec` on Windows
+    /// tried to launch `/bin/sh` and failed at process creation with a
+    /// Foundation error that named no ARO statement (GitLab #682).
+    ///
+    /// `cmd.exe` rather than PowerShell: it is the interpreter `%COMSPEC%`
+    /// names, it is present on every Windows install, and `/c` takes the
+    /// command as one string the way `sh -c` does. PowerShell's `-Command`
+    /// re-parses its argument under different quoting rules, which would make
+    /// the same ARO source mean two things on one platform.
+    public static var defaultShell: String {
+        #if os(Windows)
+        ProcessInfo.processInfo.environment["COMSPEC"] ?? "C:\\Windows\\System32\\cmd.exe"
+        #else
+        "/bin/sh"
+        #endif
+    }
+
+    /// The flag that hands `defaultShell` a command string.
+    public static var shellCommandFlag: String {
+        #if os(Windows)
+        "/c"
+        #else
+        "-c"
+        #endif
+    }
+
     public init(
         command: String,
         argv: [String]? = nil,
         workingDirectory: String? = nil,
         environment: [String: String]? = nil,
         timeout: Int = 30000,
-        shell: String = "/bin/sh",
+        shell: String? = nil,
         captureStderr: Bool = true
     ) {
         self.command = command
@@ -125,7 +154,7 @@ public struct ExecConfig: Sendable {
         self.workingDirectory = workingDirectory
         self.environment = environment
         self.timeout = timeout
-        self.shell = shell
+        self.shell = shell ?? ExecConfig.defaultShell
         self.captureStderr = captureStderr
     }
 
@@ -368,7 +397,7 @@ public struct ExecuteAction: ActionImplementation, SynchronousAction {
                     workingDirectory: exprConfig["workingDirectory"] as? String,
                     environment: exprConfig["environment"] as? [String: String],
                     timeout: Self.timeoutMilliseconds(exprConfig["timeout"]),
-                    shell: (exprConfig["shell"] as? String) ?? "/bin/sh",
+                    shell: exprConfig["shell"] as? String,
                     captureStderr: (exprConfig["captureStderr"] as? Bool) ?? true
                 )
             }
@@ -436,19 +465,34 @@ public struct ExecuteAction: ActionImplementation, SynchronousAction {
         let process = Process()
 
         if let argv = config.argv, let executable = argv.first {
-            // Shell-free execution: `env` performs the PATH lookup without
-            // interpreting any argument (GitLab #471). Arguments reach the process
-            // exactly as written, so metacharacters in them are inert.
-            if executable.contains("/") {
+            // Shell-free execution: no interpreter is involved, so arguments
+            // reach the process exactly as written and metacharacters in them
+            // are inert (GitLab #471). A name with a separator in it is a path
+            // and is launched directly; a bare name needs a PATH search, and
+            // the two platforms spell that differently.
+            if executable.contains("/") || executable.contains("\\") {
                 process.executableURL = URL(fileURLWithPath: executable)
                 process.arguments = Array(argv.dropFirst())
             } else {
+                #if os(Windows)
+                // There is no `/usr/bin/env`. `ToolResolver` asks `where.exe`,
+                // which is the same PATH search `env` performs and, like it,
+                // interprets nothing — so arguments still reach the process
+                // exactly as written (GitLab #682). Falling through to the
+                // bare name lets Foundation report a missing executable, which
+                // is a better error than a missing `env`.
+                process.executableURL = URL(fileURLWithPath: ToolResolver.findTool(executable) ?? executable)
+                process.arguments = Array(argv.dropFirst())
+                #else
+                // `env` performs the PATH lookup without interpreting any
+                // argument (GitLab #471).
                 process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
                 process.arguments = argv
+                #endif
             }
         } else {
             process.executableURL = URL(fileURLWithPath: config.shell)
-            process.arguments = ["-c", config.command]
+            process.arguments = [ExecConfig.shellCommandFlag, config.command]
         }
 
         if let workDir = config.workingDirectory {

@@ -17,6 +17,87 @@ import CoreServices
 
 #if !os(Windows)
 
+// MARK: - One mapping, three backends
+
+/// The kinds of change a file watcher reports.
+///
+/// Three backends derive these from three unrelated sources — FSEvents flags,
+/// inotify masks, a polling diff — and the interpreter derives them from
+/// FileMonitor's `FileChangeEvent`. Naming them once is what lets the four
+/// agree (GitLab #693).
+enum FileWatchChange: String {
+    case created = "Created"
+    case modified = "Modified"
+    case deleted = "Deleted"
+
+    var domainEventType: String { "file.\(rawValue.lowercased())" }
+}
+
+/// Announce a change exactly as `AROFileSystemService.handleFileEvent` does:
+/// the typed event, then the domain event carrying `path`.
+///
+/// Only the FSEvents backend published anything before this existed. inotify
+/// and the polling fallback merely printed a line, so a `File Event Handler`
+/// in a Linux binary never ran at all — which is why
+/// `Examples/MultiService/expected.linux-compiled.txt` has no file lines in it.
+func reportFileWatchChange(_ change: FileWatchChange, at path: String) {
+    print("[FileMonitor] \(change.rawValue): \(path)")
+
+    switch change {
+    case .created:  EventBus.shared.publish(FileCreatedEvent(path: path))
+    case .modified: EventBus.shared.publish(FileModifiedEvent(path: path))
+    case .deleted:  EventBus.shared.publish(FileDeletedEvent(path: path))
+    }
+
+    // DomainEvent is what a *compiled* handler is registered against
+    // (`aro_runtime_register_handler` matches on this string).
+    EventBus.shared.publish(DomainEvent(eventType: change.domainEventType, payload: ["path": path]))
+}
+
+/// Which paths a watcher has already announced as existing.
+///
+/// FSEvents reports the flags *accumulated* for a path, not one flag per
+/// operation: a file that is created and then written arrives with
+/// `ItemCreated` and `ItemModified` set together. The old code broke that tie
+/// by asking whether the file exists now — which answers "yes", so every
+/// creation was announced as a modification. Existence cannot distinguish
+/// them; having announced the path before can.
+final class WatchedPathLedger: @unchecked Sendable {
+    private let lock = NSLock()
+    private var known: Set<String> = []
+
+    /// Record what is already there, so the first *edit* of a pre-existing
+    /// file is a modification rather than a creation.
+    func seed(directory: String) {
+        // try?: the directory may vanish or be unreadable between the watch
+        // being added and this listing; an empty ledger is the safe start.
+        guard let entries = try? FileManager.default.subpathsOfDirectory(atPath: directory) else { return }
+        lock.lock(); defer { lock.unlock() }
+        known = Set(entries.map { directory + "/" + $0 })
+    }
+
+    /// Classify one raw event. Returns the changes to announce, in order.
+    ///
+    /// - Parameters:
+    ///   - exists: whether the path is there *now*.
+    ///   - sawCreate: whether the platform said a creation was among the
+    ///     accumulated flags.
+    func classify(_ path: String, exists: Bool, sawCreate: Bool) -> [FileWatchChange] {
+        lock.lock(); defer { lock.unlock() }
+
+        if exists {
+            return known.insert(path).inserted ? [.created] : [.modified]
+        }
+        if known.remove(path) != nil {
+            return [.deleted]
+        }
+        // Gone now and never announced: the file's whole life fell inside one
+        // coalescing window. Report both halves rather than dropping it — a
+        // handler that logs creations should still see this one.
+        return sawCreate ? [.created, .deleted] : []
+    }
+}
+
 // MARK: - File Watcher Bridge (Platform-specific)
 
 /// Registry of live file-watcher handles, shared by all platform backends.
@@ -65,6 +146,9 @@ final class FileWatcherHandle: @unchecked Sendable {
     var isWatching: Bool = false
     var lastEventId: FSEventStreamEventId = FSEventStreamEventId(kFSEventStreamEventIdSinceNow)
 
+    /// What the flags cannot say. See `WatchedPathLedger`.
+    let ledger = WatchedPathLedger()
+
     init(path: String) {
         self.path = path
     }
@@ -95,51 +179,36 @@ private func fsEventsCallback(
 ) {
     let paths = unsafeBitCast(eventPaths, to: NSArray.self)
 
+    // Without the handle we have no ledger, so no way to tell a creation from
+    // an edit. Dropping the batch is worse than reporting it imprecisely.
+    let ledger = clientCallBackInfo.map {
+        Unmanaged<FileWatcherHandle>.fromOpaque($0).takeUnretainedValue().ledger
+    }
+
     for i in 0..<numEvents {
         guard let path = paths[i] as? String else { continue }
         let flags = eventFlags[i]
 
-        // Determine event type - FSEvents can set multiple flags at once
-        // Check in priority order: Removed > Modified > Created > Renamed
-        let eventType: String
-        let isRemoved = (flags & UInt32(kFSEventStreamEventFlagItemRemoved)) != 0
-        let isModified = (flags & UInt32(kFSEventStreamEventFlagItemModified)) != 0 ||
-                         (flags & UInt32(kFSEventStreamEventFlagItemInodeMetaMod)) != 0
-        let isCreated = (flags & UInt32(kFSEventStreamEventFlagItemCreated)) != 0
-        let isRenamed = (flags & UInt32(kFSEventStreamEventFlagItemRenamed)) != 0
+        let sawCreate = (flags & UInt32(kFSEventStreamEventFlagItemCreated)) != 0
+        let sawRemove = (flags & UInt32(kFSEventStreamEventFlagItemRemoved)) != 0
+        let sawRename = (flags & UInt32(kFSEventStreamEventFlagItemRenamed)) != 0
+        let sawModify = (flags & UInt32(kFSEventStreamEventFlagItemModified)) != 0 ||
+                        (flags & UInt32(kFSEventStreamEventFlagItemInodeMetaMod)) != 0
 
-        if isRemoved {
-            eventType = "Deleted"
-        } else if isModified && !isCreated {
-            // Modified but not created = file was edited
-            eventType = "Modified"
-        } else if isCreated && !isModified {
-            // Created but not modified = new file
-            eventType = "Created"
-        } else if isCreated && isModified {
-            // Both flags set - need to determine actual operation
-            // Check if file exists to disambiguate
-            if FileManager.default.fileExists(atPath: path) {
-                // File exists, this is likely a modification
-                eventType = "Modified"
-            } else {
-                // File doesn't exist, was probably created then immediately modified
-                eventType = "Created"
-            }
-        } else if isRenamed {
-            eventType = "Renamed"
-        } else {
-            continue // Skip unknown events
+        // Nothing we report on — an xattr change, a permissions change.
+        guard sawCreate || sawRemove || sawRename || sawModify else { continue }
+
+        let exists = FileManager.default.fileExists(atPath: path)
+
+        // A rename is two events, one per path, and each is a creation or a
+        // removal from the watcher's point of view — which is also how the
+        // interpreter sees it, since FileMonitor has no rename case.
+        let changes = ledger?.classify(path, exists: exists, sawCreate: sawCreate || sawRename)
+            ?? [exists ? (sawCreate ? .created : .modified) : .deleted]
+
+        for change in changes {
+            reportFileWatchChange(change, at: path)
         }
-
-        // Print to console (matching interpreter behavior)
-        print("[FileMonitor] \(eventType): \(path)")
-
-        // Publish domain event to EventBus so compiled binary file event handlers are triggered.
-        // DomainEvent eventType: "file.created" | "file.modified" | "file.deleted"
-        // DomainEvent payload:   { "path": String }
-        let domainEventType = "file.\(eventType.lowercased())"
-        EventBus.shared.publish(DomainEvent(eventType: domainEventType, payload: ["path": path]))
     }
 }
 
@@ -182,6 +251,10 @@ public func aro_file_watcher_start(_ watcherPtr: UnsafeMutableRawPointer?) -> In
 
     // Already watching
     if handle.isWatching { return 0 }
+
+    // Remember what is already there, so the first edit of a pre-existing
+    // file reads as a modification rather than a creation.
+    handle.ledger.seed(directory: handle.path)
 
     // Create FSEvents stream
     var context = FSEventStreamContext(
@@ -355,25 +428,32 @@ public func aro_file_watcher_start(_ watcherPtr: UnsafeMutableRawPointer?) -> In
                             .assumingMemoryBound(to: inotify_event.self)
                         let event = eventPtr.pointee
 
-                        let eventType: String
-                        if (event.mask & UInt32(IN_CREATE)) != 0 {
-                            eventType = "Created"
-                        } else if (event.mask & UInt32(IN_DELETE)) != 0 {
-                            eventType = "Deleted"
+                        // inotify delivers one event per operation, so the
+                        // mask says outright what happened — no ledger needed.
+                        // A move is a creation at the destination and a
+                        // deletion at the source, which is also how the
+                        // interpreter's FileMonitor sees it (it has no rename
+                        // case), so the two halves map onto those rather than
+                        // onto a `file.renamed` nothing subscribes to.
+                        let change: FileWatchChange
+                        if (event.mask & UInt32(IN_CREATE)) != 0 || (event.mask & UInt32(IN_MOVED_TO)) != 0 {
+                            change = .created
+                        } else if (event.mask & UInt32(IN_DELETE)) != 0 || (event.mask & UInt32(IN_MOVED_FROM)) != 0 {
+                            change = .deleted
                         } else if (event.mask & UInt32(IN_MODIFY)) != 0 {
-                            eventType = "Modified"
-                        } else if (event.mask & UInt32(IN_MOVED_FROM)) != 0 || (event.mask & UInt32(IN_MOVED_TO)) != 0 {
-                            eventType = "Renamed"
+                            change = .modified
                         } else {
+                            offset += MemoryLayout<inotify_event>.size + Int(event.len)
                             return
                         }
 
+                        // `len == 0` is an event on the watched directory
+                        // itself; there is no file to name.
                         if event.len > 0 {
                             let namePtr = UnsafeRawPointer(bufferPtr.baseAddress! + offset + MemoryLayout<inotify_event>.size)
                                 .assumingMemoryBound(to: CChar.self)
                             let name = String(cString: namePtr)
-                            let fullPath = handle.path + "/" + name
-                            print("[FileMonitor] \(eventType): \(fullPath)")
+                            reportFileWatchChange(change, at: handle.path + "/" + name)
                         }
 
                         offset += MemoryLayout<inotify_event>.size + Int(event.len)
@@ -508,7 +588,7 @@ public func aro_file_watcher_start(_ watcherPtr: UnsafeMutableRawPointer?) -> In
             // Check for new files
             for file in currentFiles.subtracting(knownFiles) {
                 let fullPath = handle.path + "/" + file
-                print("[FileMonitor] Created: \(fullPath)")
+                reportFileWatchChange(.created, at: fullPath)
                 // try?: file may vanish between listing and stat (TOCTOU race)
                 if let attrs = try? FileManager.default.attributesOfItem(atPath: fullPath),
                    let modDate = attrs[.modificationDate] as? Date {
@@ -519,7 +599,7 @@ public func aro_file_watcher_start(_ watcherPtr: UnsafeMutableRawPointer?) -> In
             // Check for deleted files
             for file in knownFiles.subtracting(currentFiles) {
                 let fullPath = handle.path + "/" + file
-                print("[FileMonitor] Deleted: \(fullPath)")
+                reportFileWatchChange(.deleted, at: fullPath)
                 handle.lastModified.removeValue(forKey: file)
             }
 
@@ -530,7 +610,7 @@ public func aro_file_watcher_start(_ watcherPtr: UnsafeMutableRawPointer?) -> In
                 if let attrs = try? FileManager.default.attributesOfItem(atPath: fullPath),
                    let modDate = attrs[.modificationDate] as? Date {
                     if let lastMod = handle.lastModified[file], modDate > lastMod {
-                        print("[FileMonitor] Modified: \(fullPath)")
+                        reportFileWatchChange(.modified, at: fullPath)
                     }
                     handle.lastModified[file] = modDate
                 }

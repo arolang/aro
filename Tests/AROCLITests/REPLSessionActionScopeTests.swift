@@ -35,7 +35,7 @@ struct REPLSessionActionScopeTests {
         activity: String = "Action takes <number>",
         _ statements: String...
     ) async throws -> (REPLSession, [REPLResult]) {
-        let session = REPLSession(suppressLogPrefix: true)
+        let session = REPLSession()
         _ = try await session.defineFeatureSet(
             name: name, activity: activity, source: definition
         )
@@ -80,7 +80,7 @@ struct REPLSessionActionScopeTests {
 
     @Test("A redefinition is what the next call reaches, not the old body")
     func redefinitionWins() async throws {
-        let session = REPLSession(suppressLogPrefix: true)
+        let session = REPLSession()
         _ = try await session.defineFeatureSet(
             name: "D", activity: "Action takes <n>",
             source: """
@@ -128,7 +128,7 @@ struct REPLSessionActionScopeTests {
 
     @Test("Companion sources are offered in definition order, not dictionary order")
     func companionOrderIsStable() async throws {
-        let session = REPLSession(suppressLogPrefix: true)
+        let session = REPLSession()
         for name in ["Alpha", "Beta", "Gamma"] {
             _ = try await session.defineFeatureSet(
                 name: name, activity: "Action takes <n>",
@@ -151,7 +151,7 @@ struct REPLSessionActionScopeTests {
 
     @Test("`:invoke` hands an action its JSON object as `input`")
     func invokeBindsInputForActions() async throws {
-        let session = REPLSession(suppressLogPrefix: true)
+        let session = REPLSession()
         _ = try await session.defineFeatureSet(
             name: "Doubled", activity: "Action takes <number>", source: doubled
         )
@@ -173,7 +173,7 @@ struct REPLSessionActionScopeTests {
         // A feature set invoked by hand stands in for whatever would have
         // triggered it, and for anything that is not an action that means
         // the object's fields are the names its statements use. Unchanged.
-        let session = REPLSession(suppressLogPrefix: true)
+        let session = REPLSession()
         _ = try await session.defineFeatureSet(
             name: "Calculate Area", activity: "Geometry",
             source: """
@@ -195,7 +195,7 @@ struct REPLSessionActionScopeTests {
 
     @Test("Clearing the session drops the definitions and their order")
     func clearDropsDefinitions() async throws {
-        let session = REPLSession(suppressLogPrefix: true)
+        let session = REPLSession()
         _ = try await session.defineFeatureSet(
             name: "Doubled", activity: "Action takes <number>", source: doubled
         )

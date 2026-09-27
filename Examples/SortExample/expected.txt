@@ -1,3 +1,7 @@
+# Generated: Sat Sep 26 08:40:18 2026
+# Type: console
+# Command: aro run ./Examples/SortExample
+---
 === Sort Demo ===
 --- Sorting Numbers (Ascending) ---
 Original:
@@ -5,13 +9,19 @@ Original:
 Sorted:
 [1, 2, 3, 5, 8, 9]
 --- Sorting Numbers (Descending) ---
+Original:
 [10, 40, 20, 50, 30]
 Sorted descending:
+[50, 40, 30, 20, 10]
 --- Sorting Strings ---
+Original:
 [banana, apple, cherry, date]
+Sorted:
 [apple, banana, cherry, date]
 --- Using Order Verb ---
+Original:
 [100, 50, 75, 25]
 Ordered:
 [25, 50, 75, 100]
 All sorting complete!
+[OK] demo

@@ -1,0 +1,301 @@
+// ============================================================
+// RepositoryScopeAnalyzerTests.swift
+// AROParser — scope mistakes `aro check` should catch
+// ARO-0094 §7.2, GitLab #885
+// ============================================================
+//
+// What makes these worth having: the errors here are the ones that would
+// otherwise surface as a runtime failure on the first request that happens to
+// reach the statement — which, for an admin route or an error path, can be
+// weeks after deployment.
+
+import Testing
+@testable import AROParser
+
+@Suite("Repository scope analysis (ARO-0094 §7.2)")
+struct RepositoryScopeAnalyzerTests {
+
+    private func parse(_ source: String) throws -> Program {
+        try Parser(tokens: try Lexer.tokenize(source)).parse()
+    }
+
+    private func diagnose(_ source: String, scopes: [String: String]) throws -> [Diagnostic] {
+        let program = try parse(source)
+        let collector = DiagnosticCollector()
+        RepositoryScopeAnalyzer.check(program, scopes: scopes, diagnostics: collector)
+        return collector.diagnostics
+    }
+
+    // MARK: - Collecting declarations
+
+    @Test("Declarations are read off the Configure statements")
+    func collectsDeclarations() throws {
+        let program = try parse("""
+        (Application-Start: Shop) {
+            Configure the <cart-repository: scope> with "session".
+            Configure the <partial-repository: scope> with "connection".
+            Return an <OK: status> for the <startup>.
+        }
+        """)
+        let found = RepositoryScopeAnalyzer.declarations(in: program)
+        #expect(found.count == 2)
+        #expect(found.contains { $0.repository == "cart-repository" && $0.scope == "session" })
+        #expect(found.contains { $0.repository == "partial-repository" && $0.scope == "connection" })
+    }
+
+    @Test("A scope that is not one of the three is an error")
+    func unknownScope() throws {
+        let program = try parse("""
+        (Application-Start: Shop) {
+            Configure the <cart-repository: scope> with "user".
+            Return an <OK: status> for the <startup>.
+        }
+        """)
+        let collector = DiagnosticCollector()
+        let scopes = RepositoryScopeAnalyzer.resolve(
+            RepositoryScopeAnalyzer.declarations(in: program), diagnostics: collector)
+        #expect(scopes.isEmpty)
+        #expect(collector.errors.count == 1)
+        #expect(collector.errors[0].message.contains("'user' is not a scope"))
+    }
+
+    @Test("A bare word scope is reported as a scope, not as a missing variable")
+    func bareWordScope() throws {
+        // ARO-0094 §3.1.1: `{ scope: session }` parses as a variable
+        // reference, because a bare word is one everywhere else in ARO. Left
+        // alone it fails at run time with "Undefined variable: session", which
+        // says nothing about scopes. The analyzer reads the name and says what
+        // is actually wrong.
+        let program = try parse("""
+        (Application-Start: Shop) {
+            Configure the <cart-repository: scope> with session.
+            Return an <OK: status> for the <startup>.
+        }
+        """)
+        let found = RepositoryScopeAnalyzer.declarations(in: program)
+        #expect(found.first?.scope == "session")
+    }
+
+    @Test("Two declarations that disagree are an error, and the first stands")
+    func conflictingDeclarations() throws {
+        let program = try parse("""
+        (Application-Start: Shop) {
+            Configure the <cart-repository: scope> with "session".
+            Return an <OK: status> for the <startup>.
+        }
+
+        (Seed Carts: Shop Setup) {
+            Configure the <cart-repository: scope> with "application".
+            Return an <OK: status> for the <seed>.
+        }
+        """)
+        let collector = DiagnosticCollector()
+        let scopes = RepositoryScopeAnalyzer.resolve(
+            RepositoryScopeAnalyzer.declarations(in: program), diagnostics: collector)
+        #expect(scopes["cart-repository"] == "session")
+        #expect(collector.errors.count == 1)
+        #expect(collector.errors[0].message.contains("session-scoped and application-scoped"))
+    }
+
+    @Test("The same scope declared twice is fine")
+    func idempotentDeclaration() throws {
+        // Two files may both say it — feature sets are globally visible, so an
+        // application can declare a repository's scope wherever it is set up.
+        // Repeating the *same* answer is not a conflict.
+        let a = try parse("""
+        (Application-Start: Shop) {
+            Configure the <cart-repository: scope> with "session".
+            Return an <OK: status> for the <startup>.
+        }
+        """)
+        let b = try parse("""
+        (Seed Carts: Shop Setup) {
+            Configure the <cart-repository: scope> with "session".
+            Return an <OK: status> for the <seed>.
+        }
+        """)
+        let collector = DiagnosticCollector()
+        let scopes = RepositoryScopeAnalyzer.resolve(
+            RepositoryScopeAnalyzer.declarations(in: a)
+                + RepositoryScopeAnalyzer.declarations(in: b),
+            diagnostics: collector)
+        #expect(scopes["cart-repository"] == "session")
+        #expect(collector.errors.isEmpty)
+    }
+
+    // MARK: - Uses that can never resolve
+
+    @Test("A session repository in Application-Start can never have a session")
+    func sessionRepositoryInApplicationStart() throws {
+        let found = try diagnose("""
+        (Application-Start: Shop) {
+            Configure the <cart-repository: scope> with "session".
+            Store the <seed> into the <cart-repository>.
+            Return an <OK: status> for the <startup>.
+        }
+        """, scopes: ["cart-repository": "session"])
+        #expect(found.count == 1)
+        #expect(found[0].severity == .error)
+        #expect(found[0].message.contains("can never have a session"))
+    }
+
+    @Test("A session repository in a file watcher can never have a session")
+    func sessionRepositoryInFileHandler() throws {
+        let found = try diagnose("""
+        (Import Rows: File Event Handler) {
+            Store the <row> into the <cart-repository>.
+            Return an <OK: status> for the <import>.
+        }
+        """, scopes: ["cart-repository": "session"])
+        #expect(found.count == 1)
+        #expect(found[0].message.contains("can never have a session"))
+    }
+
+    @Test("A connection repository on an HTTP route has no connection to use")
+    func connectionRepositoryOnHTTPRoute() throws {
+        let found = try diagnose("""
+        (addToCart: Shop API) {
+            Store the <item> into the <partial-repository>.
+            Return a <Created: status> with <item>.
+        }
+        """, scopes: ["partial-repository": "connection"])
+        #expect(found.count == 1)
+        #expect(found[0].message.contains("no connection the program can see"))
+    }
+
+    // MARK: - Uses that are fine
+
+    @Test("A socket handler touching a session repository is left to run time")
+    func socketHandlerMayHaveBeenPromoted() throws {
+        // `Attach` may have promoted this connection, and the analyzer cannot
+        // know whether it did. Warning here would fire on every correct
+        // promotion, which is how a useful diagnostic becomes one people
+        // silence.
+        let found = try diagnose("""
+        (Handle Data Received: Socket Event Handler) {
+            Store the <chunk> into the <cart-repository>.
+            Return an <OK: status> for the <packet>.
+        }
+        """, scopes: ["cart-repository": "session"])
+        #expect(found.isEmpty)
+    }
+
+    @Test("A session repository on an HTTP route is exactly what it is for")
+    func sessionRepositoryOnHTTPRoute() throws {
+        let found = try diagnose("""
+        (addToCart: Shop API) {
+            Store the <item> into the <cart-repository>.
+            Return a <Created: status> with <item>.
+        }
+        """, scopes: ["cart-repository": "session"])
+        #expect(found.isEmpty)
+    }
+
+    @Test("An application repository is unremarkable anywhere")
+    func applicationRepositoryAnywhere() throws {
+        let found = try diagnose("""
+        (Application-Start: Shop) {
+            Store the <seed> into the <catalogue-repository>.
+            Return an <OK: status> for the <startup>.
+        }
+        """, scopes: ["catalogue-repository": "application"])
+        #expect(found.isEmpty)
+    }
+
+    @Test("An undeclared repository is not analysed at all")
+    func undeclaredIsSilent() throws {
+        // Every repository was application-scoped before ARO-0094 and a
+        // program that never declares one must see no new diagnostics.
+        let found = try diagnose("""
+        (Application-Start: Shop) {
+            Store the <seed> into the <cart-repository>.
+            Return an <OK: status> for the <startup>.
+        }
+        """, scopes: [:])
+        #expect(found.isEmpty)
+    }
+
+    @Test("A user-defined action inherits its caller, so nothing is decidable")
+    func userActionIsNotAnalysed() throws {
+        let found = try diagnose("""
+        (AddItem: Action takes <item>) {
+            Store the <item> into the <cart-repository>.
+            Return an <OK: status> with <item>.
+        }
+        """, scopes: ["cart-repository": "session"])
+        #expect(found.isEmpty)
+    }
+
+    // MARK: - The catalogue
+
+    @Test("The analyzer's scope names match the runtime's")
+    func scopeNamesAgree() {
+        // AROParser cannot import ARORuntime — `aro check` never loads it — so
+        // the two lists are pinned here the way ComputeQualifierCatalog is
+        // pinned to ComputeAction. Add a scope to one and this fails.
+        #expect(RepositoryScopeAnalyzer.scopeNames == ["application", "connection", "session"])
+    }
+}
+
+// ============================================================
+// GitLab #632 — a handler whose name names no event
+// ============================================================
+
+@Suite("Handler names that name no event (#632)")
+struct HandlerNameAnalyzerTests {
+
+    private func warnings(_ source: String) throws -> [Diagnostic] {
+        let program = try Parser(tokens: try Lexer.tokenize(source)).parse()
+        let collector = DiagnosticCollector()
+        HandlerNameAnalyzer.check(program, diagnostics: collector)
+        return collector.warnings
+    }
+
+    @Test("A socket handler with no keyword is reported")
+    func keywordlessSocketHandler() throws {
+        // The issue's own repro. It used to subscribe to nothing: compiled,
+        // checked clean, never ran.
+        let found = try warnings("""
+        (Echo Input: Socket Event Handler) {
+            Extract the <chunk> from the <packet: buffer>.
+            Return an <OK: status> for the <packet>.
+        }
+        """)
+        #expect(found.count == 1)
+        #expect(found[0].message.contains("says which event it handles"))
+        #expect(found[0].hints.contains { $0.contains("connects and disconnects too") })
+    }
+
+    @Test("A WebSocket handler with no keyword is reported")
+    func keywordlessWebSocketHandler() throws {
+        let found = try warnings("""
+        (Broadcast Chat: WebSocket Event Handler) {
+            Return an <OK: status> for the <event>.
+        }
+        """)
+        #expect(found.count == 1)
+    }
+
+    @Test("Named handlers are silent")
+    func namedHandlersAreSilent() throws {
+        for name in ["Handle Data Received", "Handle Client Connected",
+                     "Handle Client Disconnected", "Handle Message"] {
+            let found = try warnings("""
+            (\(name): Socket Event Handler) {
+                Return an <OK: status> for the <packet>.
+            }
+            """)
+            #expect(found.isEmpty, "\(name) should not warn")
+        }
+    }
+
+    @Test("Handlers of other families are not this check's business")
+    func otherFamiliesUntouched() throws {
+        let found = try warnings("""
+        (Do Something: UserCreated Handler) {
+            Return an <OK: status> for the <event>.
+        }
+        """)
+        #expect(found.isEmpty)
+    }
+}

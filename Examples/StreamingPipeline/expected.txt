@@ -1,4 +1,4 @@
-# Generated: Tue Feb 17 12:36:49 2026
+# Generated: Wed Sep 23 00:47:11 2026
 # Type: console
 # Command: aro run ./Examples/StreamingPipeline
 ---
@@ -268,4 +268,4 @@ Max Amount:
 === Pipeline Complete ===
 In streaming mode, each row flows through all 5 filter stages.
 Non-matching rows are discarded immediately - O(1) memory!
-streaming-demo
+[OK] streaming-demo

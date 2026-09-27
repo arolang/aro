@@ -23,7 +23,7 @@ struct StoreInlinePayloadSessionTests {
 
     @Test("The payload is stored and the result binds the stored record")
     func inlinePayloadStoresAndBinds() async throws {
-        let session = REPLSession(suppressLogPrefix: true)
+        let session = REPLSession()
         let result = try await session.executeStatement(
             "Store the <ticket> into the <s515a-repository> with { id: 1, state: \"new\" }.")
         #expect(result.isSuccess)
@@ -40,7 +40,7 @@ struct StoreInlinePayloadSessionTests {
 
     @Test("The identity field behaves exactly as for a Created record")
     func identityFieldMatchesCreateThenStore() async throws {
-        let session = REPLSession(suppressLogPrefix: true)
+        let session = REPLSession()
 
         // Create-then-Store, the shape people had to write.
         _ = try await session.executeStatement(
@@ -70,7 +70,7 @@ struct StoreInlinePayloadSessionTests {
 
     @Test("A payload for a name that is already bound is refused, and stores nothing")
     func payloadAndBoundNameConflict() async throws {
-        let session = REPLSession(suppressLogPrefix: true)
+        let session = REPLSession()
         _ = try await session.executeStatement(
             "Create the <ticket> with { id: 9, state: \"old\" }.")
 
@@ -95,7 +95,7 @@ struct StoreInlinePayloadSessionTests {
 
     @Test("A payload alongside a <result: source> specifier is refused")
     func payloadAndSpecifierConflict() async throws {
-        let session = REPLSession(suppressLogPrefix: true)
+        let session = REPLSession()
         _ = try await session.executeStatement("Create the <src> with { id: 9 }.")
 
         let result = try await session.executeStatement(
@@ -115,7 +115,7 @@ struct StoreInlinePayloadSessionTests {
     func payloadIsStatementLocal() async throws {
         // `_with_` is a per-statement framework variable. If it survived the
         // statement, the plain Store below would store the payload again.
-        let session = REPLSession(suppressLogPrefix: true)
+        let session = REPLSession()
         _ = try await session.executeStatement(
             "Store the <first> into the <s515e-repository> with { id: 1, state: \"new\" }.")
         _ = try await session.executeStatement(
@@ -132,7 +132,7 @@ struct StoreInlinePayloadSessionTests {
 
     @Test("A list payload stores one row per element, as a bound list does")
     func listPayloadFlattens() async throws {
-        let session = REPLSession(suppressLogPrefix: true)
+        let session = REPLSession()
         let result = try await session.executeStatement(
             "Store the <rows> into the <s515f-repository> with [ { id: 1 }, { id: 2 } ].")
         #expect(result.isSuccess)
@@ -144,7 +144,7 @@ struct StoreInlinePayloadSessionTests {
 
     @Test("The bare and <result: source> spellings still work untouched")
     func existingSpellingsUnaffected() async throws {
-        let session = REPLSession(suppressLogPrefix: true)
+        let session = REPLSession()
         _ = try await session.executeStatement("Create the <u> with { id: 1, name: \"Ada\" }.")
 
         let bare = try await session.executeStatement(

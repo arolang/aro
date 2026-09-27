@@ -257,6 +257,20 @@ struct ModifierBinder {
                 at: ip
             )
         }
+
+        // Bind against clause if present — `Compare the <r> from the <a>
+        // against the <b>.` (GitLab #469). Nothing bound `_against_` in
+        // compiled mode, so the comparison ran with no right operand
+        // (GitLab #663); the interpreter's executor has always bound it.
+        if let againstClause = modifiers.againstClause {
+            let againstName = ctx.stringConstant("_against_")
+            let againstJSON = ctx.stringConstant(serializer.serializeExpression(againstClause))
+            _ = ctx.module.insertCall(
+                externals.evaluateAndBind,
+                on: [ctx.currentContextVar!, againstName, againstJSON],
+                at: ip
+            )
+        }
     }
 
     // MARK: - Literal Binding

@@ -123,7 +123,8 @@ public final class ActionRunner: @unchecked Sendable {
             // Action has async paths that need Task dispatch — fall through
             return nil
         } catch {
-            return .failure(Self.failureMessage(for: error))
+            return .failure(Self.failureMessage(for: error),
+                            hint: AROError.curatedHint(for: error))
         }
     }
 
@@ -158,7 +159,15 @@ public final class ActionRunner: @unchecked Sendable {
     // MARK: - Verb Canonicalization
 
     /// Canonical verb mappings - maps synonym verbs to their primary verb
-    private static let verbMappings: [String: String] = [
+    /// Synonym → canonical verb.
+    ///
+    /// Internal rather than private so `VerbMappingParityTests` can assert
+    /// every canonical target is a verb some action actually implements. It
+    /// could not before, and the table drifted: `forward → route` and
+    /// `monitor`/`observe → watch` pointed at verbs no `ActionImplementation`
+    /// ever claimed, so the synonyms they promised failed at `executeAction`
+    /// exactly as the bare verb did (GitLab #722, and #698 for the phantoms).
+    static let verbMappings: [String: String] = [
         // compute synonyms
         "calculate": "compute",
         "derive": "compute",
@@ -215,16 +224,15 @@ public final class ActionRunner: @unchecked Sendable {
         "initialize": "start",
         "boot": "start",
 
-        // listen synonyms
+        // listen synonyms. `await` is ListenAction's own verb, so this is a
+        // no-op that documents the pair.
+        //
+        // `wait` is NOT here. It belongs to `WaitForEventsAction`
+        // (["wait", "keepalive", "block"]), so canonicalising it to `listen`
+        // dispatched `Wait the <application> for the <events>.` to
+        // `ListenAction` — the wrong action, and in compiled binaries
+        // especially, whose table is keyed by the canonical verb (GitLab #722).
         "await": "listen",
-        "wait": "listen",
-
-        // route synonyms
-        "forward": "route",
-
-        // watch synonyms
-        "monitor": "watch",
-        "observe": "watch",
 
         // sleep synonyms (ARO-0054)
         "delay": "sleep",
@@ -389,14 +397,20 @@ public struct ActionRunnerResult: @unchecked Sendable {
     public let value: (any Sendable)?
     public let error: String?
 
+    /// The curated sentence for this failure, when it is one of the few the
+    /// statement cannot explain by itself (`AROError.curatedHint`). Carried
+    /// alongside the message because the bridge only ever received a `String`,
+    /// and a string cannot be classified back into the error it came from.
+    public let hint: String?
+
     public var succeeded: Bool { error == nil }
 
     public static func success(_ value: any Sendable) -> ActionRunnerResult {
-        ActionRunnerResult(value: value, error: nil)
+        ActionRunnerResult(value: value, error: nil, hint: nil)
     }
 
-    public static func failure(_ error: String) -> ActionRunnerResult {
-        ActionRunnerResult(value: nil, error: error)
+    public static func failure(_ error: String, hint: String? = nil) -> ActionRunnerResult {
+        ActionRunnerResult(value: nil, error: error, hint: hint)
     }
 }
 
@@ -441,7 +455,8 @@ extension ActionRunner {
             do {
                 return .success(try syncHandler(result, object, context))
             } catch {
-                return .failure(Self.failureMessage(for: error))
+                return .failure(Self.failureMessage(for: error),
+                            hint: AROError.curatedHint(for: error))
             }
         }
 
@@ -456,7 +471,8 @@ extension ActionRunner {
             let value = try future.force()
             return .success(value)
         } catch {
-            return .failure(Self.failureMessage(for: error))
+            return .failure(Self.failureMessage(for: error),
+                            hint: AROError.curatedHint(for: error))
         }
     }
 
@@ -477,12 +493,32 @@ extension ActionRunner {
                 // Unregister when task completes
                 context.eventBus?.unregisterPendingHandler()
             }
-            _ = try? await self.executeAsync(
-                verb: verb,
-                result: result,
-                object: object,
-                context: context
-            )
+            do {
+                _ = try await self.executeAsync(
+                    verb: verb,
+                    result: result,
+                    object: object,
+                    context: context
+                )
+            } catch {
+                // Fire-and-forget means nobody is waiting for the result, not
+                // that the result does not matter (GitLab #650). This was a
+                // bare `try?` with no justifying comment, so an `Emit` whose
+                // handler threw inside a compiled binary vanished: no output,
+                // no non-zero exit, no trace. CLAUDE.md requires every `try?`
+                // to say why the fallback is acceptable, and here it was not.
+                //
+                // Reported as a recoverable error event, the same shape the
+                // interpreter's handler path uses, so a program can observe it
+                // and `aro run` can say something happened.
+                context.eventBus?.publish(ErrorOccurredEvent(
+                    error: String(describing: error),
+                    context: "\(verb) (fire-and-forget)",
+                    recoverable: true
+                ))
+                FileHandle.standardError.write(Data((
+                    "[ARO] Fire-and-forget \(verb) failed: \(error)\n").utf8))
+            }
         }
     }
 

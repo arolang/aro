@@ -103,7 +103,8 @@ public struct ExpressionEvaluator: Sendable {
                varRef.noun.specifiers == ["count"] {
                 return await context.container.repositoryStorage.count(
                     repository: varRef.noun.base,
-                    businessActivity: context.businessActivity
+                    businessActivity: context.businessActivity,
+                    caller: try context.repositoryPartition(of: varRef.noun.base)
                 )
             }
 
@@ -689,6 +690,8 @@ public struct ExpressionEvaluator: Sendable {
             return date
         }
         if let str = value as? String {
+            // Asking whether this string is a date. Unparseable means "not a
+            // date", which the nil return says; the caller decides if that matters.
             return try? ARODate.parse(str)
         }
         return nil

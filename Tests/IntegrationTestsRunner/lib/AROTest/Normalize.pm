@@ -61,16 +61,27 @@ sub normalize_output {
     # Remove macOS Swift dual-runtime warnings.
     $output =~ s/^objc\[\d+\]: Class .* is implemented in both .* One of the duplicates must be removed or renamed\.\n//gm;
 
+    # Remove plugin build progress (GitLab #826). The runtime announces on
+    # stderr when it has to compile a plugin, because a first run of e.g.
+    # SQLiteExample is otherwise minutes of silence. This executor merges
+    # stderr into stdout, so the lines would appear in a run that happens to
+    # build and not in one that doesn't -- a property of the checkout, not of
+    # the example.
+    $output =~ s/^\[aro\] (?:Building|Built) plugin '[^']*'.*\n//gm;
+
     # Remove timing values from test output (e.g., "(1ms)", "(<1ms)")
     $output =~ s/\s*\([<]?\d+m?s\)//g;
 
     # Remove leading whitespace from lines (test output has indentation)
     $output =~ s/^[ \t]+//gm;
 
-    # Remove bracketed prefixes at start of lines (e.g., [Application-Start], [OK], etc.)
-    # Binary applications don't output these, only the interpreter does.
-    # Use [ \t]* (not \s*) to preserve newlines from empty Log statements.
-    $output =~ s/^\[[A-Za-z][A-Za-z0-9 -]*\][ \t]*//gm;
+    # (Removed: the rule that stripped any leading [Bracketed] token.
+    #  It existed because the interpreter prefixed every Log line with the
+    #  feature set's name and the binary did not, so the two modes could only
+    #  be compared with the prefix erased -- and erasing it also erased
+    #  application output like [OK] and [AUDIT], on both sides, hiding any
+    #  difference in those too. The interpreter no longer adds the prefix, so
+    #  there is nothing left to strip. GitLab #814.)
 
     # Remove ISO timestamps
     $output =~ s/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z?/__TIMESTAMP__/g;

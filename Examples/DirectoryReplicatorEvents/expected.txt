@@ -1,4 +1,4 @@
-# Generated: Sat Jan 10 11:15:15 2026
+# Generated: Sat Sep 26 09:45:52 2026
 # Type: console
 # Command: aro run ./Examples/DirectoryReplicatorEvents
 # NOTE: This example uses test-script for verification
@@ -8,10 +8,10 @@
 Scanning template directory...
 Found 3 directories
 Storing directories to repository...
-directory-repository: created
+[AUDIT] directory-repository: created
 Created: foo
-directory-repository: created
+[AUDIT] directory-repository: created
 Created: foo/bar
-directory-repository: created
+[AUDIT] directory-repository: created
 Created: baz
-replication
+[OK] replication

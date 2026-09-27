@@ -1,4 +1,4 @@
-# Generated: 2026-03-22
+# Generated: Wed Sep 23 00:47:10 2026
 # Type: console
 # Command: aro run ./Examples/StreamExample
 # Workdir: Examples/StreamExample
@@ -11,4 +11,4 @@ charlie
 delta
 echo
 === Done ===
-example
+[OK] example

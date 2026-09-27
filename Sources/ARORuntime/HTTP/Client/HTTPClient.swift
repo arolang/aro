@@ -11,53 +11,16 @@ import NIO
 import NIOHTTP1
 import NIOFoundationCompat
 
-/// Bounded async semaphore — actor-based, no busy-wait.
-/// Acquire suspends until a slot is free; release hands the slot to the next
-/// waiting acquirer if any, otherwise decrements the in-flight count.
-fileprivate actor HTTPConcurrencyLimiter {
-    private let limit: Int
-    private var inFlight: Int = 0
-    private var waiters: [CheckedContinuation<Void, Never>] = []
-
-    init(limit: Int) {
-        self.limit = max(1, limit)
-    }
-
-    func acquire() async {
-        if inFlight < limit {
-            inFlight += 1
-            return
-        }
-        await withCheckedContinuation { cont in
-            waiters.append(cont)
-        }
-        // On resume the slot has been transferred from the releaser; inFlight
-        // stays at `limit` rather than dipping and re-incrementing.
-    }
-
-    func release() {
-        if let next = waiters.first {
-            waiters.removeFirst()
-            next.resume()
-        } else {
-            inFlight = max(0, inFlight - 1)
-        }
-    }
-}
-
 /// HTTP Client implementation using AsyncHTTPClient
 ///
 /// Provides HTTP client functionality for making outgoing requests
 /// from ARO feature sets.
 public final class AROHTTPClient: HTTPClientService, @unchecked Sendable {
-    /// Process-wide cap on concurrent HTTP fetches. Bounds the number of
-    /// response bodies in memory during a burst (crawlers, fan-out emitters).
-    /// Override with the `ARO_HTTP_CONCURRENCY` environment variable.
-    private static let sharedLimiter: HTTPConcurrencyLimiter = {
-        let env = ProcessInfo.processInfo.environment["ARO_HTTP_CONCURRENCY"]
-        let limit = env.flatMap(Int.init) ?? 8
-        return HTTPConcurrencyLimiter(limit: limit)
-    }()
+    // Process-wide cap on concurrent HTTP fetches — bounding the number of
+    // response bodies in memory during a burst (crawlers, fan-out emitters) —
+    // now lives in `ApplicationLimits.httpGate`, so `Configure the
+    // <http-client: concurrency> with 4.` and `ARO_HTTP_CONCURRENCY` write
+    // the same setting (GitLab #862).
     // MARK: - Properties
 
     private let client: HTTPClient
@@ -190,10 +153,18 @@ public final class AROHTTPClient: HTTPClientService, @unchecked Sendable {
             request.body = .bytes(ByteBuffer(data: body))
         }
 
+        // Pace outbound requests before taking a slot (ARO-0088 §10a, GitLab
+        // #862). Rate and concurrency are different limits and both apply: a
+        // quota of 10/s is exceeded by one request at a time if each takes
+        // 50ms, and 8 concurrent requests say nothing about the per-minute
+        // total. Waiting here rather than inside the slot means a paced
+        // program does not hold capacity while it waits its turn.
+        await ApplicationLimits.awaitHTTPRateAllowance()
+
         // Gate concurrent HTTP fetches across the entire process. The slot is
         // held only for the fetch + body collection — once we return the
         // buffered response, downstream parsing/handlers don't keep it.
-        await Self.sharedLimiter.acquire()
+        await ApplicationLimits.httpGate.acquire(limit: ApplicationLimits.httpConcurrency)
         let response: HTTPClientResponse
         do {
             let httpResponse = try await client.execute(request, timeout: timeout)
@@ -206,9 +177,9 @@ public final class AROHTTPClient: HTTPClientService, @unchecked Sendable {
                 headers: Dictionary(httpResponse.headers.map { ($0.name, $0.value) }) { _, last in last },
                 body: bodyData
             )
-            await Self.sharedLimiter.release()
+            await ApplicationLimits.httpGate.release()
         } catch {
-            await Self.sharedLimiter.release()
+            await ApplicationLimits.httpGate.release()
             eventBus.publish(HTTPClientErrorEvent(url: url, error: error.localizedDescription))
             throw HTTPError.connectionFailed
         }

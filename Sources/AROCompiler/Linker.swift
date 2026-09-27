@@ -265,35 +265,6 @@ public final class CCompiler {
 
     // MARK: - Compilation
 
-    /// Compile C source to an object file
-    /// - Parameters:
-    ///   - sourcePath: Path to C source file
-    ///   - outputPath: Path for output object file
-    ///   - optimize: Enable optimizations
-    public func compileToObject(
-        sourcePath: String,
-        outputPath: String,
-        optimize: Bool = false
-    ) throws {
-        var args = [findCompiler()]
-        args.append("-c")
-        args.append(sourcePath)
-        args.append("-o")
-        args.append(outputPath)
-
-        if optimize {
-            args.append("-O2")
-        } else {
-            args.append("-g") // Debug info
-        }
-
-        // Standard flags
-        args.append("-std=c11")
-        args.append("-Wall")
-
-        try runProcess(args)
-    }
-
     /// Linker options for size and stripping
     /// How the Swift runtime is bound to the produced binary.
     ///
@@ -376,21 +347,21 @@ public final class CCompiler {
         options: LinkOptions
     ) throws {
         #if os(Linux)
-        FileHandle.standardError.write(Data("[LINKER] ===== ENTERED link() method =====\n".utf8))
-        FileHandle.standardError.write(Data("[LINKER] link() called with objectFiles: \(objectFiles)\n".utf8))
-        FileHandle.standardError.write(Data("[LINKER] outputPath: \(outputPath)\n".utf8))
-        FileHandle.standardError.write(Data("[LINKER] Finding compiler...\n".utf8))
+        debugLog("[LINKER] ===== ENTERED link() method =====")
+        debugLog("[LINKER] link() called with objectFiles: \(objectFiles)")
+        debugLog("[LINKER] outputPath: \(outputPath)")
+        debugLog("[LINKER] Finding compiler...")
         #endif
 
         var args = [findCompiler()]
 
         #if os(Linux)
-        FileHandle.standardError.write(Data("[LINKER] Array created with compiler: \(args[0])\n".utf8))
-        FileHandle.standardError.write(Data("[LINKER] Building arguments...\n".utf8))
+        debugLog("[LINKER] Array created with compiler: \(args[0])")
+        debugLog("[LINKER] Building arguments...")
         #endif
 
         #if os(Linux)
-        FileHandle.standardError.write(Data("[LINKER] 1. Handling output type...\n".utf8))
+        debugLog("[LINKER] 1. Handling output type...")
         #endif
 
         // Output type
@@ -411,7 +382,7 @@ public final class CCompiler {
         }
 
         #if os(Linux)
-        FileHandle.standardError.write(Data("[LINKER] 2. Adding object files...\n".utf8))
+        debugLog("[LINKER] 2. Adding object files...")
 
         // On Linux, export all symbols to the dynamic symbol table
         // This is required for dlsym() to find feature set functions (aro_fs_*)
@@ -425,7 +396,7 @@ public final class CCompiler {
         args.append(contentsOf: objectFiles)
 
         #if os(Linux)
-        FileHandle.standardError.write(Data("[LINKER] 3. Adding output path...\n".utf8))
+        debugLog("[LINKER] 3. Adding output path...")
         #endif
 
         // Issue #231 — `-g` on the link line tells clang's driver that
@@ -442,7 +413,7 @@ public final class CCompiler {
         args.append(outputPath)
 
         #if os(Linux)
-        FileHandle.standardError.write(Data("[LINKER] 4. Processing runtime library...\n".utf8))
+        debugLog("[LINKER] 4. Processing runtime library...")
         #endif
 
         // Runtime library (ARORuntime contains C-callable bridge via @_cdecl)
@@ -472,7 +443,7 @@ public final class CCompiler {
         }
 
         #if os(Linux)
-        FileHandle.standardError.write(Data("[LINKER] 5. Checking platform-specific libraries...\n".utf8))
+        debugLog("[LINKER] 5. Checking platform-specific libraries...")
         #endif
 
         // Platform-specific libraries
@@ -515,9 +486,9 @@ public final class CCompiler {
             let compiler = args[0]
             let usingSwiftc = compiler.contains("swiftc")
 
-            FileHandle.standardError.write(Data("[LINKER] Swift lib path: \(swiftLibPath)\n".utf8))
-            FileHandle.standardError.write(Data("[LINKER] Using compiler: \(usingSwiftc ? "swiftc" : "clang")\n".utf8))
-            FileHandle.standardError.write(Data("[LINKER] Link mode: \(options.linkMode.rawValue)\n".utf8))
+            debugLog("[LINKER] Swift lib path: \(swiftLibPath)")
+            debugLog("[LINKER] Using compiler: \(usingSwiftc ? "swiftc" : "clang")")
+            debugLog("[LINKER] Link mode: \(options.linkMode.rawValue)")
 
             // The toolchain ships static archives next to the .so directory:
             //   <swiftLibPath>/swift/linux       <- .so files (dynamic)
@@ -594,7 +565,7 @@ public final class CCompiler {
                 let swiftRTPath = findSwiftRuntimeObject(swiftLibPath: useStatic ? swiftStaticLibPath : swiftLibPath)
                     ?? findSwiftRuntimeObject(swiftLibPath: swiftLibPath)
                 if let rtPath = swiftRTPath {
-                    FileHandle.standardError.write(Data("[LINKER] Found swiftrt.o at: \(rtPath)\n".utf8))
+                    debugLog("[LINKER] Found swiftrt.o at: \(rtPath)")
                     // swiftrt.o must be linked FIRST to initialize Swift runtime before any Swift code runs
                     args.insert(rtPath, at: 1)  // Insert right after compiler, before object files
                 } else {
@@ -739,73 +710,15 @@ public final class CCompiler {
         }
 
         #if os(Linux)
-        FileHandle.standardError.write(Data("[LINKER] Arguments built, calling runProcess...\n".utf8))
-        FileHandle.standardError.write(Data("[LINKER] Total args: \(args.count)\n".utf8))
+        debugLog("[LINKER] Arguments built, calling runProcess...")
+        debugLog("[LINKER] Total args: \(args.count)")
         #endif
 
         try runProcess(args)
 
         #if os(Linux)
-        FileHandle.standardError.write(Data("[LINKER] runProcess completed successfully\n".utf8))
+        debugLog("[LINKER] runProcess completed successfully")
         #endif
-    }
-
-    /// Compile C source directly to executable (single step)
-    /// - Parameters:
-    ///   - sourcePath: Path to C source file
-    ///   - outputPath: Path for output executable
-    ///   - optimize: Enable optimizations
-    public func compileAndLink(
-        sourcePath: String,
-        outputPath: String,
-        optimize: Bool = false
-    ) throws {
-        var args = [findCompiler()]
-        args.append(sourcePath)
-        args.append("-o")
-        args.append(outputPath)
-
-        // Standard flags
-        args.append("-std=c11")
-        args.append("-Wall")
-
-        // Runtime library (ARORuntime contains C-callable bridge via @_cdecl)
-        if let runtimePath = runtimeLibraryPath {
-            #if os(Windows)
-            // On Windows, use the full path to the library directly
-            args.append(runtimePath)
-            #else
-            let libDir = URL(fileURLWithPath: runtimePath).deletingLastPathComponent().path
-            args.append("-L\(libDir)")
-            args.append("-lARORuntime")
-            args.append("-Wl,-rpath,\(libDir)")
-            #endif
-        }
-
-        // Platform-specific
-        #if os(macOS)
-        if let swiftLibPath = findSwiftLibPath() {
-            args.append("-L\(swiftLibPath)")
-            args.append("-Wl,-rpath,\(swiftLibPath)")
-        }
-        args.append("-lSystem")
-        #elseif os(Linux)
-        args.append("-lpthread")
-        args.append("-ldl")
-        args.append("-lm")
-        if let swiftLibPath = findSwiftLibPath() {
-            args.append("-L\(swiftLibPath)")
-            args.append("-Wl,-rpath,\(swiftLibPath)")
-        }
-        #endif
-
-        if optimize {
-            args.append("-O2")
-        } else {
-            args.append("-g")
-        }
-
-        try runProcess(args)
     }
 
     // MARK: - Private Methods
@@ -818,7 +731,7 @@ public final class CCompiler {
 
     private func findCompiler() -> String {
         #if os(Linux)
-        FileHandle.standardError.write(Data("[LINKER] findCompiler() called on Linux\n".utf8))
+        debugLog("[LINKER] findCompiler() called on Linux")
 
         // On Linux, use clang for linking Swift static libraries
         // swiftc on GitHub Actions runners is unreliable (hangs intermittently)
@@ -826,18 +739,18 @@ public final class CCompiler {
 
         // 1. Check for generic clang (may be symlinked to clang-20 in CI)
         if FileManager.default.fileExists(atPath: "/usr/bin/clang") {
-            FileHandle.standardError.write(Data("[LINKER] Found clang at /usr/bin/clang\n".utf8))
+            debugLog("[LINKER] Found clang at /usr/bin/clang")
             return "/usr/bin/clang"
         }
 
         // 2. Check for clang-14 (Ubuntu fallback)
         if FileManager.default.fileExists(atPath: "/usr/bin/clang-14") {
-            FileHandle.standardError.write(Data("[LINKER] Found clang-14 at /usr/bin/clang-14\n".utf8))
+            debugLog("[LINKER] Found clang-14 at /usr/bin/clang-14")
             return "/usr/bin/clang-14"
         }
 
         // 3. Try to find clang in PATH
-        FileHandle.standardError.write(Data("[LINKER] Trying to find clang in PATH...\n".utf8))
+        debugLog("[LINKER] Trying to find clang in PATH...")
         do {
             let whichProcess = Process()
             whichProcess.executableURL = URL(fileURLWithPath: "/usr/bin/which")
@@ -854,12 +767,12 @@ public final class CCompiler {
                 let data = whichPipe.fileHandleForReading.readDataToEndOfFile()
                 if let path = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
                    !path.isEmpty {
-                    FileHandle.standardError.write(Data("[LINKER] Found clang in PATH: \(path)\n".utf8))
+                    debugLog("[LINKER] Found clang in PATH: \(path)")
                     return path
                 }
             }
         } catch {
-            FileHandle.standardError.write(Data("[LINKER] Error searching for clang: \(error)\n".utf8))
+            debugLog("[LINKER] Error searching for clang: \(error)")
         }
 
         // 4. Final fallback
@@ -1493,7 +1406,7 @@ public final class CCompiler {
             }
         }
 
-        FileHandle.standardError.write(Data("[LINKER] Searched for swiftrt.o in: \(potentialPaths)\n".utf8))
+        debugLog("[LINKER] Searched for swiftrt.o in: \(potentialPaths)")
         #endif
 
         return nil
@@ -1505,7 +1418,7 @@ public final class CCompiler {
         }
 
         #if os(Linux)
-        FileHandle.standardError.write(Data("[LINKER] runProcess() called with \(args.count) args\n".utf8))
+        debugLog("[LINKER] runProcess() called with \(args.count) args")
         #endif
 
         // Debug: Print command being run (only in verbose mode)
@@ -1524,7 +1437,7 @@ public final class CCompiler {
         process.standardError = errorPipe
 
         #if os(Linux)
-        FileHandle.standardError.write(Data("[LINKER] Starting process...\n".utf8))
+        debugLog("[LINKER] Starting process...")
         #endif
 
         // Thread-safe data storage
@@ -1551,7 +1464,7 @@ public final class CCompiler {
         do {
             try process.run()
             #if os(Linux)
-            FileHandle.standardError.write(Data("[LINKER] Process started, waiting for exit...\n".utf8))
+            debugLog("[LINKER] Process started, waiting for exit...")
             #endif
 
             // Read pipes in background to prevent deadlock
@@ -1574,7 +1487,7 @@ public final class CCompiler {
             Thread.sleep(forTimeInterval: 0.1)
 
             #if os(Linux)
-            FileHandle.standardError.write(Data("[LINKER] Process exited with status: \(process.terminationStatus)\n".utf8))
+            debugLog("[LINKER] Process exited with status: \(process.terminationStatus)")
             #endif
         } catch {
             throw LinkerError.compilationFailed("Failed to run compiler: \(error)")
@@ -1584,15 +1497,16 @@ public final class CCompiler {
         let errorMessage = String(data: errorBox.get(), encoding: .utf8) ?? ""
         let outputMessage = String(data: outputBox.get(), encoding: .utf8) ?? ""
 
-        #if os(Linux)
-        // On Linux, always print compiler output for debugging
+        // The compiler's own chatter, on demand. This used to print on every
+        // Linux build "for debugging" — on stdout, so it landed in anything
+        // piping `aro build`. A failing link still reports all of it: the
+        // throw below carries both streams (GitLab #672).
         if !errorMessage.isEmpty {
-            print("[LINKER] stderr: \(errorMessage)")
+            debugLog("[LINKER] stderr: \(errorMessage)")
         }
         if !outputMessage.isEmpty {
-            print("[LINKER] stdout: \(outputMessage)")
+            debugLog("[LINKER] stdout: \(outputMessage)")
         }
-        #endif
 
         if process.terminationStatus != 0 {
             let combined = [errorMessage, outputMessage].filter { !$0.isEmpty }.joined(separator: "\n")
@@ -1638,6 +1552,36 @@ public final class PluginSymbolRenamer {
         self.verbose = verbose
     }
 
+    /// Inputs above this count are renamed through an archive round-trip rather
+    /// than one `llvm-objcopy` per file.
+    ///
+    /// GitLab #716: the per-file loop forks `llvm-objcopy` once per object, and a
+    /// Rust plugin's staticlib carries ~400 members — the same ~400 fork+execs that
+    /// made `discoverSymbols` time out on a slow CI runner before it was batched.
+    /// The round-trip costs a fixed three processes (`llvm-ar` in, one
+    /// `llvm-objcopy` over the whole archive, `llvm-ar` out) no matter how many
+    /// objects there are; below this threshold those three cost more than the
+    /// forks they save.
+    public static let archiveBatchThreshold = 8
+
+    /// The `old new` pairs handed to `llvm-objcopy --redefine-syms`.
+    ///
+    /// One line per symbol. On Mach-O the symbols carry a leading underscore; the
+    /// plain (ELF) spelling is listed on every platform as a no-op safety net,
+    /// since llvm-objcopy ignores map entries for symbols the object does not
+    /// define.
+    public static func redefineSymsMap(pluginName: String) -> String {
+        var lines: [String] = []
+        for sym in pluginSymbols {
+            let renamed = renamedSymbol(plugin: pluginName, original: sym)
+            #if os(macOS)
+            lines.append("_\(sym) _\(renamed)")
+            #endif
+            lines.append("\(sym) \(renamed)")
+        }
+        return lines.joined(separator: "\n") + "\n"
+    }
+
     /// Rename plugin symbols in object files so they can be statically linked without collision.
     ///
     /// - Parameters:
@@ -1650,35 +1594,117 @@ public final class PluginSymbolRenamer {
         pluginName: String,
         outputDir: String
     ) throws -> [String] {
+        guard !objectFiles.isEmpty else { return [] }
+
         let objcopyPath = try findLLVMObjcopy()
 
-        var renamedFiles: [String] = []
-        for (index, inputFile) in objectFiles.enumerated() {
-            let baseName = URL(fileURLWithPath: inputFile).lastPathComponent
-            let outputFile = "\(outputDir)/\(pluginName)_\(index)_\(baseName)"
+        // The 12 redefinitions go in a file rather than on the command line
+        // (GitLab #716): 24 `--redefine-sym` arguments is a long argv to rebuild
+        // for every single object, and the file is written once for all of them.
+        let mapFile = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("aro-redefine-\(pluginName)-\(UUID().uuidString).txt")
+        try Self.redefineSymsMap(pluginName: pluginName).write(to: mapFile, atomically: true, encoding: .utf8)
+        defer { try? FileManager.default.removeItem(at: mapFile) }
 
-            // Build --redefine-sym arguments for all 12 plugin symbols.
-            // On macOS (Mach-O), symbols have a leading underscore.
-            var args = [objcopyPath]
-            for sym in Self.pluginSymbols {
-                let renamed = Self.renamedSymbol(plugin: pluginName, original: sym)
-                #if os(macOS)
-                args.append("--redefine-sym")
-                args.append("_\(sym)=_\(renamed)")
-                #endif
-                // ELF (Linux) has no leading underscore; also add the plain form
-                // on macOS as a no-op safety net (llvm-objcopy ignores missing symbols)
-                args.append("--redefine-sym")
-                args.append("\(sym)=\(renamed)")
+        if objectFiles.count > Self.archiveBatchThreshold {
+            do {
+                return try renameViaArchive(
+                    objectFiles: objectFiles,
+                    pluginName: pluginName,
+                    outputDir: outputDir,
+                    objcopyPath: objcopyPath,
+                    mapFile: mapFile.path
+                )
+            } catch {
+                // Fall back to the per-file loop rather than failing the build.
+                // The batched path leans on llvm-ar and on llvm-objcopy's archive
+                // support; a toolchain missing either must still produce a binary,
+                // just more slowly. The reason is printed so that a silent
+                // slowdown doesn't look like the batching simply not helping.
+                FileHandle.standardError.write(Data(
+                    "[Linker] Warning: batched symbol renaming failed for '\(pluginName)' (\(error)); falling back to one llvm-objcopy per object file.\n".utf8))
             }
-            args.append(inputFile)
-            args.append(outputFile)
-
-            try runProcess(args)
-            renamedFiles.append(outputFile)
         }
 
+        return try renameEachObjectFile(
+            objectFiles: objectFiles,
+            pluginName: pluginName,
+            outputDir: outputDir,
+            objcopyPath: objcopyPath,
+            mapFile: mapFile.path
+        )
+    }
+
+    /// One `llvm-objcopy` per object file. Correct for any input, but O(N) processes.
+    private func renameEachObjectFile(
+        objectFiles: [String],
+        pluginName: String,
+        outputDir: String,
+        objcopyPath: String,
+        mapFile: String
+    ) throws -> [String] {
+        var renamedFiles: [String] = []
+        for (index, inputFile) in objectFiles.enumerated() {
+            let outputFile = "\(outputDir)/\(Self.renamedObjectName(pluginName: pluginName, index: index, inputFile: inputFile))"
+            try runProcess([objcopyPath, "--redefine-syms=\(mapFile)", inputFile, outputFile])
+            renamedFiles.append(outputFile)
+        }
         return renamedFiles
+    }
+
+    /// Rename every object in one `llvm-objcopy` invocation by bundling them into
+    /// a throwaway archive first (GitLab #716).
+    ///
+    /// `llvm-objcopy` applies `--redefine-syms` to every member of an archive and
+    /// writes an archive back, so N objects cost three processes instead of N.
+    /// Members are staged under the same unique names the per-file path produces,
+    /// so two inputs sharing a basename can't collide on extraction and the
+    /// returned paths are identical whichever path ran.
+    private func renameViaArchive(
+        objectFiles: [String],
+        pluginName: String,
+        outputDir: String,
+        objcopyPath: String,
+        mapFile: String
+    ) throws -> [String] {
+        let arPath = findArchiver()
+        let fm = FileManager.default
+
+        let staging = URL(fileURLWithPath: outputDir)
+            .appendingPathComponent(".batch-\(UUID().uuidString)")
+        try fm.createDirectory(at: staging, withIntermediateDirectories: true)
+        defer { try? fm.removeItem(at: staging) }
+
+        var memberNames: [String] = []
+        for (index, inputFile) in objectFiles.enumerated() {
+            let member = Self.renamedObjectName(pluginName: pluginName, index: index, inputFile: inputFile)
+            try fm.copyItem(at: URL(fileURLWithPath: inputFile), to: staging.appendingPathComponent(member))
+            memberNames.append(member)
+        }
+
+        // `rcS` skips the symbol index: llvm-objcopy rewrites the archive anyway
+        // and nothing ever links this intermediate.
+        let inputArchive = staging.appendingPathComponent("batch-in.a")
+        try runProcess([arPath, "rcS", inputArchive.path] + memberNames, workingDirectory: staging.path)
+
+        let outputArchive = staging.appendingPathComponent("batch-out.a")
+        try runProcess([objcopyPath, "--redefine-syms=\(mapFile)", inputArchive.path, outputArchive.path])
+
+        try runProcess([arPath, "x", outputArchive.path], workingDirectory: outputDir)
+
+        // BSD `ar` can exit 0 having extracted nothing (see extractObjectFiles),
+        // so verify rather than hand the linker paths that don't exist — that
+        // would surface much later as an unexplained missing-symbol link error.
+        let renamedFiles = memberNames.map { "\(outputDir)/\($0)" }
+        for path in renamedFiles where !fm.fileExists(atPath: path) {
+            throw LinkerError.compilationFailed("archive extraction produced no \(path)")
+        }
+        return renamedFiles
+    }
+
+    /// Name of the renamed object for an input — identical in both rename paths.
+    private static func renamedObjectName(pluginName: String, index: Int, inputFile: String) -> String {
+        "\(pluginName)_\(index)_\(URL(fileURLWithPath: inputFile).lastPathComponent)"
     }
 
     /// Discover which of the 12 standard plugin symbols actually exist in the given object files.
@@ -1858,7 +1884,7 @@ public final class PluginSymbolRenamer {
         #endif
     }
 
-    private func runProcess(_ args: [String]) throws {
+    private func runProcess(_ args: [String], workingDirectory: String? = nil) throws {
         guard !args.isEmpty else {
             throw LinkerError.compilationFailed("No command specified")
         }
@@ -1870,6 +1896,11 @@ public final class PluginSymbolRenamer {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: args[0])
         process.arguments = Array(args.dropFirst())
+        if let workingDirectory {
+            // `ar` writes/extracts relative to the cwd; member names must stay
+            // basenames so the archive records them without directory prefixes.
+            process.currentDirectoryURL = URL(fileURLWithPath: workingDirectory)
+        }
 
         let outputPipe = Pipe()
         let errorPipe = Pipe()
@@ -1880,13 +1911,13 @@ public final class PluginSymbolRenamer {
             try process.run()
             process.waitUntilExit()
         } catch {
-            throw LinkerError.compilationFailed("Failed to run llvm-objcopy: \(error)")
+            throw LinkerError.compilationFailed("Failed to run \(args[0]): \(error)")
         }
 
         if process.terminationStatus != 0 {
             let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
             let errorMessage = String(data: errorData, encoding: .utf8) ?? "Unknown error"
-            throw LinkerError.compilationFailed("llvm-objcopy failed: \(errorMessage)")
+            throw LinkerError.compilationFailed("\(URL(fileURLWithPath: args[0]).lastPathComponent) failed: \(errorMessage)")
         }
     }
 }

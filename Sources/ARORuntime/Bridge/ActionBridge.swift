@@ -222,15 +222,72 @@ private func executeAction(
         context: ctxHandle.context
     )
 
+    // A `Configure` statement marks its category, so a later read of an UNSET
+    // setting answers nil instead of the happy-path error — configuration is
+    // optional by definition (ARO-0035 §3.2, GitLab #506).
+    //
+    // `FeatureSetExecutor` did this for the interpreter and nothing did it
+    // here, so a compiled binary never recorded that a setting was configured
+    // and the optional read was unreachable in compiled code (GitLab #853).
+    // The divergence is silent in the direction that matters: the interpreter
+    // is the permissive one, so the program is developed and tested under
+    // `aro run`, behaves correctly, and fails only after `aro build` — in
+    // front of whoever the binary was shipped to.
+    if actionResult.succeeded, ConfigureAction.handles(verb) {
+        (ctxHandle.context as? RuntimeContext)?.markConfigured(resultDesc.base)
+    }
+
     // Clear temporary expression/literal bindings after action execution
     // These are statement-scoped and should not persist to subsequent statements
     ctxHandle.context.unbind("_expression_")
     ctxHandle.context.unbind("_literal_")
 
-    // If action failed, store error in context
-    // Error will be printed by the error block's aro_context_print_error call
+    // If action failed, store error in context.
+    //
+    // Wrapped in an `AROError` carrying the statement, exactly as
+    // `FeatureSetExecutor` does for the interpreter (GitLab #692). Storing the
+    // bare message meant a compiled binary printed whatever Foundation said —
+    //
+    //   Runtime error: Error Domain=NSCocoaErrorDomain Code=642 "You can't
+    //   save the file …" UserInfo={NSFilePath=…}
+    //
+    // where `aro run` printed
+    //
+    //   Runtime Error: Cannot write the _sink_ to the file: /nope/out.txt.
+    //     Feature: … / Business Activity: … / Statement: …
+    //
+    // "The code is the error message" (ARO-0006) is a language promise, and
+    // the compiled half was leaking a Swift type name and dropping the frame
+    // that says which statement failed.
     if !actionResult.succeeded, let errorMsg = actionResult.error {
-        ctxHandle.context.setExecutionError(ActionError.runtimeError(errorMsg))
+        // A `Throw` already carries ARO's own shape — the formatter
+        // reconstructs `Cannot throw the <Type> for the <reason> when
+        // <condition>` from it. Wrapping that would replace a message the
+        // language composed with one composed from descriptors, losing the
+        // guard clause. Everything else has no shape of its own and gets one.
+        if parseThrowErrorMessage(errorMsg) != nil {
+            ctxHandle.context.setExecutionError(ActionError.runtimeError(errorMsg))
+        } else {
+        ctxHandle.context.setExecutionError(
+            ActionError.statementFailed(AROError.fromStatement(
+                // Capitalised to match the interpreter, which renders the verb
+                // as the statement wrote it; the bridge only has the canonical
+                // lowercase form.
+                verb: verb.prefix(1).uppercased() + verb.dropFirst(),
+                result: resultDesc.fullName,
+                preposition: objectDesc.preposition.rawValue,
+                object: objectDesc.fullName,
+                featureSet: ctxHandle.context.featureSetName,
+                businessActivity: ctxHandle.context.businessActivity,
+                // Only ARO's own curated hints (`AROError.curatedHint`), never
+                // the raw message — that is whatever Foundation said, an
+                // `NSCocoaErrorDomain` dump with a file URL in it, and
+                // appending it is the leak GitLab #692 removed. The
+                // interpreter applies the same allowlist, so an unresolvable
+                // repository scope now explains itself in both modes.
+                hint: actionResult.hint
+            )))
+        }
     }
 
     // GitLab #495: an immutable rebind the action attempted internally was
@@ -459,6 +516,17 @@ public func aro_action_configure(
     return executeAction(verb: "configure", contextPtr: contextPtr, resultPtr: resultPtr, objectPtr: objectPtr)
 }
 
+/// The catalog and the bridge move together: `LLVMExternalDeclEmitter` emits an
+/// extern per catalog verb, so a catalog entry without a shim does not link.
+@_cdecl("aro_action_attach")
+public func aro_action_attach(
+    _ contextPtr: UnsafeMutableRawPointer?,
+    _ resultPtr: UnsafeRawPointer?,
+    _ objectPtr: UnsafeRawPointer?
+) -> UnsafeMutableRawPointer? {
+    return executeAction(verb: "attach", contextPtr: contextPtr, resultPtr: resultPtr, objectPtr: objectPtr)
+}
+
 @_cdecl("aro_action_accept")
 public func aro_action_accept(
     _ contextPtr: UnsafeMutableRawPointer?,
@@ -574,24 +642,6 @@ public func aro_action_listen(
     _ objectPtr: UnsafeRawPointer?
 ) -> UnsafeMutableRawPointer? {
     return executeAction(verb: "listen", contextPtr: contextPtr, resultPtr: resultPtr, objectPtr: objectPtr)
-}
-
-@_cdecl("aro_action_route")
-public func aro_action_route(
-    _ contextPtr: UnsafeMutableRawPointer?,
-    _ resultPtr: UnsafeRawPointer?,
-    _ objectPtr: UnsafeRawPointer?
-) -> UnsafeMutableRawPointer? {
-    return executeAction(verb: "route", contextPtr: contextPtr, resultPtr: resultPtr, objectPtr: objectPtr)
-}
-
-@_cdecl("aro_action_watch")
-public func aro_action_watch(
-    _ contextPtr: UnsafeMutableRawPointer?,
-    _ resultPtr: UnsafeRawPointer?,
-    _ objectPtr: UnsafeRawPointer?
-) -> UnsafeMutableRawPointer? {
-    return executeAction(verb: "watch", contextPtr: contextPtr, resultPtr: resultPtr, objectPtr: objectPtr)
 }
 
 @_cdecl("aro_action_stop")
@@ -857,15 +907,6 @@ public func aro_action_join(
     return executeAction(verb: "join", contextPtr: contextPtr, resultPtr: resultPtr, objectPtr: objectPtr)
 }
 
-@_cdecl("aro_action_concat")
-public func aro_action_concat(
-    _ contextPtr: UnsafeMutableRawPointer?,
-    _ resultPtr: UnsafeRawPointer?,
-    _ objectPtr: UnsafeRawPointer?
-) -> UnsafeMutableRawPointer? {
-    return executeAction(verb: "concat", contextPtr: contextPtr, resultPtr: resultPtr, objectPtr: objectPtr)
-}
-
 @_cdecl("aro_action_close")
 public func aro_action_close(
     _ contextPtr: UnsafeMutableRawPointer?,
@@ -920,6 +961,48 @@ public func aro_action_make(
     _ objectPtr: UnsafeRawPointer?
 ) -> UnsafeMutableRawPointer? {
     return executeAction(verb: "make", contextPtr: contextPtr, resultPtr: resultPtr, objectPtr: objectPtr)
+}
+
+/// `Touch the <marker> for the <file: "./stamp">.` in a compiled binary
+/// (ARO-0036 §3.4, GitLab #679, #861).
+///
+/// `touch`, `mkdir` and `rename` are documented aliases of `make`, `make` and
+/// `move` — `ActionCatalog` lists all three and `FileActions` implements them —
+/// but no bridge export existed. `LLVMCodeGenerator` therefore emitted a call
+/// to a symbol that was not there, and a valid program became a **linker
+/// error** with no ARO-level diagnostic, while `aro run` worked:
+///
+///     Undefined symbols for architecture arm64:
+///       "_aro_action_touch", referenced from: _aro_fs_application_start_entry
+///
+/// Nothing caught it because the interpreter never asks. GitLab #336 tied the
+/// code generator to the catalog; nothing tied the catalog to these exports.
+/// `ActionBridgeCoverageTests` does that now.
+@_cdecl("aro_action_touch")
+public func aro_action_touch(
+    _ contextPtr: UnsafeMutableRawPointer?,
+    _ resultPtr: UnsafeRawPointer?,
+    _ objectPtr: UnsafeRawPointer?
+) -> UnsafeMutableRawPointer? {
+    return executeAction(verb: "touch", contextPtr: contextPtr, resultPtr: resultPtr, objectPtr: objectPtr)
+}
+
+@_cdecl("aro_action_mkdir")
+public func aro_action_mkdir(
+    _ contextPtr: UnsafeMutableRawPointer?,
+    _ resultPtr: UnsafeRawPointer?,
+    _ objectPtr: UnsafeRawPointer?
+) -> UnsafeMutableRawPointer? {
+    return executeAction(verb: "mkdir", contextPtr: contextPtr, resultPtr: resultPtr, objectPtr: objectPtr)
+}
+
+@_cdecl("aro_action_rename")
+public func aro_action_rename(
+    _ contextPtr: UnsafeMutableRawPointer?,
+    _ resultPtr: UnsafeRawPointer?,
+    _ objectPtr: UnsafeRawPointer?
+) -> UnsafeMutableRawPointer? {
+    return executeAction(verb: "rename", contextPtr: contextPtr, resultPtr: resultPtr, objectPtr: objectPtr)
 }
 
 @_cdecl("aro_action_copy")

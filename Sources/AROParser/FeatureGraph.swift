@@ -196,22 +196,19 @@ public struct FeatureGraph: Sendable {
     /// ARO-0022) resolves to `UserCreated` and keeps its wire. The
     /// guard narrows which payloads reach it, not which event.
     public static func handledEventType(in activity: String) -> String? {
-        guard let range = activity.range(of: " Handler") else { return nil }
-        guard !nonDomainHandlerPatterns.contains(where: activity.contains) else { return nil }
-        let event = String(activity[..<range.lowerBound])
-            .trimmingCharacters(in: .whitespaces)
-        return event.isEmpty ? nil : event
+        return ActivityKind.parse(activity).handledDomainEvent
     }
 
     /// The repository a business activity observes, or nil. The
     /// `-repository` test mirrors `AnalyzedProgram.repositoryObservers`,
     /// which is the list the runtime actually subscribes.
     public static func observedRepository(in activity: String) -> String? {
-        guard activity.contains("-repository"),
-              let range = activity.range(of: " Observer") else { return nil }
-        let repository = String(activity[..<range.lowerBound])
-            .trimmingCharacters(in: .whitespaces)
-        return repository.isEmpty ? nil : repository
+        // `repositoryEviction` also carries the repository, but this graph
+        // wire is the change observer, so only that kind answers here.
+        if case .repositoryObserver(let repository) = ActivityKind.parse(activity) {
+            return repository
+        }
+        return nil
     }
 
     // MARK: - Construction

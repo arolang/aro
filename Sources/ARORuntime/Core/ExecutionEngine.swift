@@ -37,6 +37,19 @@ public actor ExecutionEngine {
         }
     }
 
+    /// The registry this engine was built with.
+    ///
+    /// `Runtime.executeApplicationEnd` used to build its shutdown executor
+    /// with `ActionRegistry.shared` and a brand-new `GlobalSymbolStorage`
+    /// (GitLab #629), so Application-End saw neither the symbols
+    /// Application-Start published nor a registry a test or middleware had
+    /// injected. Both come from here now.
+    public var sharedActionRegistry: ActionRegistry {
+        get async {
+            return actionRegistry
+        }
+    }
+
     /// Service registry for dependency injection
     private let services: ServiceRegistry
 
@@ -134,6 +147,11 @@ public actor ExecutionEngine {
         // Wire up every business-activity pattern that makes a feature set an
         // event handler (ExecutionEngine+EventHandlers.swift).
         registerEventHandlers(for: program, baseContext: context)
+
+        // ARO-0094 §6.2: a closed connection's connection-scoped repositories
+        // go with it. Independent of whether the program has a socket handler,
+        // because the leak does not depend on that either.
+        SessionLifecycle.install(on: eventBus)
 
         // Execute entry point
         let executor = FeatureSetExecutor(

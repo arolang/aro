@@ -50,13 +50,25 @@ public final class OpenAPIHTTPHandler: @unchecked Sendable {
             )
         }
 
+        // Resolve the session cookie before enforcing anything, because a
+        // cookie scheme is satisfied by a *valid* session and not by the
+        // cookie's presence (ARO-0094 §8.3).
+        let cookieHeader = request.headers.first(where: { $0.key.lowercased() == "cookie" })?.value ?? ""
+        let resolvedSession: String?
+        if case .success(let id) = await SessionService.shared.resolve(cookieHeader: cookieHeader) {
+            resolvedSession = id
+        } else {
+            resolvedSession = nil
+        }
+
         // Enforce security requirements declared in the OpenAPI spec.
         if let unauthorized = SecurityEnforcer.enforce(
             operation: match.operation,
             globalSecurity: spec.security,
             securitySchemes: spec.components?.securitySchemes,
             headers: request.headers,
-            queryParameters: request.queryParameters
+            queryParameters: request.queryParameters,
+            resolvedSession: resolvedSession
         ) {
             return unauthorized
         }

@@ -33,7 +33,7 @@ Defining feature set: Greet
 Feature set 'Greet' defined
 
 aro> Emit a <UserCreated: event> with { name: "Ada" }.
-[Greet] welcome Ada
+welcome Ada
 => OK
 ```
 

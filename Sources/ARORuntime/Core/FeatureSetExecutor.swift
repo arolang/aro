@@ -83,6 +83,20 @@ public final class FeatureSetExecutor: Sendable {
         _ analyzedFeatureSet: AnalyzedFeatureSet,
         context: ExecutionContext
     ) async throws -> Response {
+        // The application concurrency ceiling (ARO-0088 §10a, GitLab #862).
+        // One choke point, so every triggered feature set is counted — an HTTP
+        // request, an event handler, a file change — and not just the loop that
+        // `with <concurrency: N>` happens to bound. A no-op unless a ceiling is
+        // configured, and a no-op for a feature set already running inside one.
+        try await ApplicationLimits.withSlot {
+            try await self.executeGated(analyzedFeatureSet, context: context)
+        }
+    }
+
+    private func executeGated(
+        _ analyzedFeatureSet: AnalyzedFeatureSet,
+        context: ExecutionContext
+    ) async throws -> Response {
         let featureSet = analyzedFeatureSet.featureSet
         let startTime = Date()
 
@@ -104,9 +118,19 @@ public final class FeatureSetExecutor: Sendable {
         // (`isAccessDenied`, `businessActivity`, `resolveAny`).
         // For a feature set with N published-symbol dependencies
         // this saves 2N actor turns of overhead (#332).
+        //
+        // A lifecycle handler resolves without the business-activity check
+        // (GitLab #629). `Publish as` scopes a symbol to its activity, and
+        // `Application-End`'s activity is `Success` or `Error` — which differs
+        // from every other feature set's by construction. So a shutdown
+        // handler could never read anything Application-Start published, and
+        // the documented "graceful shutdown reads startup state" pattern was
+        // unreachable rather than merely awkward. Passing an empty activity
+        // uses the existing "no scope to violate" path rather than inventing
+        // a second rule.
         let resolutions = await globalSymbols.resolveDependencies(
             analyzedFeatureSet.dependencies,
-            forBusinessActivity: context.businessActivity
+            forBusinessActivity: isLifecycleFeatureSet ? "" : context.businessActivity
         )
         for resolution in resolutions {
             switch resolution {
@@ -758,6 +782,30 @@ public final class FeatureSetExecutor: Sendable {
                 (outerContext as? RuntimeContext)?.markConfigured(resultDescriptor.base)
             }
 
+            // `Publish the <alias> with <value>.` publishes (GitLab #635).
+            //
+            // The verb form emitted a `VariablePublishedEvent` and bound the
+            // alias locally, and stopped there — only the *statement* form
+            // (`Publish as <alias> <var>.`) reached `GlobalSymbolStorage`. So
+            // `Publish`, `Export`, `Expose` and `Share` as verbs looked like
+            // they worked, produced an event a subscriber could see, and left
+            // the symbol invisible to every other feature set. Nothing failed;
+            // the reader simply found nothing.
+            //
+            // Lives here for the same reason the `Configure` mark does: the
+            // action has a context but no global storage, and the write has to
+            // outlive the statement scope.
+            if PublishAction.verbs.contains(verb.lowercased()),
+               let published = context.resolveAny(resultDescriptor.base) {
+                await globalSymbols.publish(
+                    name: resultDescriptor.base,
+                    value: published,
+                    fromFeatureSet: context.featureSetName,
+                    businessActivity: context.businessActivity,
+                    executionId: context.executionId
+                )
+            }
+
             // Bind result to context (unless the action is an effect that
             // already set the response) and skip binding if the action already
             // bound the result, to avoid double-binding.
@@ -836,18 +884,23 @@ public final class FeatureSetExecutor: Sendable {
 
     /// Extra sentence appended to a statement-shaped error when the
     /// statement alone can't convey what went wrong (GitLab #486).
+    /// Whether this context is `Application-Start` or `Application-End`.
+    ///
+    /// Lifecycle handlers sit outside the business-activity scheme —
+    /// `Application-End`'s activity is `Success` or `Error`, which differs
+    /// from every other feature set's by construction — so they resolve
+    /// published symbols without the cross-activity check (GitLab #629).
+    private func isLifecycleFeatureSet(_ context: ExecutionContext) -> Bool {
+        context.featureSetName == "Application-Start"
+            || context.featureSetName.hasPrefix("Application-End")
+    }
+
     private static func statementHint(for error: any Error) -> String? {
-        // A file-system failure is the second exception (GitLab #493): the
-        // statement `Delete the <gone> from "./f.txt"` reads fine, but only
-        // the underlying error says *why* it failed — the path is missing,
-        // not merely undeletable. Same for read/copy/move on missing paths.
-        if let fsError = error as? FileSystemError {
-            return fsError.description
-        }
-        guard let actionError = error as? ActionError,
-              case .unknownComputation = actionError
-        else { return nil }
-        return actionError.description
+        // The allowlist lives on `AROError` so the compiled bridge applies the
+        // same one — the two paths were separate, and only this one carried a
+        // hint, so `aro run` explained an unresolvable repository scope and
+        // `aro build` did not.
+        AROError.curatedHint(for: error)
     }
 
     /// Force everything still outstanding and rethrow the first failure.
@@ -1243,8 +1296,21 @@ public final class FeatureSetExecutor: Sendable {
                 context.bind(statement.variableName, value: envValue)
             }
         case .featureSet(let name):
-            // Cross-feature-set dependency - resolve from global symbols (with business activity validation)
-            if let value = await globalSymbols.resolveAny(statement.variableName, forBusinessActivity: context.businessActivity) {
+            // Cross-feature-set dependency — resolve from global symbols,
+            // subject to the same business-activity rule.
+            //
+            // Skipped when the name is already bound: `executeGated` resolves
+            // the feature set's declared dependencies before the first
+            // statement runs, so by the time the `Require` executes the value
+            // is usually already there. Binding it a second time is an
+            // immutable rebind, which the runtime's backstop reports as
+            // "the semantic analyzer missed a duplicate binding. Please report
+            // this as a compiler bug" — an alarming message for a program that
+            // is doing exactly what the documentation says (GitLab #629).
+            if context.resolveAny(statement.variableName) == nil,
+               let value = await globalSymbols.resolveAny(
+                   statement.variableName,
+                   forBusinessActivity: isLifecycleFeatureSet(context) ? "" : context.businessActivity) {
                 context.bind(statement.variableName, value: value)
             }
             // If not found, the dependency might be provided later
@@ -1321,12 +1387,42 @@ public final class FeatureSetExecutor: Sendable {
             throw ActionError.typeMismatch(expected: "Int", actual: "\(type(of: fromVal))", variable: "range bounds")
         }
 
+        // An inverted range is an error, not a crash (GitLab #639).
+        //
+        // `for i in fromInt..<toInt` hits Swift's `Range` precondition when
+        // `lowerBound > upperBound` and aborts the process with an illegal
+        // instruction. For a server that is the whole process, mid-request,
+        // with no ARO error and no stack the author can act on — and the
+        // bounds are often computed, so it fires on data rather than on the
+        // source anyone reviewed.
+        //
+        // Reported rather than silently treated as empty: `from 10 to 1` is
+        // a mistake in the program every time, and ARO-0006 says the runtime
+        // reconstructs what failed instead of quietly doing nothing.
+        guard fromInt <= toInt else {
+            throw AROError(
+                message: "Cannot loop from \(fromInt) to \(toInt): "
+                       + "a range counts up, so the first bound must not be above the second",
+                featureSet: context.featureSetName,
+                businessActivity: context.businessActivity,
+                statement: "for <\(loop.variable)> from \(fromInt) to \(toInt) { … }"
+            )
+        }
+
         for i in fromInt..<toInt {
             let iterationContext = context.createChild(featureSetName: context.featureSetName)
             iterationContext.bind(loop.variable, value: i)
-            for stmt in loop.body {
-                try await executeStatement(stmt, context: iterationContext)
-                if iterationContext.getResponse() != nil { return }
+            // `Break.` leaves the innermost loop, which CLAUDE.md says of
+            // every loop and only `while` implemented — a `Break` in a range
+            // or for-each body escaped as an uncaught `BreakSignal` and killed
+            // the feature set with `Error: BreakSignal()` (GitLab #664).
+            do {
+                for stmt in loop.body {
+                    try await executeStatement(stmt, context: iterationContext)
+                    if iterationContext.getResponse() != nil { return }
+                }
+            } catch is BreakSignal {
+                break
             }
         }
     }
@@ -1425,15 +1521,21 @@ public final class FeatureSetExecutor: Sendable {
                     }
 
                     group.addTask {
-                        // Create a child context for this iteration
-                        let childContext = context.createChild(featureSetName: context.featureSetName)
-                        childContext.bind(loop.itemVariable, value: item)
-                        if let indexVar = loop.indexVariable {
-                            childContext.bind(indexVar, value: index)
-                        }
+                        // The loop's own bound is `concurrency`; the
+                        // application ceiling (ARO-0088 §10a, GitLab #862) is
+                        // the one that also counts the handlers this body
+                        // wakes. Nested work runs under this slot.
+                        try await ApplicationLimits.withSlot {
+                            // Create a child context for this iteration
+                            let childContext = context.createChild(featureSetName: context.featureSetName)
+                            childContext.bind(loop.itemVariable, value: item)
+                            if let indexVar = loop.indexVariable {
+                                childContext.bind(indexVar, value: index)
+                            }
 
-                        for bodyStatement in loop.body {
-                            try await self.executeStatement(bodyStatement, context: childContext)
+                            for bodyStatement in loop.body {
+                                try await self.executeStatement(bodyStatement, context: childContext)
+                            }
                         }
                     }
 
@@ -1470,11 +1572,20 @@ public final class FeatureSetExecutor: Sendable {
                 }
 
                 // Execute loop body in iteration context
-                for bodyStatement in loop.body {
-                    try await executeStatement(bodyStatement, context: iterationContext)
-                    if iterationContext.getResponse() != nil {
-                        return
+                // `Break.` leaves the innermost loop (GitLab #664).
+                do {
+                    for bodyStatement in loop.body {
+                        try await executeStatement(bodyStatement, context: iterationContext)
+                        if let response = iterationContext.getResponse() {
+                            // See `executeForEachLazy`: ending the loop is not
+                            // ending the feature set unless the response travels
+                            // with it (GitLab #665).
+                            context.setResponse(response)
+                            return
+                        }
                     }
+                } catch is BreakSignal {
+                    break
                 }
             }
         }
@@ -1505,11 +1616,23 @@ public final class FeatureSetExecutor: Sendable {
                 }
             }
 
-            for bodyStatement in loop.body {
-                try await executeStatement(bodyStatement, context: iterationContext)
-                if iterationContext.getResponse() != nil {
-                    return
+            // `Break.` leaves the innermost loop (GitLab #664).
+            do {
+                for bodyStatement in loop.body {
+                    try await executeStatement(bodyStatement, context: iterationContext)
+                    if let response = iterationContext.getResponse() {
+                        // The response has to reach the FEATURE SET, not just
+                        // end the loop (GitLab #665). An iteration context is a
+                        // plain child, not a statement scope, so `setResponse`
+                        // stored it on the child and `getResponse` never
+                        // propagated it — the loop stopped and the statements
+                        // after it ran anyway.
+                        context.setResponse(response)
+                        return
+                    }
                 }
+            } catch is BreakSignal {
+                break
             }
             index += 1
         }

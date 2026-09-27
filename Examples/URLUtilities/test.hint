@@ -1,0 +1,3 @@
+# Test hints for URLUtilities (ARO-0019 §3.1a, GitLab #859)
+mode: both
+occurrence-check: true

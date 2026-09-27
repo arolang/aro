@@ -563,6 +563,8 @@ public struct ExtractAction: SynchronousAction {
     private func parseJSONString(_ source: String) -> (any Sendable)? {
         let trimmed = source.trimmingCharacters(in: .whitespacesAndNewlines)
 
+        // Asking "is this string JSON?". A parse failure is the answer "no",
+        // not an error to report: the caller falls back to the raw string.
         guard trimmed.hasPrefix("{") || trimmed.hasPrefix("["),
               let data = trimmed.data(using: .utf8),
               let parsed = try? JSONSerialization.jsonObject(with: data, options: []) else {
@@ -871,38 +873,26 @@ public struct RetrieveAction: ActionImplementation {
             let compoundCondition = condition
 
             // Retrieve from repository storage service
+            let storage = context.service(RepositoryStorageService.self)
+                ?? context.container.repositoryStorage
+            let partition = try context.repositoryPartition(of: repoName)
             var values: [any Sendable]
-            if let storage = context.service(RepositoryStorageService.self) {
-                if compoundCondition == nil, let field = whereField, let matchValue = whereValue {
-                    // Filtered retrieval with where clause
-                    values = await storage.retrieve(
-                        from: repoName,
-                        businessActivity: context.businessActivity,
-                        where: field,
-                        equals: matchValue
-                    )
-                } else {
-                    // Retrieve all
-                    values = await storage.retrieve(
-                        from: repoName,
-                        businessActivity: context.businessActivity
-                    )
-                }
+            if compoundCondition == nil, let field = whereField, let matchValue = whereValue {
+                // Filtered retrieval with where clause
+                values = await storage.retrieve(
+                    from: repoName,
+                    businessActivity: context.businessActivity,
+                    caller: partition,
+                    where: field,
+                    equals: matchValue
+                )
             } else {
-                // Fallback to container storage if service not registered
-                if compoundCondition == nil, let field = whereField, let matchValue = whereValue {
-                    values = await context.container.repositoryStorage.retrieve(
-                        from: repoName,
-                        businessActivity: context.businessActivity,
-                        where: field,
-                        equals: matchValue
-                    )
-                } else {
-                    values = await context.container.repositoryStorage.retrieve(
-                        from: repoName,
-                        businessActivity: context.businessActivity
-                    )
-                }
+                // Retrieve all
+                values = await storage.retrieve(
+                    from: repoName,
+                    businessActivity: context.businessActivity,
+                    caller: partition
+                )
             }
 
             if let condition = compoundCondition {
@@ -1189,4 +1179,10 @@ public protocol FileSystemService: Sendable {
     // platform implementations already provided this; it was just absent
     // from the protocol, which is why DeleteAction could not reach it.
     func delete(path: String) async throws
+
+    // ARO-0036 §10 (GitLab #861): set the POSIX permission bits. `Stat` read
+    // them from the start and nothing could write them, so a script a program
+    // had just generated could not be made executable by the program that
+    // generated it.
+    func setPermissions(path: String, mode: FileMode) async throws -> FileMode?
 }

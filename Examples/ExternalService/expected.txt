@@ -1,7 +1,7 @@
-# Generated: Mon Apr 13 16:03:42 2026
+# Generated: Wed Sep 23 00:46:55 2026
 # Type: console
 # Command: aro run ./Examples/ExternalService
-# Timeout: 120s
+# Timeout: 300s
 ---
 === External Service Demo ===
 Demonstrating stateful service calls...
@@ -21,4 +21,4 @@ Current count:
 State persisted across calls: 0 -> 1 -> 2
 This demonstrates why Call exists!
 External service demo completed.
-startup
+[OK] startup

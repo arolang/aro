@@ -218,7 +218,7 @@ The model replies: "Created `main.aro` with two feature sets. `Application-Start
 
 ```bash
 $ aro run .
-[Application-Start] File watcher starting...
+File watcher starting...
 ```
 
 In another terminal:
@@ -277,9 +277,9 @@ The working version needs one feature set per event:
 Now the terminal says what you expected — noting that `path` is absolute, not the `./test.txt` you typed:
 
 ```
-[Handle File Created] [created] /home/you/FileWatcher/test.txt
-[Handle File Modified] [modified] /home/you/FileWatcher/test.txt
-[Handle File Deleted] [deleted] /home/you/FileWatcher/test.txt
+[created] /home/you/FileWatcher/test.txt
+[modified] /home/you/FileWatcher/test.txt
+[deleted] /home/you/FileWatcher/test.txt
 ```
 
 One file. One prompt. One convention the model did not know, that no tool in the loop could have caught, and that only running the thing revealed. Chapter 8's advice — *run it yourself, do not just have the model check it* — is this example.

@@ -1,5 +1,23 @@
+# Generated: Sat Sep 26 08:42:40 2026
 # Type: console
 # Command: aro run ./Examples/CSVProcessor
-# Note: occurrence-check — plugin may not load if dylib not built
+# NOTE: the plugin loader also prints a timestamped deprecation warning about
+# plugin-rust-csv's manifest on stderr. It is not asserted here: the timestamp
+# carries the local UTC offset, which makes the line machine-specific, and the
+# warning is not output this example is demonstrating. test.hint keeps
+# occurrence-check, so extra lines in the real output are allowed (GitLab #820).
 ---
 === CSV Processor Demo ===
+1. Parsing CSV data...
+Parsed rows:
+4
+2. Converting CSV to JSON...
+JSON objects:
+3
+3. Formatting as semicolon-delimited...
+product;price;quantity
+Apple;1.50;100
+Banana;0.75;200
+
+CSV processing completed!
+[OK] startup

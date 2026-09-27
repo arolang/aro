@@ -67,7 +67,7 @@ When you run ARO from the command line, output is formatted for readability:
 Running with `aro run`:
 
 ```
-[Application-Start] Hello, World!
+Hello, World!
 ```
 
 ### Machine Context
@@ -115,7 +115,7 @@ The runtime automatically detects context:
 ### CLI Output (Human)
 
 ```
-[getUser] User retrieved
+User retrieved
 [OK] success
   user.id: 123
   user.name: Alice

@@ -1,0 +1,3 @@
+# Test hints for CaptureGroups (ARO-0037 §7, GitLab #858)
+mode: both
+occurrence-check: true

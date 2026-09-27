@@ -236,7 +236,23 @@ public final class Lexer: @unchecked Sendable {
             if peek() == ">" {
                 _ = advance()
                 addToken(.arrow, start: startLocation)
-            } else if peek().isNumber {
+            } else if peek().isNumber && !previousTokenEndsAnExpression {
+                // A sign, not an operator — and only where a sign can go.
+                //
+                // This used to fold `-` into any following digit, so `0-19`
+                // lexed as `intLiteral(0)`, `intLiteral(-19)` and `<x>-1` as
+                // `<x>` then `intLiteral(-1)`: subtraction without spaces did
+                // not work, and `parseNumericSpecifier` carried a workaround
+                // reconstructing the range from the negative literal
+                // (GitLab #658).
+                //
+                // The rule is positional. After something that can *end* an
+                // expression — a number, an identifier, `)`, `]`, `}`, or the
+                // `>` closing a `<variable>` — a `-` is binary. Anywhere else
+                // (start of input, after an operator, after `(`, after `from`)
+                // it is a sign. That is the same rule every C-family lexer
+                // uses, and it leaves `-7d` date offsets and `default -1`
+                // alone.
                 try scanNumber(start: startLocation, negative: true)
             } else {
                 addToken(.hyphen, start: startLocation)
@@ -962,6 +978,18 @@ public final class Lexer: @unchecked Sendable {
     // MARK: - Token Creation
 
     /// Extracts the token's lexeme via O(1) byte-range slicing (GitLab #115).
+    /// Whether the token just emitted can end an expression, which makes a
+    /// following `-` a binary operator rather than a sign (GitLab #658).
+    private var previousTokenEndsAnExpression: Bool {
+        switch lastTokenKind {
+        case .intLiteral, .floatLiteral, .stringLiteral,
+             .identifier, .rightParen, .rightBracket, .rightBrace, .rightAngle:
+            return true
+        default:
+            return false
+        }
+    }
+
     private func addToken(_ kind: TokenKind, start: SourceLocation) {
         let raw = String(bytes: utf8[start.byteOffset..<pos], encoding: .utf8) ?? ""
         let lexeme = intern(raw)

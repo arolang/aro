@@ -18,8 +18,18 @@ import Testing
 @Suite("Parse recovery contract")
 struct ParseRecoveryContractTests {
 
+    /// A header with no `:` between the name and the business activity.
+    ///
+    /// The feature set is dropped whole, which is what these tests need —
+    /// a statement-level error would leave the feature set standing with an
+    /// `ErrorStatement` in it, and `featureSets.isEmpty` below would be false.
+    ///
+    /// This used to be `(Welcome A: UserCreated Handler)`, which failed only
+    /// because `A` lexes as an article and the header consulted a keyword
+    /// allowlist. That is now an ordinary name (GitLab #855), so the fixture
+    /// was quietly testing the lexer rather than recovery.
     private let broken = """
-    (Welcome A: UserCreated Handler) {
+    (Welcome A UserCreated Handler) {
         Log "hi" to the <console>.
         Return an <OK: status> for the <run>.
     }

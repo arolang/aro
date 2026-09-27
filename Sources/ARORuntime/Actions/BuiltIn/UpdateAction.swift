@@ -251,9 +251,11 @@ public struct UpdateAction: SynchronousAction {
             )
         }
 
+        let partition = try context.repositoryPartition(of: repoName)
         let existing = await storage.retrieve(
             from: repoName,
             businessActivity: context.businessActivity,
+            caller: partition,
             where: field,
             equals: matchValue
         )
@@ -275,7 +277,8 @@ public struct UpdateAction: SynchronousAction {
             let storeResult = await storage.storeWithChangeInfo(
                 value: merged,
                 in: repoName,
-                businessActivity: context.businessActivity
+                businessActivity: context.businessActivity,
+                caller: partition
             )
             updatedRows.append(merged)
 

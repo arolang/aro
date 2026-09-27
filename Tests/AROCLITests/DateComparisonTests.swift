@@ -23,7 +23,7 @@ import ARORuntime
 struct DateComparisonTests {
 
     private func run(_ statements: String...) async throws -> (REPLSession, [REPLResult]) {
-        let session = REPLSession(suppressLogPrefix: true)
+        let session = REPLSession()
         var results: [REPLResult] = []
         for statement in statements {
             results.append(try await session.executeStatement(statement))
@@ -160,7 +160,7 @@ struct DateComparisonTests {
         // there `When` is the action verb and an article follows it.
         // Adding the block broke every test suite in the repo until
         // this one token of lookahead was put back.
-        let session = REPLSession(suppressLogPrefix: true)
+        let session = REPLSession()
         let defined = try await session.defineFeatureSet(
             name: "length-of-hello",
             activity: "String Utils Test",

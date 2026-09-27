@@ -13,7 +13,7 @@ struct ConfigureSessionTests {
 
     @Test("A category takes multiple Configure statements, merging settings")
     func repeatedConfigure() async throws {
-        let session = REPLSession(suppressLogPrefix: true)
+        let session = REPLSession()
         let first = try await session.executeStatement(
             "Configure the <http-client: timeout> with 30.")
         let second = try await session.executeStatement(
@@ -31,7 +31,7 @@ struct ConfigureSessionTests {
 
     @Test("Reading an UNSET setting on a configured category answers nil (§3.2)")
     func unsetSettingIsNil() async throws {
-        let session = REPLSession(suppressLogPrefix: true)
+        let session = REPLSession()
         _ = try await session.executeStatement(
             "Configure the <http-client: timeout> with 30.")
 
@@ -54,7 +54,7 @@ struct ConfigureSessionTests {
 
     @Test("Data records keep the happy-path error for missing fields")
     func dataRecordsStillError() async throws {
-        let session = REPLSession(suppressLogPrefix: true)
+        let session = REPLSession()
         _ = try await session.executeStatement(
             "Create the <order> with { id: 7 }.")
         let result = try await session.executeStatement(
@@ -68,7 +68,7 @@ struct ConfigureSessionTests {
 
     @Test("An unconfigured category still errors on any read")
     func unconfiguredCategoryErrors() async throws {
-        let session = REPLSession(suppressLogPrefix: true)
+        let session = REPLSession()
         let result = try await session.executeStatement(
             "Extract the <x> from the <never-configured: setting>.")
         #expect(!result.isSuccess)

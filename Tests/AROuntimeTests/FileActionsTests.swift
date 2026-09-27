@@ -83,12 +83,20 @@ struct MakeActionTests {
         #expect(MakeAction.role == .server)
     }
 
-    @Test("Make action verbs - make is canonical")
+    @Test("Make action verbs - make is canonical, and touch is not one of them")
     func testMakeActionVerbs() {
         #expect(MakeAction.verbs.contains("make"))
-        #expect(MakeAction.verbs.contains("touch"))
         #expect(MakeAction.verbs.contains("createdirectory"))
         #expect(MakeAction.verbs.contains("mkdir"))
+
+        // `touch` was a verb here, and `Make` decided file-vs-directory from
+        // the *result* name — so the only spelling that touched anything was
+        // `Make the <file> to the <path: …>`, and
+        // `Touch the <t> for the <file: "./x">.` silently created a directory
+        // called `file` (GitLab #861). A verb that only ever means "file" does
+        // not need to ask.
+        #expect(MakeAction.verbs.contains("touch") == false)
+        #expect(TouchAction.verbs == ["touch"])
     }
 
     @Test("Make action valid prepositions")

@@ -56,6 +56,7 @@ RUN apt-get update -qq \
         zlib1g-dev libsqlite3-dev libxml2 \
         python3 python3-pip \
         perl cpanminus libipc-run-perl libyaml-libyaml-perl libhttp-tiny-perl \
+        libhttp-cookiejar-perl \
         gdb \
     && rm -rf /var/lib/apt/lists/*
 
@@ -82,6 +83,12 @@ ENV PATH="/root/.cargo/bin:${PATH}"
 RUN cpanm --notest --quiet Net::EmptyPort Term::ANSIColor \
     && perl -MNet::EmptyPort -e 'print "Net::EmptyPort ok\n"' \
     && perl -MTerm::ANSIColor -e 'print "Term::ANSIColor ok\n"'
+
+# HTTP::CookieJar comes from apt above (libhttp-cookiejar-perl). Asserted here
+# rather than assumed, because without it HTTP::Tiny silently drops cookies and
+# the session examples cannot be the same caller twice — an empty cart and a
+# broken feature then look identical (ARO-0094).
+RUN perl -MHTTP::CookieJar -e 'print "HTTP::CookieJar ok\n"'
 
 # `llc` and `llvm-objcopy` are given unversioned names because `aro build`
 # shells out to them by name and nothing else in the image provides them.

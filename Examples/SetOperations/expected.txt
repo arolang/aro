@@ -1,4 +1,4 @@
-# Generated: Sun Feb 16 2026
+# Generated: Wed Sep 23 00:47:03 2026
 # Type: console
 # Command: aro run ./Examples/SetOperations
 ---
@@ -81,4 +81,4 @@ required subset of granted: yes
 granted subset of required: no
 
 === Demo Complete ===
-demo
+[OK] demo

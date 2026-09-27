@@ -1,0 +1,58 @@
+(* Path operations and file metadata — ARO-0036 §9 / §10
+ *
+ * Paths are strings, but they are not arbitrary strings: concatenation gets
+ * "a/" + "/b" wrong, and nobody notices until a path has a trailing slash.
+ *)
+
+(Application-Start: Path Operations) {
+    Create the <p> with "/var/data/report.csv".
+
+    Compute the <name: basename> from <p>.
+    Compute the <dir: dirname> from <p>.
+    Compute the <ext: extension> from <p>.
+    Compute the <stem: stem> from <p>.
+    Log "basename: ${<name>}" to the <console>.
+    Log "dirname: ${<dir>}" to the <console>.
+    Log "extension: ${<ext>}" to the <console>.
+    Log "stem: ${<stem>}" to the <console>.
+
+    (* The three agree: basename is stem + "." + extension. So renaming a file
+     * — keep the name, change the type — is two qualifiers, not a Split. *)
+    Compute the <renamed: path-join> from <dir> with "${<stem>}.json".
+    Log "renamed: ${<renamed>}" to the <console>.
+
+    (* Exactly one separator, however the pieces are written. *)
+    Compute the <joined: path-join> from "uploads/" with "/photo.png".
+    Log "joined: ${<joined>}" to the <console>.
+
+    (* An absolute right-hand component does NOT reset the path — unlike
+     * Python's os.path.join. Joining a trusted directory to an untrusted name
+     * must not be turnable into "anywhere on the filesystem". *)
+    Compute the <safe: path-join> from "/uploads" with "/etc/passwd".
+    Log "not reset: ${<safe>}" to the <console>.
+
+    (* A dotfile is a name, not an extension. *)
+    Compute the <dot-ext: extension> from ".gitignore".
+    Compute the <dot-stem: stem> from ".gitignore".
+    Log "dotfile: ext=[${<dot-ext>}] stem=[${<dot-stem>}]" to the <console>.
+
+    (* `..` is resolved lexically, so the answer never depends on symlinks. *)
+    Compute the <abs: absolute> from "/srv/./app/../app/run.sh".
+    Log "absolute: ${<abs>}" to the <console>.
+
+    (* Touch creates, or stamps a file that is already there. *)
+    Touch the <marker> for the <file: "./build-stamp.txt">.
+    Log "created: ${<marker: created>}" to the <console>.
+
+    (* Stat read permissions from the start; now they can be set, and the two
+     * spellings round-trip. *)
+    Configure the <mode> for the <file: "./build-stamp.txt"> with { permissions: "755" }.
+    Log "mode: ${<mode: permissions>} (was ${<mode: previous>})" to the <console>.
+
+    Stat the <info> for the <file: "./build-stamp.txt">.
+    Log "stat: ${<info: permissions>}" to the <console>.
+
+    Delete the <gone> from the <file: "./build-stamp.txt">.
+
+    Return an <OK: status> for the <startup>.
+}
