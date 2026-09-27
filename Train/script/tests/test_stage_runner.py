@@ -74,9 +74,15 @@ class StageRunnerCase(unittest.TestCase):
         self.now[0] += seconds
 
     def _run(self, proc, **kw):
+        self.commands = []
+
+        def popen(cmd, **_kw):
+            self.commands.append(cmd)
+            return proc
+
         return sr.run_notebook('demo', self.scripts, self.out, 'python3',
                                poll_interval=60, _clock=self._clock,
-                               _sleep=self._sleep, _popen=lambda *a, **k: proc,
+                               _sleep=self._sleep, _popen=popen,
                                **kw)
 
 
@@ -132,6 +138,29 @@ class TestStallWatchdog(StageRunnerCase):
         self.assertIn('kernel', result['error'])
 
 
+class TestTheStageStreams(StageRunnerCase):
+    """The watchdog can only work if the stage narrates itself.
+
+    Stages used to run under `jupyter nbconvert --execute`, which files every
+    cell's output in the output notebook and prints three lines of its own. The
+    log the watchdog polls therefore stopped growing a second into every stage,
+    and any stage outliving the stall window — the LLM extraction, the
+    fine-tunes — was killed as wedged with an empty log to show for it.
+    """
+
+    def test_the_stage_runs_under_the_streaming_runner(self):
+        self._run(FakeProc(alive_polls=0), stall_timeout=300)
+        cmd = self.commands[0]
+        self.assertNotIn('nbconvert', cmd)
+        self.assertIn(str(sr.NB_EXEC), cmd)
+        # Unbuffered, or the log grows in 4 KB jumps and a quiet stage looks
+        # stalled long after it started talking again.
+        self.assertIn('-u', cmd)
+
+    def test_the_streaming_runner_exists(self):
+        self.assertTrue(sr.NB_EXEC.is_file(), f'{sr.NB_EXEC} is missing')
+
+
 class TestStageOptions(unittest.TestCase):
     def test_limit_truncates(self):
         opts = sr.StageOptions(limit=2)
@@ -178,6 +207,13 @@ class TestLastErrorLine(unittest.TestCase):
 
     def test_missing_log(self):
         self.assertEqual(sr.last_error_line(self.log / 'nope'), 'see log')
+
+    def test_reads_the_runners_own_summary_uncoloured(self):
+        self.log.write_text(
+            'heartbeat 3\n'
+            "[nb_exec] FAILED: \x1b[31mKeyError\x1b[39m: 'pairs'\n"
+            '[nb_exec] wrote /tmp/out/demo.ipynb\n')
+        self.assertEqual(sr.last_error_line(self.log), "KeyError: 'pairs'")
 
 
 if __name__ == '__main__':
