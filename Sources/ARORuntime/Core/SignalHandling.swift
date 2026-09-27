@@ -24,14 +24,37 @@ import WinSDK
 /// it did with `signal` — so this changes where the handler comes from, not
 /// which one is in force.
 ///
-/// **The handler runs on an unspecified thread.** On POSIX it runs in a signal
-/// context, on Windows on a thread the console subsystem creates for it; the
-/// existing handlers are safe on both because all they do is set a flag on
-/// `ShutdownCoordinator`. Keep it that way.
+/// **The handler runs on an ordinary thread, not in a signal context**
+/// (GitLab #630). On POSIX the signal is ignored by `signal(2)` and delivered
+/// through a `DispatchSourceSignal` instead; on Windows it arrives on a thread
+/// the console subsystem creates. Both are normal threads, so a handler may
+/// take a lock, allocate, and start a `Task`.
+///
+/// It did not used to be. `signal(SIGINT) { _ in … }` ran the handler in a
+/// POSIX signal context, where `pthread_mutex_lock`, Swift runtime allocation
+/// and `Task` creation are all undefined behaviour — and the installed handler
+/// took two `NSLock`s, published an event on the event-bus actor (spawning a
+/// `Task`) and resumed continuations. If the signal landed while the main
+/// thread held either lock, the process deadlocked instead of shutting down:
+/// an unreproducible "Ctrl-C hangs".
+///
+/// The comment here used to say handlers must only set a flag, which is the
+/// correct rule for a signal context and was not what the code did. Moving
+/// delivery off the signal context makes the rule unnecessary rather than
+/// unenforced.
 public enum ShutdownSignals {
 
     private static let lock = NSLock()
     nonisolated(unsafe) private static var handler: (@convention(c) () -> Void)?
+
+    /// The dispatch sources delivering SIGINT and SIGTERM.
+    ///
+    /// Held for the life of the process: a `DispatchSourceSignal` stops
+    /// delivering the moment it is deallocated, so dropping these would
+    /// silently restore the "Ctrl-C does nothing" behaviour — and `signal(…,
+    /// SIG_IGN)` has by then guaranteed the default terminate-on-SIGINT is
+    /// gone too.
+    nonisolated(unsafe) private static var sources: [DispatchSourceSignal] = []
 
     /// Install `body` as the process's shutdown handler.
     ///
@@ -45,12 +68,40 @@ public enum ShutdownSignals {
         #if os(Windows)
         // `true` adds the handler; the console subsystem calls it for Ctrl-C,
         // Ctrl-Break, and the three events that mean the session is going away.
+        // This one already ran on an ordinary thread.
         SetConsoleCtrlHandler(aroConsoleControlHandler, true)
         #else
-        signal(SIGINT) { _ in ShutdownSignals.invoke() }
-        signal(SIGTERM) { _ in ShutdownSignals.invoke() }
+        installDispatchSources()
         #endif
     }
+
+    #if !os(Windows)
+    /// Install the two signal sources, once.
+    ///
+    /// `install` is called by three sites and the last handler wins, which is
+    /// what `signal` did; the *sources* must not be created three times, so
+    /// they are created once and read the current handler when they fire.
+    private static func installDispatchSources() {
+        lock.lock()
+        defer { lock.unlock() }
+        guard sources.isEmpty else { return }
+
+        // `SIG_IGN` first, and it is load-bearing: a `DispatchSourceSignal`
+        // observes the signal, it does not consume it, so without this the
+        // default disposition still terminates the process before the source
+        // ever runs.
+        signal(SIGINT, SIG_IGN)
+        signal(SIGTERM, SIG_IGN)
+
+        let queue = DispatchQueue(label: "aro.shutdown-signals")
+        for number in [SIGINT, SIGTERM] {
+            let source = DispatchSource.makeSignalSource(signal: number, queue: queue)
+            source.setEventHandler { ShutdownSignals.invoke() }
+            source.resume()
+            sources.append(source)
+        }
+    }
+    #endif
 
     /// Call whatever is installed, for tests.
     ///
@@ -132,7 +183,12 @@ public final class RuntimeSignalHandler: @unchecked Sendable {
         }
     }
 
-    /// Handle shutdown signal
+    /// Handle shutdown signal.
+    ///
+    /// Taking a lock and calling `stop()` here is safe now that delivery
+    /// happens on a dispatch queue rather than in a POSIX signal context
+    /// (GitLab #630) — before that it was undefined behaviour, and a signal
+    /// arriving while the main thread held this lock deadlocked the process.
     private func handleSignal() {
         lock.lock()
         let rt = runtime
@@ -148,7 +204,20 @@ public final class RuntimeSignalHandler: @unchecked Sendable {
         return isSetup
     }
 
-    /// Reset for testing (clears registered runtime)
+    /// Reset for testing (clears the registered runtime).
+    ///
+    /// `isSetup` deliberately stays true (GitLab #630 notes it as a bug; it
+    /// is not). It records that the process's signal disposition has been
+    /// changed and the dispatch sources created — neither of which `reset`
+    /// undoes, and neither of which *should* be undone, since the sources
+    /// must outlive any one runtime. Clearing the flag would make the next
+    /// `register` call `setupSignalHandlers` again; that is idempotent now
+    /// (`installDispatchSources` returns early), but the flag would then be
+    /// claiming something it had not done.
+    ///
+    /// `isActive` reads it, and `ServerActions` asks `isActive` to decide
+    /// whether to install its own handlers. Leaving it true is the answer
+    /// that keeps that decision correct: the handlers really are installed.
     public func reset() {
         lock.lock()
         defer { lock.unlock() }

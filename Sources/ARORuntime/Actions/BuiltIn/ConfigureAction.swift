@@ -142,6 +142,19 @@ public enum ConfigurableSettings {
             guard let setting = setting(category: .httpServer, key: key) else { return nil }
             switch setting.canonicalKey {
             case "max-body":
+                // Process-wide, and the statement does not look it
+                // (GitLab #645): this raises or lowers the ceiling for every
+                // route in the application, including ones already serving.
+                // Set at startup, where it reads as an application default;
+                // a route's own limit belongs in the contract as
+                // `x-aro-max-body`, which is per-route and static.
+                if !context.featureSetName.hasPrefix("Application-Start") {
+                    FileHandle.standardError.write(Data((
+                        "[ARO] Warning: Configure the <http-server: max-body> in "
+                        + "'\(context.featureSetName)' changes the limit for every "
+                        + "route, not just this one. Set it in Application-Start, or "
+                        + "declare x-aro-max-body on the route in openapi.yaml.\n").utf8))
+                }
                 RuntimeDefaults.maxMaterializedBody = bytes
                 return ["max-body": bytes] as [String: any Sendable]
             default:
