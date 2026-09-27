@@ -86,12 +86,32 @@ public struct LogAction: ActionImplementation {
                 // `raw` is an escaping directive for template output (#476), not a
                 // value transform — applying it would warn about an unknown qualifier.
                 if TemplateEscaping.isRawQualifier(specifier) { continue }
-                // Apply qualifier; skip on failure (qualifier may not apply to this type)
-                do {
-                    value = try context.container.qualifierRegistry.resolve(specifier, value: value)
-                } catch {
-                    FileHandle.standardError.write(Data("[LogAction] Warning: qualifier '\(specifier)' failed: \(error.localizedDescription)\n".utf8))
+                // A specifier that names nothing is an error (GitLab #648).
+                //
+                // This line used to be `value = try registry.resolve(...)`,
+                // and `resolve` returns an *optional* — nil meaning "not a
+                // plugin qualifier". Assigning that to an `any Sendable`
+                // boxes `Optional.none` rather than failing to compile, so
+                // every specifier the plugin registry did not know turned the
+                // value into nil and `Log the <user: name> to the <console>.`
+                // printed `nil`. The surrounding `catch` then wrote
+                // `[LogAction] Warning: …` to stderr for the *other* failure
+                // mode, which is the one place a program's output never
+                // shows.
+                //
+                // Resolution order is the expression evaluator's, so a
+                // qualified noun means the same thing in both places: plugin
+                // qualifier first, then the field it names, then an error
+                // naming the specifier.
+                if let transformed = try context.container.qualifierRegistry.resolve(specifier, value: value) {
+                    value = transformed
+                    continue
                 }
+                guard let record = value as? [String: any Sendable],
+                      let field = record[specifier] else {
+                    throw ActionError.propertyNotFound(property: specifier, on: result.base)
+                }
+                value = field
             }
             // Message from any variable type
             message = ResponseFormatter.formatValue(value, for: context.outputContext)

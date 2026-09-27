@@ -90,13 +90,16 @@ struct HandlerDependencies: Sendable {
             let evaluator = ExpressionEvaluator()
             do {
                 let condResult = try await evaluator.evaluate(whenCondition, context: handlerContext)
-                let passes: Bool
-                if let b = condResult as? Bool { passes = b }
-                else if let i = condResult as? Int { passes = i != 0 }
-                else { passes = !String(describing: condResult).isEmpty }
-                guard passes else { return }
+                // The shared rule (GitLab #644). This site read the guard's
+                // value as `!String(describing:).isEmpty`, so `false` — which
+                // prints as "false" — passed it. A handler guarded on a
+                // boolean field therefore ran for every event.
+                guard FeatureSetExecutor.strictBool(condResult) == true else { return }
             } catch {
-                // Guard evaluation error: skip this handler (don't crash)
+                // Not silently: a guard that cannot be evaluated made the
+                // handler cease to exist, with no diagnostic (GitLab #644).
+                FeatureSetExecutor.reportGuardFailure(
+                    analyzedFS.featureSet.name, error, kind: "handler", bus: eventBus)
                 return
             }
         }

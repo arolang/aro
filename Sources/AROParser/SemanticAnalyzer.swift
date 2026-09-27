@@ -292,6 +292,7 @@ public final class SemanticAnalyzer {
     public func analyze(
         _ program: Program,
         externallyHandledEvents: Set<String> = [],
+        checksWholeApplication: Bool = true,
         declaredUserActions: UserActionRegistry? = nil,
         preboundSymbols: Set<String> = [],
         pluginActionsPossible: Bool = true
@@ -371,8 +372,22 @@ public final class SemanticAnalyzer {
         // Fourth pass: detect circular event chains
         events.detectCircularEventChains(analyzedSets)
 
-        // Fifth pass: detect orphaned event emissions
-        events.detectOrphanedEventEmissions(analyzedSets, externallyHandled: externallyHandledEvents)
+        // Fifth pass: detect orphaned event emissions.
+        //
+        // Only when the caller is looking at the whole application
+        // (GitLab #852). An ARO application is a directory and every feature
+        // set in it is globally visible, so "no handler exists" is a statement
+        // about the application — and a single-file check has not seen the
+        // application. `aro check main.aro` warned that an event emitted there
+        // had no handler while the handler sat in `handler.aro` beside it, and
+        // the advice it gave was to write a second handler.
+        //
+        // `CheckCommand` already applies exactly this rule to
+        // `Application.<Name>` calls, for the same reason and in the same
+        // words; this brings events into line.
+        if checksWholeApplication {
+            events.detectOrphanedEventEmissions(analyzedSets, externallyHandled: externallyHandledEvents)
+        }
 
         // ARO-0081: validate `Application.<Name>` calls and framework-variable
         // access inside Action bodies. Done last so duplicate-name diagnostics

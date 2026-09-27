@@ -58,7 +58,8 @@ public final class Compiler {
         declaredUserActions: UserActionRegistry? = nil,
         preboundSymbols: Set<String> = [],
         declaredRepositoryScopes: [String: String] = [:],
-        pluginActionsPossible: Bool = true
+        pluginActionsPossible: Bool = true,
+        checksWholeApplication: Bool = true
     ) -> CompilationResult {
         // Clear diagnostics from previous compilations
         diagnostics.clear()
@@ -76,6 +77,7 @@ public final class Compiler {
             let analyzedProgram = analyzer.analyze(
                 program,
                 externallyHandledEvents: externallyHandledEvents,
+                checksWholeApplication: checksWholeApplication,
                 declaredUserActions: declaredUserActions,
                 preboundSymbols: preboundSymbols,
                 pluginActionsPossible: pluginActionsPossible)

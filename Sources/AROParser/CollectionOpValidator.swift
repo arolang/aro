@@ -125,6 +125,19 @@ public struct CollectionOpValidator {
     /// runtime would accept is accepted here, and the one thing it
     /// throws on is the one thing reported.
     private func validateComputeQualifier(_ statement: AROStatement) {
+        // Compute verbs only.
+        //
+        // Extending this to `Log` looked right — it runs the same qualifier
+        // registry — and is wrong: `Log`'s qualifier slot is overloaded.
+        // `Log the <metrics: short>` selects a *metrics format* (ARO-0044),
+        // `<template: raw>` is an escaping directive (GitLab #476), and
+        // neither is in the Compute table. Checking Log against that table
+        // rejects `Examples/MetricsDemo`, which is correct ARO.
+        //
+        // The runtime half of GitLab #648 stands: an unknown qualifier that
+        // reaches the registry now throws instead of warning to stderr. Giving
+        // `Log` a check-time equivalent needs a catalog of *its* qualifier
+        // namespaces first, which is its own piece of work.
         guard ComputeQualifierCatalog.computeVerbs.contains(statement.action.verb.lowercased()) else {
             return
         }
@@ -196,8 +209,14 @@ public struct CollectionOpValidator {
         hints.append("Run `aro actions --qualifiers` for the full set")
 
         let context = chain.map { " (stage of the chain '\($0)')" } ?? ""
+        // Named for the verb that wrote it rather than always "Compute":
+        // `Calculate` and `Derive` dispatch to the same action, and a
+        // diagnostic that names a verb the source does not contain reads as
+        // being about a different statement.
+        let verb = statement.action.verb.prefix(1).uppercased()
+                 + statement.action.verb.dropFirst().lowercased()
         diagnostics.error(
-            "Unknown Compute qualifier '\(qualifier)'\(context)",
+            "Unknown \(verb) qualifier '\(qualifier)'\(context)",
             at: result.span.start,
             hints: hints
         )
