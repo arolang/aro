@@ -1154,7 +1154,11 @@ public final class FeatureSetExecutor: Sendable {
                 // Check guard condition if present
                 if let guardCondition = caseClause.guardCondition {
                     let guardResult = try await expressionEvaluator.evaluate(guardCondition, context: context)
-                    guard let boolResult = guardResult as? Bool, boolResult else {
+                    // The shared rule (GitLab #644). This site accepted a
+                    // `Bool` and nothing else, so a guard that a compiled
+                    // binary carried across the C ABI as 0/1 failed here and
+                    // passed everywhere else.
+                    guard Self.strictBool(guardResult) == true else {
                         continue // Guard failed, try next case
                     }
                 }
@@ -1233,8 +1237,11 @@ public final class FeatureSetExecutor: Sendable {
             // Note: value is already any Sendable, so it can't be nil
             return false
         case .array, .object:
-            // Complex types - use string comparison for now
-            return String(describing: StatementModifiers.value(of: literal)) == String(describing: value)
+            // Structural comparison, not `String(describing:)` (GitLab #640).
+            // Swift's `Dictionary` description has no defined order, so
+            // `match <obj> { case { a: 1, b: 2 } … }` matched or failed from
+            // run to run, and `[1, 2]` never matched `[1.0, 2.0]`.
+            return AROValueEquality.equal(StatementModifiers.value(of: literal), value)
         case .regex(let pattern, let flags):
             guard let stringValue = value as? String else { return false }
             return regexMatches(stringValue, pattern: pattern, flags: flags)
@@ -1259,22 +1266,15 @@ public final class FeatureSetExecutor: Sendable {
     }
 
     /// Check if two values are equal
+    /// The same structural comparison `match` uses for literals (GitLab #640).
+    ///
+    /// This had the same `String(describing:)` fallback, so a `case <other>`
+    /// comparing two records answered from how Swift happened to print them
+    /// that run. It also missed `1` against `1.0`, which the shared version
+    /// handles because which of the two a value is depends on whether it came
+    /// from a literal, JSON or arithmetic — not on anything the author wrote.
     private func valuesEqual(_ a: any Sendable, _ b: any Sendable) -> Bool {
-        // Try various type comparisons
-        if let aString = a as? String, let bString = b as? String {
-            return aString == bString
-        }
-        if let aInt = a as? Int, let bInt = b as? Int {
-            return aInt == bInt
-        }
-        if let aDouble = a as? Double, let bDouble = b as? Double {
-            return aDouble == bDouble
-        }
-        if let aBool = a as? Bool, let bBool = b as? Bool {
-            return aBool == bBool
-        }
-        // Fall back to string comparison
-        return String(describing: a) == String(describing: b)
+        AROValueEquality.equal(a, b)
     }
 
     // MARK: - Require Statement Execution (ARO-0003)
@@ -1640,14 +1640,39 @@ public final class FeatureSetExecutor: Sendable {
 
     // MARK: - When Clause Helpers
 
-    /// Evaluate a value as a boolean for when clause conditions
-    /// Follows JavaScript-like truthiness rules for convenience
+    /// `AROTruthiness.strict` under the name the guard sites here call it by.
+    ///
+    /// The rule and the reasoning live in `AROTruthiness` (GitLab #644),
+    /// because five copies of it is what the bug was.
+    static func strictBool(_ value: any Sendable) -> Bool? {
+        AROTruthiness.strict(value)
+    }
+
+    /// Report a guard that could not be evaluated (GitLab #644).
+    ///
+    /// Every guard path swallowed this, so a misspelt field in a guard made
+    /// the handler silently cease to exist. Recoverable, because one broken
+    /// guard should not take the application down — but visible, because the
+    /// alternative is a program that does nothing and says nothing.
+    ///
+    /// `nonisolated`, and the bus is passed in: the subscription closures that
+    /// call this deliberately stay off the engine actor — the actor may itself
+    /// be blocked waiting for handlers, so hopping back would deadlock.
+    nonisolated static func reportGuardFailure(
+        _ featureSet: String, _ error: any Error, kind: String, bus: EventBus
+    ) {
+        bus.publish(ErrorOccurredEvent(
+            error: "guard of \(featureSet) could not be evaluated: \(error)",
+            context: featureSet,
+            recoverable: true
+        ))
+        FileHandle.standardError.write(Data((
+            "[ARO] Guard of \(featureSet) could not be evaluated: \(error) — "
+            + "the \(kind) did not run.\n").utf8))
+    }
+
     private func asBool(_ value: any Sendable) -> Bool {
-        if let b = value as? Bool { return b }
-        if let i = value as? Int { return i != 0 }
-        if let s = value as? String { return !s.isEmpty }
-        if let array = value as? [any Sendable] { return !array.isEmpty }
-        return true  // Non-nil values are truthy
+        Self.strictBool(value) ?? false
     }
 
     // MARK: - While Loop Execution (GitLab #131)
