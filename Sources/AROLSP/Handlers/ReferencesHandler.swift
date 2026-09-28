@@ -55,9 +55,14 @@ public struct ReferencesHandler: Sendable {
         uri: String,
         lines: LineIndex
     ) -> [[String: Any]] {
+        // GitLab #723: one walker decides what is inside a feature set, so a
+        // reference written inside `when { … }` is found like any other. The
+        // pipeline branch this replaces re-implemented the `AROStatement`
+        // case and had drifted — it never looked at a stage's `where`
+        // predicates; going through the same branch fixes that too.
         var references: [[String: Any]] = []
 
-        for statement in statements {
+        for statement in AROStatementWalk.flattenAll(statements) {
             if let aro = statement as? AROStatement {
                 if aro.result.base == symbolName {
                     references.append(createLocationDict(lines: lines, uri: uri, span: aro.result.span))
@@ -75,28 +80,6 @@ public struct ReferencesHandler: Sendable {
                 if publish.internalVariable == symbolName {
                     references.append(createLocationDict(lines: lines, uri: uri, span: publish.span))
                 }
-            } else if let forEachLoop = statement as? ForEachLoop {
-                references.append(contentsOf: findReferencesInStatements(forEachLoop.body, name: symbolName, uri: uri, lines: lines))
-            } else if let rangeLoop = statement as? RangeLoop {
-                references.append(contentsOf: findReferencesInStatements(rangeLoop.body, name: symbolName, uri: uri, lines: lines))
-            } else if let whileLoop = statement as? WhileLoop {
-                references.append(contentsOf: findReferencesInStatements(whileLoop.body, name: symbolName, uri: uri, lines: lines))
-            } else if let matchStmt = statement as? MatchStatement {
-                for caseClause in matchStmt.cases {
-                    references.append(contentsOf: findReferencesInStatements(caseClause.body, name: symbolName, uri: uri, lines: lines))
-                }
-            } else if let pipeline = statement as? PipelineStatement {
-                for stage in pipeline.stages {
-                    if stage.result.base == symbolName {
-                        references.append(createLocationDict(lines: lines, uri: uri, span: stage.result.span))
-                    }
-                    if stage.object.noun.base == symbolName {
-                        references.append(createLocationDict(lines: lines, uri: uri, span: stage.object.noun.span))
-                    }
-                    if let expr = stage.valueSource.asExpression {
-                        references.append(contentsOf: findReferencesInExpression(expr, name: symbolName, uri: uri, lines: lines))
-                    }
-                }
             }
         }
 
@@ -106,30 +89,11 @@ public struct ReferencesHandler: Sendable {
     // MARK: - Statement Traversal
 
     private func findSymbolNameInStatements(_ statements: [Statement], position: SourceLocation) -> String? {
-        for statement in statements {
-            if let aro = statement as? AROStatement {
-                if aro.result.span.contains(position) { return aro.result.base }
-                if aro.object.noun.span.contains(position) { return aro.object.noun.base }
-                if let expr = aro.valueSource.asExpression,
-                   let name = findSymbolNameInExpression(expr, position: position) { return name }
-            } else if let forEachLoop = statement as? ForEachLoop {
-                if let name = findSymbolNameInStatements(forEachLoop.body, position: position) { return name }
-            } else if let rangeLoop = statement as? RangeLoop {
-                if let name = findSymbolNameInStatements(rangeLoop.body, position: position) { return name }
-            } else if let whileLoop = statement as? WhileLoop {
-                if let name = findSymbolNameInStatements(whileLoop.body, position: position) { return name }
-            } else if let matchStmt = statement as? MatchStatement {
-                for caseClause in matchStmt.cases {
-                    if let name = findSymbolNameInStatements(caseClause.body, position: position) { return name }
-                }
-            } else if let pipeline = statement as? PipelineStatement {
-                for stage in pipeline.stages {
-                    if stage.result.span.contains(position) { return stage.result.base }
-                    if stage.object.noun.span.contains(position) { return stage.object.noun.base }
-                    if let expr = stage.valueSource.asExpression,
-                       let name = findSymbolNameInExpression(expr, position: position) { return name }
-                }
-            }
+        for aro in AROStatementWalk.flatten(statements) {
+            if aro.result.span.contains(position) { return aro.result.base }
+            if aro.object.noun.span.contains(position) { return aro.object.noun.base }
+            if let expr = aro.valueSource.asExpression,
+               let name = findSymbolNameInExpression(expr, position: position) { return name }
         }
         return nil
     }

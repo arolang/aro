@@ -783,54 +783,30 @@ public final class LLVMCodeGenerator {
     /// Collects all variable names that will be bound by statements in the loop body.
     /// This is used to unbind them at the start of each iteration, simulating the
     /// child context behavior of the interpreter.
+    ///
+    /// GitLab #723: the descent is `AROStatementWalk`'s, so this sees every
+    /// body the loop body can contain. The private recursion it replaces
+    /// never entered a `when { … }` block, so a binding made inside one was
+    /// not unbound between iterations — an immutability error on the second
+    /// pass through a loop whose body guards a binding with `when`, in
+    /// compiled mode only.
+    ///
+    /// The item and index variables of a nested `for each` stay out: the
+    /// nested loop manages its own. A `RangeLoop`'s variable does not — it
+    /// lives in this scope and has to be unbound with the rest, which is why
+    /// the containers are walked too rather than only the actions.
     private func collectBoundVariables(from statements: [any Statement]) -> Set<String> {
         var variables = Set<String>()
-        for statement in statements {
-            collectBoundVariablesFromStatement(statement, into: &variables)
+        for statement in AROStatementWalk.flattenAll(statements) {
+            if let aroStatement = statement as? AROStatement {
+                variables.insert(aroStatement.result.base)
+            } else if let rangeLoop = statement as? RangeLoop {
+                variables.insert(rangeLoop.variable)
+            }
+            // Publish, Require and Break bind nothing; a pipeline's stages
+            // arrive as the `AROStatement`s they are (ARO-0067).
         }
         return variables
-    }
-
-    private func collectBoundVariablesFromStatement(_ statement: any Statement, into variables: inout Set<String>) {
-        if let aroStatement = statement as? AROStatement {
-            // The result of an ARO statement is bound to a variable
-            variables.insert(aroStatement.result.base)
-        } else if let matchStatement = statement as? MatchStatement {
-            // Recurse into match statement cases
-            for caseClause in matchStatement.cases {
-                for stmt in caseClause.body {
-                    collectBoundVariablesFromStatement(stmt, into: &variables)
-                }
-            }
-            if let otherwise = matchStatement.otherwise {
-                for stmt in otherwise {
-                    collectBoundVariablesFromStatement(stmt, into: &variables)
-                }
-            }
-        } else if let forEachLoop = statement as? ForEachLoop {
-            // The item and index variables are managed by the nested loop
-            // But we still need to collect variables from the nested body
-            for stmt in forEachLoop.body {
-                collectBoundVariablesFromStatement(stmt, into: &variables)
-            }
-        } else if let rangeLoop = statement as? RangeLoop {
-            // Range loop variable and body variables
-            variables.insert(rangeLoop.variable)
-            for stmt in rangeLoop.body {
-                collectBoundVariablesFromStatement(stmt, into: &variables)
-            }
-        } else if let whileLoop = statement as? WhileLoop {
-            // While loop variables are in the outer scope — collect them
-            for stmt in whileLoop.body {
-                collectBoundVariablesFromStatement(stmt, into: &variables)
-            }
-        } else if let pipeline = statement as? PipelineStatement {
-            // ARO-0067: Each pipeline stage binds its result variable
-            for stage in pipeline.stages {
-                variables.insert(stage.result.base)
-            }
-        }
-        // PublishStatement, RequireStatement, and BreakStatement don't bind new variables
     }
 
     /// The name the compiled loop resolves its collection from, plus the
@@ -2297,11 +2273,21 @@ private final class StringConstantCollector {
         _ = ctx.stringConstant(fs.name)
         _ = ctx.stringConstant(fs.businessActivity)
 
-        for statement in fs.statements {
+        collectFromStatements(fs.statements)
+    }
+
+    /// GitLab #723: interning is driven by `AROStatementWalk`, which reaches
+    /// `when { … }`, `while` and range bodies — all three invisible to the
+    /// private recursion that stood here. Interning is memoized and happens
+    /// on demand anyway, so the old gaps cost a late allocation rather than a
+    /// wrong program; the point of doing it here is to do it once.
+    private func collectFromStatements(_ statements: [Statement]) {
+        for statement in AROStatementWalk.flattenAll(statements) {
             collectFromStatement(statement)
         }
     }
 
+    /// One statement, its own strings only — the walker supplies the nesting.
     private func collectFromStatement(_ statement: Statement) {
         if let aro = statement as? AROStatement {
             _ = ctx.stringConstant(aro.result.base)
@@ -2317,16 +2303,6 @@ private final class StringConstantCollector {
             collectFromRangeModifiers(aro.rangeModifiers)
         } else if let match = statement as? MatchStatement {
             _ = ctx.stringConstant(match.subject.base)
-            for caseClause in match.cases {
-                for stmt in caseClause.body {
-                    collectFromStatement(stmt)
-                }
-            }
-            if let otherwise = match.otherwise {
-                for stmt in otherwise {
-                    collectFromStatement(stmt)
-                }
-            }
         } else if let loop = statement as? ForEachLoop {
             _ = ctx.stringConstant(loop.itemVariable)
             if let index = loop.indexVariable {
@@ -2336,13 +2312,6 @@ private final class StringConstantCollector {
             // interned on demand when the loop is generated (GitLab #519).
             if let noun = loop.collection {
                 _ = ctx.stringConstant(noun.base)
-            }
-            for stmt in loop.body {
-                collectFromStatement(stmt)
-            }
-        } else if let pipeline = statement as? PipelineStatement {
-            for stage in pipeline.stages {
-                collectFromStatement(stage)
             }
         } else if let publish = statement as? PublishStatement {
             _ = ctx.stringConstant(publish.externalName)

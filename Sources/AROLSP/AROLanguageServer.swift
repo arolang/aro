@@ -731,49 +731,19 @@ public final class AROLanguageServer: Sendable {
         position: SourceLocation,
         isActionVerb: inout Bool
     ) -> String? {
-        for statement in statements {
-            if let aro = statement as? AROStatement {
-                if aro.action.span.contains(position) {
-                    isActionVerb = true
-                    return aro.action.verb
-                }
-                if aro.result.span.contains(position) {
-                    return aro.result.base
-                }
-                if aro.object.noun.span.contains(position) {
-                    return aro.object.noun.base
-                }
-            } else if let forEachLoop = statement as? ForEachLoop {
-                if let found = findHighlightTargetInStatements(forEachLoop.body, position: position, isActionVerb: &isActionVerb) {
-                    return found
-                }
-            } else if let rangeLoop = statement as? RangeLoop {
-                if let found = findHighlightTargetInStatements(rangeLoop.body, position: position, isActionVerb: &isActionVerb) {
-                    return found
-                }
-            } else if let whileLoop = statement as? WhileLoop {
-                if let found = findHighlightTargetInStatements(whileLoop.body, position: position, isActionVerb: &isActionVerb) {
-                    return found
-                }
-            } else if let matchStmt = statement as? MatchStatement {
-                for caseClause in matchStmt.cases {
-                    if let found = findHighlightTargetInStatements(caseClause.body, position: position, isActionVerb: &isActionVerb) {
-                        return found
-                    }
-                }
-            } else if let pipeline = statement as? PipelineStatement {
-                for stage in pipeline.stages {
-                    if stage.action.span.contains(position) {
-                        isActionVerb = true
-                        return stage.action.verb
-                    }
-                    if stage.result.span.contains(position) {
-                        return stage.result.base
-                    }
-                    if stage.object.noun.span.contains(position) {
-                        return stage.object.noun.base
-                    }
-                }
+        // GitLab #723: highlighting an occurrence inside `when { … }` found
+        // nothing, because the chain here descended into loops, match cases
+        // and pipelines but not into a `when` block or a match's `otherwise`.
+        for aro in AROStatementWalk.flatten(statements) {
+            if aro.action.span.contains(position) {
+                isActionVerb = true
+                return aro.action.verb
+            }
+            if aro.result.span.contains(position) {
+                return aro.result.base
+            }
+            if aro.object.noun.span.contains(position) {
+                return aro.object.noun.base
             }
         }
         return nil
@@ -788,44 +758,17 @@ public final class AROLanguageServer: Sendable {
     ) -> [[String: Any]] {
         var highlights: [[String: Any]] = []
 
-        for statement in statements {
-            if let aro = statement as? AROStatement {
-                if isActionVerb {
-                    if aro.action.verb.lowercased() == name.lowercased() {
-                        highlights.append(makeHighlight(lines: lines, span: aro.action.span, kind: 1))
-                    }
-                } else {
-                    if aro.result.base == name {
-                        highlights.append(makeHighlight(lines: lines, span: aro.result.span, kind: 2))  // Write
-                    }
-                    if aro.object.noun.base == name {
-                        highlights.append(makeHighlight(lines: lines, span: aro.object.noun.span, kind: 3))  // Read
-                    }
+        for aro in AROStatementWalk.flatten(statements) {
+            if isActionVerb {
+                if aro.action.verb.lowercased() == name.lowercased() {
+                    highlights.append(makeHighlight(lines: lines, span: aro.action.span, kind: 1))
                 }
-            } else if let forEachLoop = statement as? ForEachLoop {
-                highlights.append(contentsOf: collectHighlightsInStatements(forEachLoop.body, name: name, isActionVerb: isActionVerb, lines: lines))
-            } else if let rangeLoop = statement as? RangeLoop {
-                highlights.append(contentsOf: collectHighlightsInStatements(rangeLoop.body, name: name, isActionVerb: isActionVerb, lines: lines))
-            } else if let whileLoop = statement as? WhileLoop {
-                highlights.append(contentsOf: collectHighlightsInStatements(whileLoop.body, name: name, isActionVerb: isActionVerb, lines: lines))
-            } else if let matchStmt = statement as? MatchStatement {
-                for caseClause in matchStmt.cases {
-                    highlights.append(contentsOf: collectHighlightsInStatements(caseClause.body, name: name, isActionVerb: isActionVerb, lines: lines))
+            } else {
+                if aro.result.base == name {
+                    highlights.append(makeHighlight(lines: lines, span: aro.result.span, kind: 2))  // Write
                 }
-            } else if let pipeline = statement as? PipelineStatement {
-                for stage in pipeline.stages {
-                    if isActionVerb {
-                        if stage.action.verb.lowercased() == name.lowercased() {
-                            highlights.append(makeHighlight(lines: lines, span: stage.action.span, kind: 1))
-                        }
-                    } else {
-                        if stage.result.base == name {
-                            highlights.append(makeHighlight(lines: lines, span: stage.result.span, kind: 2))
-                        }
-                        if stage.object.noun.base == name {
-                            highlights.append(makeHighlight(lines: lines, span: stage.object.noun.span, kind: 3))
-                        }
-                    }
+                if aro.object.noun.base == name {
+                    highlights.append(makeHighlight(lines: lines, span: aro.object.noun.span, kind: 3))  // Read
                 }
             }
         }

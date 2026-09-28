@@ -75,38 +75,22 @@ public final class UserActionAnalyzer {
         }
     }
 
+    /// GitLab #723: the walk is `AROStatementWalk`'s. The private recursion
+    /// it replaces entered loops and match cases but not a `when { … }` block
+    /// or a match's `otherwise`, so a call to an action that does not exist
+    /// passed `aro check` when it was written inside one, and failed at run
+    /// time instead — as did the framework-variable restriction on an Action
+    /// body.
     private func visit(
         _ statements: [Statement],
         isInsideAction: Bool,
         registry: UserActionRegistry,
         scope: UserActionScope
     ) {
-        for statement in statements {
-            switch statement {
-            case let aro as AROStatement:
-                validateApplicationCall(aro, registry: registry, scope: scope)
-                if isInsideAction {
-                    validateNoFrameworkVariables(aro)
-                }
-            case let pipeline as PipelineStatement:
-                for stage in pipeline.stages {
-                    validateApplicationCall(stage, registry: registry, scope: scope)
-                    if isInsideAction {
-                        validateNoFrameworkVariables(stage)
-                    }
-                }
-            case let forEach as ForEachLoop:
-                visit(forEach.body, isInsideAction: isInsideAction, registry: registry, scope: scope)
-            case let rangeLoop as RangeLoop:
-                visit(rangeLoop.body, isInsideAction: isInsideAction, registry: registry, scope: scope)
-            case let whileLoop as WhileLoop:
-                visit(whileLoop.body, isInsideAction: isInsideAction, registry: registry, scope: scope)
-            case let match as MatchStatement:
-                for clause in match.cases {
-                    visit(clause.body, isInsideAction: isInsideAction, registry: registry, scope: scope)
-                }
-            default:
-                break
+        for aro in AROStatementWalk.flatten(statements) {
+            validateApplicationCall(aro, registry: registry, scope: scope)
+            if isInsideAction {
+                validateNoFrameworkVariables(aro)
             }
         }
     }

@@ -44,9 +44,12 @@ public struct InlayHintHandler: Sendable {
 
         for analyzed in result.analyzedProgram.featureSets {
             let symbolTable = analyzed.symbolTable
-            for statement in analyzed.featureSet.statements {
-                hints.append(contentsOf: hintsForStatement(
-                    statement,
+            // GitLab #723: the shared walker reaches every nested body,
+            // including `when { … }`, where a binding used to get no type
+            // hint at all.
+            for aro in AROStatementWalk.flatten(analyzed.featureSet.statements) {
+                hints.append(contentsOf: hintsForAROStatement(
+                    aro,
                     symbolTable: symbolTable,
                     startLine: startLine,
                     endLine: endLine
@@ -116,43 +119,6 @@ public struct InlayHintHandler: Sendable {
     }
 
     // MARK: - Per-statement hint generation
-
-    private func hintsForStatement(
-        _ statement: Statement,
-        symbolTable: SymbolTable,
-        startLine: Int,
-        endLine: Int
-    ) -> [[String: Any]] {
-        var hints: [[String: Any]] = []
-
-        if let aro = statement as? AROStatement {
-            hints.append(contentsOf: hintsForAROStatement(aro, symbolTable: symbolTable, startLine: startLine, endLine: endLine))
-        } else if let forEachLoop = statement as? ForEachLoop {
-            for nested in forEachLoop.body {
-                hints.append(contentsOf: hintsForStatement(nested, symbolTable: symbolTable, startLine: startLine, endLine: endLine))
-            }
-        } else if let rangeLoop = statement as? RangeLoop {
-            for nested in rangeLoop.body {
-                hints.append(contentsOf: hintsForStatement(nested, symbolTable: symbolTable, startLine: startLine, endLine: endLine))
-            }
-        } else if let whileLoop = statement as? WhileLoop {
-            for nested in whileLoop.body {
-                hints.append(contentsOf: hintsForStatement(nested, symbolTable: symbolTable, startLine: startLine, endLine: endLine))
-            }
-        } else if let matchStmt = statement as? MatchStatement {
-            for caseClause in matchStmt.cases {
-                for nested in caseClause.body {
-                    hints.append(contentsOf: hintsForStatement(nested, symbolTable: symbolTable, startLine: startLine, endLine: endLine))
-                }
-            }
-        } else if let pipeline = statement as? PipelineStatement {
-            for stage in pipeline.stages {
-                hints.append(contentsOf: hintsForAROStatement(stage, symbolTable: symbolTable, startLine: startLine, endLine: endLine))
-            }
-        }
-
-        return hints
-    }
 
     private func hintsForAROStatement(
         _ aro: AROStatement,

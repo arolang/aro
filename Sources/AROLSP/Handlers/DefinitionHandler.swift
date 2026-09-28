@@ -44,58 +44,24 @@ public struct DefinitionHandler: Sendable {
         uri: String,
         lines: LineIndex
     ) -> [String: Any]? {
-        for statement in statements {
-            if let aro = statement as? AROStatement {
-                if aro.result.span.contains(position) {
-                    if let symbol = symbolTable.lookup(aro.result.base) {
-                        return createLocationResponse(uri: uri, span: symbol.definedAt, lines: lines)
-                    }
+        // GitLab #723: the shared walker knows about `when { … }`, a match's
+        // `otherwise` and every loop body; the `as?` chain that stood here
+        // knew about some of them, which is why go-to-definition worked in a
+        // `for each` body and did nothing inside a `when` block.
+        for aro in AROStatementWalk.flatten(statements) {
+            if aro.result.span.contains(position) {
+                if let symbol = symbolTable.lookup(aro.result.base) {
+                    return createLocationResponse(uri: uri, span: symbol.definedAt, lines: lines)
                 }
-                if aro.object.noun.span.contains(position) {
-                    if let symbol = symbolTable.lookup(aro.object.noun.base) {
-                        return createLocationResponse(uri: uri, span: symbol.definedAt, lines: lines)
-                    }
+            }
+            if aro.object.noun.span.contains(position) {
+                if let symbol = symbolTable.lookup(aro.object.noun.base) {
+                    return createLocationResponse(uri: uri, span: symbol.definedAt, lines: lines)
                 }
-                if let expr = aro.valueSource.asExpression {
-                    if let location = findDefinitionInExpression(expr, position: position, symbolTable: symbolTable, uri: uri, lines: lines) {
-                        return location
-                    }
-                }
-            } else if let forEachLoop = statement as? ForEachLoop {
-                if let location = findDefinitionInStatements(forEachLoop.body, position: position, symbolTable: symbolTable, uri: uri, lines: lines) {
+            }
+            if let expr = aro.valueSource.asExpression {
+                if let location = findDefinitionInExpression(expr, position: position, symbolTable: symbolTable, uri: uri, lines: lines) {
                     return location
-                }
-            } else if let rangeLoop = statement as? RangeLoop {
-                if let location = findDefinitionInStatements(rangeLoop.body, position: position, symbolTable: symbolTable, uri: uri, lines: lines) {
-                    return location
-                }
-            } else if let whileLoop = statement as? WhileLoop {
-                if let location = findDefinitionInStatements(whileLoop.body, position: position, symbolTable: symbolTable, uri: uri, lines: lines) {
-                    return location
-                }
-            } else if let matchStmt = statement as? MatchStatement {
-                for caseClause in matchStmt.cases {
-                    if let location = findDefinitionInStatements(caseClause.body, position: position, symbolTable: symbolTable, uri: uri, lines: lines) {
-                        return location
-                    }
-                }
-            } else if let pipeline = statement as? PipelineStatement {
-                for stage in pipeline.stages {
-                    if stage.result.span.contains(position) {
-                        if let symbol = symbolTable.lookup(stage.result.base) {
-                            return createLocationResponse(uri: uri, span: symbol.definedAt, lines: lines)
-                        }
-                    }
-                    if stage.object.noun.span.contains(position) {
-                        if let symbol = symbolTable.lookup(stage.object.noun.base) {
-                            return createLocationResponse(uri: uri, span: symbol.definedAt, lines: lines)
-                        }
-                    }
-                    if let expr = stage.valueSource.asExpression {
-                        if let location = findDefinitionInExpression(expr, position: position, symbolTable: symbolTable, uri: uri, lines: lines) {
-                            return location
-                        }
-                    }
                 }
             }
         }

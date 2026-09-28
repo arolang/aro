@@ -78,22 +78,16 @@ public struct ResponseStatusValidator {
         )
     }
 
-    /// Flatten nested statements so a status inside a `match` case or a
-    /// loop is checked too — same walk as `CollectionOpValidator`.
+    /// Flatten nested statements so a status written inside any block is
+    /// checked too.
+    ///
+    /// This was a fourth copy of the walk GitLab #660 consolidated — it even
+    /// said "same walk as `CollectionOpValidator`", which by then it no
+    /// longer was: that one had become `AROStatementWalk` and gained `when`,
+    /// `while`, range and pipeline, while this copy still knew only match
+    /// cases and for-each. So `Return a <TooManyReqests: status>` inside a
+    /// `when` block kept its silent 200 (GitLab #723).
     private func collectAROStatements(_ statements: [Statement]) -> [AROStatement] {
-        var out: [AROStatement] = []
-        for statement in statements {
-            if let aro = statement as? AROStatement {
-                out.append(aro)
-            } else if let match = statement as? MatchStatement {
-                for matchCase in match.cases {
-                    out.append(contentsOf: collectAROStatements(matchCase.body))
-                }
-                out.append(contentsOf: collectAROStatements(match.otherwise ?? []))
-            } else if let loop = statement as? ForEachLoop {
-                out.append(contentsOf: collectAROStatements(loop.body))
-            }
-        }
-        return out
+        AROStatementWalk.flatten(statements)
     }
 }
