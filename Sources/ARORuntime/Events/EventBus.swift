@@ -39,6 +39,11 @@ fileprivate final class EventBusPendingPublishCounter: @unchecked Sendable {
         lock.lock(); defer { lock.unlock() }
         return count == 0
     }
+
+    var isPositive: Bool {
+        lock.lock(); defer { lock.unlock() }
+        return count > 0
+    }
 }
 
 /// Result box for synchronous bridge methods
@@ -103,6 +108,17 @@ private final class SubscriptionStore: @unchecked Sendable {
         idToType.removeAll()
     }
 
+    /// Whether anything at all would be delivered for `eventType`.
+    ///
+    /// Answers the question `publish` needs before deciding to spawn a Task,
+    /// without building the array `matching(for:)` returns (GitLab #708).
+    func hasSubscribers(for eventType: String) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        if !wildcardSubscriptions.isEmpty { return true }
+        return !(subscriptionsByType[eventType]?.isEmpty ?? true)
+    }
+
     func matching(for eventType: String) -> [EventBus.Subscription] {
         lock.lock()
         defer { lock.unlock() }
@@ -135,6 +151,31 @@ public actor EventBus {
         let id: UUID
         let eventType: String
         let handler: EventHandler
+
+        /// An optional pre-dispatch test, evaluated before the handler's task
+        /// is created.
+        ///
+        /// Every `X Handler` in an ARO program subscribes to the single key
+        /// `DomainEvent.eventType` — `"domain"` — and then, inside the
+        /// handler, returns immediately unless `event.domainEventType` is its
+        /// own. That guard ran *after* the fan-out had already spawned a Task
+        /// and taken an actor hop, so an application with H handlers paid H
+        /// task spawns for every `Emit` even when one handler matched
+        /// (GitLab #704).
+        ///
+        /// Moving the same test here costs one closure call instead. It is
+        /// deliberately not a routing key: prefix-matching plugin
+        /// subscriptions and wildcard subscribers share the `"domain"` bucket,
+        /// and re-keying it would silently stop delivering to them.
+        let accepts: (@Sendable (any RuntimeEvent) -> Bool)?
+
+        init(id: UUID, eventType: String, handler: @escaping EventHandler,
+             accepts: (@Sendable (any RuntimeEvent) -> Bool)? = nil) {
+            self.id = id
+            self.eventType = eventType
+            self.handler = handler
+            self.accepts = accepts
+        }
     }
 
     /// Actor-isolated subscription storage — replaces nonisolated(unsafe) + NSLock
@@ -142,6 +183,13 @@ public actor EventBus {
 
     /// Async stream continuations for stream-based subscriptions
     private var continuations: [UUID: AsyncStream<any RuntimeEvent>.Continuation] = [:]
+
+    /// How many of those there are, readable without the actor.
+    ///
+    /// `continuations` is actor-isolated and `publish` is not, so the
+    /// fast-path check above needs a second, nonisolated view of the same
+    /// fact (GitLab #708). Kept in step with every mutation of the dictionary.
+    private nonisolated let streamContinuationCount = EventBusPendingPublishCounter()
 
     /// In-flight event handler counter
     private var inFlightHandlers: Int = 0
@@ -278,6 +326,24 @@ public actor EventBus {
     /// This is nonisolated for compatibility with existing synchronous code
     /// - Parameter event: The event to publish
     nonisolated public func publish(_ event: any RuntimeEvent) {
+        // Nobody to deliver to and nobody to pause for: do nothing at all.
+        //
+        // Every feature-set execution publishes `FeatureSetStartedEvent`,
+        // `FeatureSetCompletedEvent` and, for a `Store`, `DataStoredEvent`
+        // before any user event is considered. A program with no subscriber
+        // for those — which is every program that does not ask for metrics or
+        // observers — paid a Task spawn, an actor hop and two counter
+        // round-trips per event to deliver them to nobody (GitLab #708).
+        //
+        // The three things the Task does are all covered: the debugger's
+        // checkpoint (`Debug.controller` is nil unless one is attached), the
+        // callback subscribers, and the `AsyncStream` continuations.
+        if Debug.controller == nil,
+           !store.hasSubscribers(for: type(of: event).eventType),
+           !streamContinuationCount.isPositive {
+            return
+        }
+
         // Pre-increment a synchronously-visible counter so awaitPendingEvents
         // cannot exit between publish() returning and publishInternal running.
         pendingFireAndForgetPublishes.increment()
@@ -324,7 +390,9 @@ public actor EventBus {
     /// layer (see `HTTPClient.sharedLimiter`).
     private func publishInternal(_ event: any RuntimeEvent) async {
         let eventType = type(of: event).eventType
-        let matchingSubscriptions = store.matching(for: eventType)
+        let matchingSubscriptions = store.matching(for: eventType).filter {
+            $0.accepts?(event) ?? true
+        }
         let allContinuations = Array(continuations.values)
 
         // Notify async stream subscribers
@@ -405,7 +473,9 @@ public actor EventBus {
         await Self.eventBreakpointCheckpoint(for: event)
 
         let eventType = type(of: event).eventType
-        let matchingSubscriptions = store.matching(for: eventType)
+        let matchingSubscriptions = store.matching(for: eventType).filter {
+            $0.accepts?(event) ?? true
+        }
 
         // Stream subscribers are unbuffered fan-out — deliver inline, same as
         // the normal path; only callback handlers are pooled.
@@ -429,20 +499,37 @@ public actor EventBus {
         observerWorkersStarted = true
         let count = effectiveObserverWorkerCount
         for _ in 0..<count {
-            Task { await self.observerWorkerLoop() }
+            observerWorkers.append(Task { await self.observerWorkerLoop() })
         }
     }
+
+    /// The worker tasks, kept so they can be cancelled.
+    ///
+    /// They used to be spawned and forgotten, and their loop had no
+    /// cancellation check, so `ARO_ASYNC_OBSERVERS` workers outlived the
+    /// application that started them (GitLab #708). That is invisible for
+    /// `aro run`, which exits, and not for the REPL, the Jupyter kernel, or a
+    /// test suite that creates many buses.
+    private var observerWorkers: [Task<Void, Never>] = []
 
     /// Each worker pulls one item (parking while the queue is empty), runs its
     /// handler to completion, then accounts for it. A worker only ever *drains*
     /// — producers park in `observerSpaceWaiters`, never workers — so the pool
     /// cannot deadlock under recursive observer → store → observer.
     private func observerWorkerLoop() async {
-        while true {
+        while !Task.isCancelled {
             let work = await takeObserverWork()
             await work.subscription.handler(work.event)
             observerHandlerCompleted()
         }
+    }
+
+    /// Stop the worker pool. The next backpressured publish starts a fresh
+    /// one, so this is a teardown rather than a permanent shutdown.
+    private func stopObserverWorkers() {
+        for worker in observerWorkers { worker.cancel() }
+        observerWorkers.removeAll()
+        observerWorkersStarted = false
     }
 
     /// Dequeue the next item, or suspend until one is enqueued. Frees a queue
@@ -506,7 +593,9 @@ public actor EventBus {
         await Self.eventBreakpointCheckpoint(for: event)
 
         let eventType = type(of: event).eventType
-        let matchingSubscriptions = store.matching(for: eventType)
+        let matchingSubscriptions = store.matching(for: eventType).filter {
+            $0.accepts?(event) ?? true
+        }
 
         await withTaskGroup(of: Void.self) { group in
             for subscription in matchingSubscriptions {
@@ -527,7 +616,9 @@ public actor EventBus {
         await Self.eventBreakpointCheckpoint(for: event)
 
         let eventType = type(of: event).eventType
-        let matchingSubscriptions = store.matching(for: eventType)
+        let matchingSubscriptions = store.matching(for: eventType).filter {
+            $0.accepts?(event) ?? true
+        }
 
         // Execute all handlers and wait for completion
         await withTaskGroup(of: Void.self) { group in
@@ -736,13 +827,41 @@ public actor EventBus {
     /// - Returns: A subscription ID that can be used to unsubscribe
     @discardableResult
     nonisolated public func subscribe(to eventType: String, handler: @escaping EventHandler) -> UUID {
+        subscribe(to: eventType, accepts: nil, handler: handler)
+    }
+
+    /// Subscribe with a pre-dispatch test — see `Subscription.accepts`.
+    @discardableResult
+    nonisolated public func subscribe(
+        to eventType: String,
+        accepts: (@Sendable (any RuntimeEvent) -> Bool)?,
+        handler: @escaping EventHandler
+    ) -> UUID {
         let subscription = Subscription(
             id: UUID(),
             eventType: eventType,
-            handler: handler
+            handler: handler,
+            accepts: accepts
         )
         store.add(subscription)
         return subscription.id
+    }
+
+    /// Subscribe to the `DomainEvent`s an `Emit` of `named` produces.
+    ///
+    /// The routing key stays `"domain"`; what this adds is the name test,
+    /// evaluated before a task is spawned (GitLab #704).
+    @discardableResult
+    nonisolated public func subscribe(
+        toDomainEventNamed named: String,
+        handler: @escaping @Sendable (DomainEvent) async -> Void
+    ) -> UUID {
+        subscribe(
+            to: DomainEvent.eventType,
+            accepts: { ($0 as? DomainEvent)?.domainEventType == named }
+        ) { event in
+            if let domain = event as? DomainEvent { await handler(domain) }
+        }
     }
 
     /// Subscribe to events of a specific type with a typed handler
@@ -767,7 +886,7 @@ public actor EventBus {
 
         return AsyncStream { continuation in
             Task {
-                self.continuations[id] = continuation
+                self.registerContinuation(id, continuation)
             }
 
             continuation.onTermination = { [weak self] _ in
@@ -800,7 +919,9 @@ public actor EventBus {
     }
 
     private func removeContinuation(_ id: UUID) {
-        _ = continuations.removeValue(forKey: id)
+        if continuations.removeValue(forKey: id) != nil {
+            _ = streamContinuationCount.decrement()
+        }
     }
 
     // MARK: - Unsubscribing
@@ -819,6 +940,16 @@ public actor EventBus {
         store.removeAll()
         Task {
             await self.finishAndClearContinuations()
+            await self.stopObserverWorkers()
+        }
+    }
+
+    private func registerContinuation(
+        _ id: UUID,
+        _ continuation: AsyncStream<any RuntimeEvent>.Continuation
+    ) {
+        if continuations.updateValue(continuation, forKey: id) == nil {
+            streamContinuationCount.increment()
         }
     }
 
@@ -826,6 +957,7 @@ public actor EventBus {
         for continuation in continuations.values {
             continuation.finish()
         }
+        for _ in continuations { _ = streamContinuationCount.decrement() }
         continuations.removeAll()
     }
 

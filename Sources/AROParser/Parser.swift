@@ -960,13 +960,14 @@ public final class Parser {
 
     /// Check if a verb is a sink action verb
     /// Sink verbs write data TO system objects
+    private static let sinkVerbs: Set<String> = [
+        "log", "print", "output", "debug",  // LogAction
+        "write",                             // WriteAction
+        "send", "dispatch"                   // SendAction
+    ]
+
     private func isSinkActionVerb(_ verb: String) -> Bool {
-        let sinkVerbs: Set<String> = [
-            "log", "print", "output", "debug",  // LogAction
-            "write",                             // WriteAction
-            "send", "dispatch"                   // SendAction
-        ]
-        return sinkVerbs.contains(verb.lowercased())
+        return Self.sinkVerbs.contains(verb.lowercased())
     }
 
     /// Check if the current token starts sink syntax

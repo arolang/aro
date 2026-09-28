@@ -60,10 +60,28 @@ public final class AROLanguageServer: Sendable {
         /// rebuild is cheap, but doing it per keystroke would not be.
         private var declaredActions: UserActionRegistry?
 
+        /// The contract's per-route body limits, keyed by the directory of the
+        /// file being edited.
+        ///
+        /// Cached for the same reason `declaredActions` is: the inlay-hint
+        /// handler asks on every viewport scroll, and answering meant walking
+        /// up to six directories × three filenames of `fileExists` and then
+        /// parsing `openapi.yaml` from disk (GitLab #720). The contract's
+        /// modification date is kept with the answer, so an edit to the
+        /// contract is picked up without waiting for an invalidation signal.
+        private var bodyLimits: [String: BodyLimitsEntry] = [:]
+
+        private struct BodyLimitsEntry {
+            let contract: URL?
+            let modified: Date?
+            let limits: RouteBodyLimits
+        }
+
         func setRoots(_ urls: [URL]) {
             lock.lock(); defer { lock.unlock() }
             roots = urls
             declaredActions = nil
+            bodyLimits = [:]
         }
 
         var allRoots: [URL] {
@@ -71,10 +89,47 @@ public final class AROLanguageServer: Sendable {
             return roots
         }
 
-        /// Drop the cache; the next compile rescans.
+        /// Drop the caches; the next compile rescans.
+        ///
+        /// The body limits go too: a `didSave` or a watched-file change may
+        /// have created an `openapi.yaml` where the last walk found none, and
+        /// a cached "no contract here" answer has no modification date to
+        /// notice that with.
         func invalidateDeclaredActions() {
             lock.lock(); defer { lock.unlock() }
             declaredActions = nil
+            bodyLimits = [:]
+        }
+
+        /// The per-route body limits that apply to `file`.
+        func currentBodyLimits(near file: URL?) -> RouteBodyLimits {
+            let key = file?.deletingLastPathComponent().path ?? ""
+
+            lock.lock()
+            let cached = bodyLimits[key]
+            let currentRoots = roots
+            lock.unlock()
+
+            if let cached, let contract = cached.contract,
+               let modified = try? FileManager.default.attributesOfItem(
+                   atPath: contract.path)[.modificationDate] as? Date,
+               modified == cached.modified {
+                return cached.limits
+            }
+            // A cached answer of "no contract" stands until something
+            // invalidates it — there is no file to date-stamp.
+            if let cached, cached.contract == nil { return cached.limits }
+
+            let contract = RouteBodyLimits.contract(near: file, roots: currentRoots)
+            let limits = contract.flatMap { RouteBodyLimits.load(from: $0) } ?? .empty
+            let modified = contract.flatMap {
+                try? FileManager.default.attributesOfItem(atPath: $0.path)[.modificationDate] as? Date
+            }
+
+            lock.lock()
+            bodyLimits[key] = BodyLimitsEntry(contract: contract, modified: modified, limits: limits)
+            lock.unlock()
+            return limits
         }
 
         /// The workspace's declared actions, scanning on first use.
@@ -326,15 +381,15 @@ public final class AROLanguageServer: Sendable {
         }
 
         // Notifications: handled for side effects, never answered.
-        if let handler = syncNotificationHandlers[method] {
-            handler(params)
+        if let handler = Self.syncNotificationHandlers[method] {
+            handler(self, params)
             return nil
         }
 
         // Requests: produce a result that is wrapped in a success response
         // when the message carries an id.
-        if let handler = syncRequestHandlers[method] {
-            let result = handler(params)
+        if let handler = Self.syncRequestHandlers[method] {
+            let result = handler(self, params)
             if let id = id {
                 return createSuccessResponse(id: id, result: result)
             }
@@ -353,26 +408,33 @@ public final class AROLanguageServer: Sendable {
     /// Request methods routed on the synchronous transport. Each closure maps
     /// the raw `params` to a JSON-serialisable result (or `nil`). The result
     /// is wrapped in a JSON-RPC success response by ``handleMessageSync``.
-    private var syncRequestHandlers: [String: @Sendable (Any?) -> Any?] {
-        [
-            "initialize": { [self] in handleInitializeSync(params: $0) },
-            "textDocument/hover": { [self] in handleHoverSync(params: $0) },
-            "textDocument/definition": { [self] in handleDefinitionSync(params: $0) },
-            "textDocument/documentHighlight": { [self] in handleDocumentHighlightSync(params: $0) },
-            "textDocument/completion": { [self] in handleCompletionSync(params: $0) },
-            "textDocument/references": { [self] in handleReferencesSync(params: $0) },
-            "textDocument/documentSymbol": { [self] in handleDocumentSymbolSync(params: $0) },
-            "workspace/symbol": { [self] in handleWorkspaceSymbolSync(params: $0) },
-            "textDocument/formatting": { [self] in handleFormattingSync(params: $0) },
-            "textDocument/prepareRename": { [self] in handlePrepareRenameSync(params: $0) },
-            "textDocument/rename": { [self] in handleRenameSync(params: $0) },
-            "textDocument/foldingRange": { [self] in handleFoldingRangeSync(params: $0) },
-            "textDocument/semanticTokens/full": { [self] in handleSemanticTokensSync(params: $0) },
-            "textDocument/signatureHelp": { [self] in handleSignatureHelpSync(params: $0) },
-            "textDocument/codeAction": { [self] in handleCodeActionSync(params: $0) },
-            "textDocument/inlayHint": { [self] in handleInlayHintSync(params: $0) }
-        ]
-    }
+    /// Built once for the process, not once per message.
+    ///
+    /// These were computed properties, so every JSON-RPC message — every
+    /// keystroke's `didChange`, every viewport scroll's `inlayHint` — built a
+    /// 16-entry dictionary of freshly allocated closures just to look one
+    /// name up in it (GitLab #720). The table is a property of the protocol,
+    /// not of a server instance, so it is `static` and the instance arrives as
+    /// an argument; that also keeps the closures from capturing `self`, which
+    /// a stored `let` on a class would have made a retain cycle.
+    private static let syncRequestHandlers: [String: @Sendable (AROLanguageServer, Any?) -> Any?] = [
+        "initialize": { $0.handleInitializeSync(params: $1) },
+        "textDocument/hover": { $0.handleHoverSync(params: $1) },
+        "textDocument/definition": { $0.handleDefinitionSync(params: $1) },
+        "textDocument/documentHighlight": { $0.handleDocumentHighlightSync(params: $1) },
+        "textDocument/completion": { $0.handleCompletionSync(params: $1) },
+        "textDocument/references": { $0.handleReferencesSync(params: $1) },
+        "textDocument/documentSymbol": { $0.handleDocumentSymbolSync(params: $1) },
+        "workspace/symbol": { $0.handleWorkspaceSymbolSync(params: $1) },
+        "textDocument/formatting": { $0.handleFormattingSync(params: $1) },
+        "textDocument/prepareRename": { $0.handlePrepareRenameSync(params: $1) },
+        "textDocument/rename": { $0.handleRenameSync(params: $1) },
+        "textDocument/foldingRange": { $0.handleFoldingRangeSync(params: $1) },
+        "textDocument/semanticTokens/full": { $0.handleSemanticTokensSync(params: $1) },
+        "textDocument/signatureHelp": { $0.handleSignatureHelpSync(params: $1) },
+        "textDocument/codeAction": { $0.handleCodeActionSync(params: $1) },
+        "textDocument/inlayHint": { $0.handleInlayHintSync(params: $1) }
+    ]
 
     /// Notification methods routed on the synchronous transport. Handled for
     /// their side effects; no response is ever produced.
@@ -381,26 +443,24 @@ public final class AROLanguageServer: Sendable {
     /// on the previous synchronous path they matched the notification group but
     /// fell through the inner switch's `default`, so they were silently
     /// acknowledged without touching the document manager.
-    private var syncNotificationHandlers: [String: @Sendable (Any?) -> Void] {
-        [
-            "textDocument/didOpen": { [self] in handleDidOpenSync(params: $0) },
-            "textDocument/didChange": { [self] in handleDidChangeSync(params: $0) },
-            "textDocument/didClose": { [self] in handleDidCloseSync(params: $0) },
-            // Not a full no-op any more: a save may have changed an `Action`
-            // header on disk, so the workspace action cache is dropped
-            // (GitLab #589). Diagnostics on this path are still published by
-            // the next compile.
-            "textDocument/didSave": { [self] _ in workspaceState.invalidateDeclaredActions() },
-            // A file created or deleted outside the editor changes which
-            // actions the workspace declares, and no `didOpen`/`didSave`
-            // announces it (GitLab #589). Clients only send this when they
-            // watch files, so it is a bonus signal, not the primary one.
-            "workspace/didChangeWatchedFiles": { [self] _ in
-                workspaceState.invalidateDeclaredActions()
-            },
-            "$/cancelRequest": { _ in }
-        ]
-    }
+    private static let syncNotificationHandlers: [String: @Sendable (AROLanguageServer, Any?) -> Void] = [
+        "textDocument/didOpen": { $0.handleDidOpenSync(params: $1) },
+        "textDocument/didChange": { $0.handleDidChangeSync(params: $1) },
+        "textDocument/didClose": { $0.handleDidCloseSync(params: $1) },
+        // Not a full no-op any more: a save may have changed an `Action`
+        // header on disk, so the workspace action cache is dropped
+        // (GitLab #589). Diagnostics on this path are still published by
+        // the next compile.
+        "textDocument/didSave": { server, _ in server.workspaceState.invalidateDeclaredActions() },
+        // A file created or deleted outside the editor changes which
+        // actions the workspace declares, and no `didOpen`/`didSave`
+        // announces it (GitLab #589). Clients only send this when they
+        // watch files, so it is a bonus signal, not the primary one.
+        "workspace/didChangeWatchedFiles": { server, _ in
+            server.workspaceState.invalidateDeclaredActions()
+        },
+        "$/cancelRequest": { _, _ in }
+    ]
 
     // MARK: - Synchronous Handlers
 
@@ -969,15 +1029,15 @@ public final class AROLanguageServer: Sendable {
         }
 
         // Notifications: handled for side effects, never answered.
-        if let handler = asyncNotificationHandlers[method] {
-            await handler(params)
+        if let handler = Self.asyncNotificationHandlers[method] {
+            await handler(self, params)
             return nil
         }
 
         // Requests: produce a result that is wrapped in a success response
         // when the message carries an id.
-        if let handler = asyncRequestHandlers[method] {
-            let result = await handler(params)
+        if let handler = Self.asyncRequestHandlers[method] {
+            let result = await handler(self, params)
             if let id = id {
                 return createSuccessResponse(id: id, result: result)
             }
@@ -1000,40 +1060,36 @@ public final class AROLanguageServer: Sendable {
     /// `textDocument/documentHighlight` intentionally forwards to the
     /// synchronous handler (there is no async variant), matching the previous
     /// behaviour.
-    private var asyncRequestHandlers: [String: @Sendable (Any?) async -> Any?] {
-        [
-            "initialize": { [self] in await handleInitialize(params: $0) },
-            "textDocument/hover": { [self] in await handleHover(params: $0) },
-            "textDocument/definition": { [self] in await handleDefinition(params: $0) },
-            "textDocument/completion": { [self] in await handleCompletion(params: $0) },
-            "textDocument/references": { [self] in await handleReferences(params: $0) },
-            "textDocument/documentSymbol": { [self] in await handleDocumentSymbol(params: $0) },
-            "workspace/symbol": { [self] in await handleWorkspaceSymbol(params: $0) },
-            "textDocument/formatting": { [self] in await handleFormatting(params: $0) },
-            "textDocument/prepareRename": { [self] in await handlePrepareRename(params: $0) },
-            "textDocument/rename": { [self] in await handleRename(params: $0) },
-            "textDocument/foldingRange": { [self] in await handleFoldingRange(params: $0) },
-            "textDocument/semanticTokens/full": { [self] in await handleSemanticTokens(params: $0) },
-            "textDocument/signatureHelp": { [self] in await handleSignatureHelp(params: $0) },
-            "textDocument/codeAction": { [self] in await handleCodeAction(params: $0) },
-            "textDocument/inlayHint": { [self] in await handleInlayHint(params: $0) },
-            "textDocument/documentHighlight": { [self] in handleDocumentHighlightSync(params: $0) }
-        ]
-    }
+    private static let asyncRequestHandlers: [String: @Sendable (AROLanguageServer, Any?) async -> Any?] = [
+        "initialize": { await $0.handleInitialize(params: $1) },
+        "textDocument/hover": { await $0.handleHover(params: $1) },
+        "textDocument/definition": { await $0.handleDefinition(params: $1) },
+        "textDocument/completion": { await $0.handleCompletion(params: $1) },
+        "textDocument/references": { await $0.handleReferences(params: $1) },
+        "textDocument/documentSymbol": { await $0.handleDocumentSymbol(params: $1) },
+        "workspace/symbol": { await $0.handleWorkspaceSymbol(params: $1) },
+        "textDocument/formatting": { await $0.handleFormatting(params: $1) },
+        "textDocument/prepareRename": { await $0.handlePrepareRename(params: $1) },
+        "textDocument/rename": { await $0.handleRename(params: $1) },
+        "textDocument/foldingRange": { await $0.handleFoldingRange(params: $1) },
+        "textDocument/semanticTokens/full": { await $0.handleSemanticTokens(params: $1) },
+        "textDocument/signatureHelp": { await $0.handleSignatureHelp(params: $1) },
+        "textDocument/codeAction": { await $0.handleCodeAction(params: $1) },
+        "textDocument/inlayHint": { await $0.handleInlayHint(params: $1) },
+        "textDocument/documentHighlight": { $0.handleDocumentHighlightSync(params: $1) }
+    ]
 
     /// Notification methods routed on the async transport. Handled for their
     /// side effects; no response is ever produced.
-    private var asyncNotificationHandlers: [String: @Sendable (Any?) async -> Void] {
-        [
-            "textDocument/didOpen": { [self] in await handleDidOpen(params: $0) },
-            "textDocument/didChange": { [self] in await handleDidChange(params: $0) },
-            "textDocument/didClose": { [self] in await handleDidClose(params: $0) },
-            "textDocument/didSave": { [self] in await handleDidSave(params: $0) },
-            "workspace/didChangeWatchedFiles": { [self] _ in
-                workspaceState.invalidateDeclaredActions()
-            }
-        ]
-    }
+    private static let asyncNotificationHandlers: [String: @Sendable (AROLanguageServer, Any?) async -> Void] = [
+        "textDocument/didOpen": { await $0.handleDidOpen(params: $1) },
+        "textDocument/didChange": { await $0.handleDidChange(params: $1) },
+        "textDocument/didClose": { await $0.handleDidClose(params: $1) },
+        "textDocument/didSave": { await $0.handleDidSave(params: $1) },
+        "workspace/didChangeWatchedFiles": { server, _ in
+            server.workspaceState.invalidateDeclaredActions()
+        }
+    ]
 
     // MARK: - Initialize
 
@@ -1457,7 +1513,7 @@ public final class AROLanguageServer: Sendable {
     /// (GitLab #477). Read from the contract nearest the file being edited,
     /// falling back to the workspace roots.
     private func bodyLimits(for uri: String) -> RouteBodyLimits {
-        RouteBodyLimits.load(near: uriToURL(uri), roots: workspaceState.allRoots)
+        workspaceState.currentBodyLimits(near: uriToURL(uri))
     }
 
     // MARK: - Diagnostics Publishing

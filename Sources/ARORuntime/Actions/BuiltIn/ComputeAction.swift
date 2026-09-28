@@ -966,31 +966,16 @@ public struct ComputeAction: SynchronousAction {
             return String(str.filter { seen.insert($0).inserted })
         }
         guard let items = input as? [any Sendable] else { return input }
-        var seen = Set<String>()
+        var seen = Set<AROValueKey>()
         var out: [any Sendable] = []
         for item in items {
-            // Key on the rendered form: the element type is `any
-            // Sendable`, which is not Hashable, and every value the
-            // runtime carries renders stably.
-            let key = identityKey(item)
-            if seen.insert(key).inserted { out.append(item) }
+            // The element type is `any Sendable`, which is not Hashable, so
+            // it is reduced to one that is. This used to serialise each
+            // element to JSON with `.sortedKeys` — 100 000 JSON documents for
+            // 100 000 records (GitLab #712).
+            if seen.insert(AROValueKey(item)).inserted { out.append(item) }
         }
         return out
-    }
-
-    /// Stable string key for an arbitrary runtime value.
-    private static func identityKey(_ value: any Sendable) -> String {
-        if let str = value as? String { return "s:\(str)" }
-        if let int = value as? Int { return "n:\(Double(int))" }
-        if let dbl = value as? Double { return "n:\(dbl)" }
-        if let bool = value as? Bool { return "b:\(bool)" }
-        if JSONSerialization.isValidJSONObject(value),
-           let data = try? JSONSerialization.data(withJSONObject: value,
-                                                  options: [.sortedKeys]),
-           let json = String(data: data, encoding: .utf8) {
-            return "j:\(json)"
-        }
-        return "d:\(String(describing: value))"
     }
 
     /// The lines of a text, as a list.
@@ -1480,7 +1465,7 @@ public struct ComputeAction: SynchronousAction {
 
     /// Multiset intersection: elements in both, preserving duplicates up to min count
     private func multisetIntersect(_ a: [any Sendable], _ b: [any Sendable]) -> [any Sendable] {
-        var bCounts: [String: Int] = [:]
+        var bCounts: [AROValueKey: Int] = [:]
         for item in b {
             let key = hashKey(for: item)
             bCounts[key, default: 0] += 1
@@ -1499,7 +1484,7 @@ public struct ComputeAction: SynchronousAction {
 
     /// Multiset difference: elements in A minus occurrences in B
     private func multisetDifference(_ a: [any Sendable], _ b: [any Sendable]) -> [any Sendable] {
-        var bCounts: [String: Int] = [:]
+        var bCounts: [AROValueKey: Int] = [:]
         for item in b {
             let key = hashKey(for: item)
             bCounts[key, default: 0] += 1
@@ -1596,20 +1581,17 @@ public struct ComputeAction: SynchronousAction {
         return counts
     }
 
-    /// Create a hash key for any Sendable value (for multiset counting)
-    private func hashKey(for value: any Sendable) -> String {
-        if let dict = value as? [String: any Sendable] {
-            // Sort keys for consistent hashing
-            let sorted = dict.keys.sorted().map { key -> String in
-                let v = dict[key]!
-                return "\(key):\(hashKey(for: v))"
-            }
-            return "{\(sorted.joined(separator: ","))}"
-        }
-        if let arr = value as? [any Sendable] {
-            return "[\(arr.map { hashKey(for: $0) }.joined(separator: ","))]"
-        }
-        return String(describing: value)
+    /// A hashable stand-in for a value, for set membership and multiset
+    /// counting.
+    ///
+    /// This used to build a recursive `String(describing:)` per element, so
+    /// `intersect` formatted both operands in full before comparing anything
+    /// (GitLab #712). It also made `1`, `"1"` and — through
+    /// `String(describing:)` — `true` and `"true"` the same element;
+    /// `AROValueKey` follows the language's equality instead, so a string is
+    /// never a number and a Bool is never either.
+    private func hashKey(for value: any Sendable) -> AROValueKey {
+        AROValueKey(value)
     }
 
     /// Strict equality check for two values
@@ -2036,7 +2018,7 @@ public struct CreateAction: ActionImplementation {
         // Get end date from _to_ (the 'to' clause)
         // Debug: Log _to_ resolution for ARO-0041 diagnostics (enable with ARO_DEBUG=1)
         let endValue = context.resolveAny("_to_")
-        if endValue == nil && ProcessInfo.processInfo.environment["ARO_DEBUG"] != nil {
+        if endValue == nil && RuntimeEnvironment.isDebug {
             FileHandle.standardError.write(Data("[CreateAction] DEBUG: _to_ is nil - date range 'to' clause not bound\n".utf8))
         }
         guard let endValue, let endDate = getARODate(from: endValue) else {

@@ -139,14 +139,27 @@ public final class LLVMCodeGenContext {
     /// - Parameter value: The string value
     /// - Returns: A global variable containing the null-terminated string
     ///
-    /// Dedup keys on a normalised form so two semantically
-    /// equivalent JSON literals share one IR global (#345). The
-    /// emitted bytes match the first variant seen; subsequent
-    /// callers receive a pointer to that global. The runtime
-    /// parses these strings as JSON, so equivalent-but-differently-
-    /// formatted variants are interchangeable at the byte level.
+    /// Dedup keys on the raw string: identical bytes share one IR
+    /// global, and nothing else does.
+    ///
+    /// This used to canonicalise anything starting with `{` or `[`
+    /// through `JSONSerialization` with `.sortedKeys`, so that two
+    /// literals differing only in formatting collapsed (GitLab #345).
+    /// It cost a parse and a re-serialisation of every such constant
+    /// during IR generation — including the embedded OpenAPI spec and
+    /// the templates manifest, which are routinely megabytes — and it
+    /// was not sound (GitLab #715). The emitted bytes are the *first*
+    /// variant seen, so two objects whose keys are written in a
+    /// different order shared a global and the second one's literal
+    /// silently became the first one's. The runtime does not parse all
+    /// of these as JSON; a serialised `where` value, for one, is
+    /// compared byte-wise.
+    ///
+    /// Two byte-identical literals still collapse, which is what the
+    /// dedupe is actually for. Canonicalisation, if it is wanted,
+    /// belongs in `ExpressionSerializer`, which owns the byte form.
     public func stringConstant(_ value: String) -> GlobalVariable {
-        let key = Self.normaliseStringKey(value)
+        let key = value
         if let existing = stringConstants[key] {
             return existing
         }
@@ -163,26 +176,6 @@ public final class LLVMCodeGenContext {
 
         stringConstants[key] = global
         return global
-    }
-
-    /// Canonicalise JSON-shaped values so semantically identical
-    /// literals collapse to one IR global. Non-JSON strings key on
-    /// their raw form — same dedupe behaviour as before this
-    /// change, only JSON shapes pick up the extra coverage (#345).
-    private static func normaliseStringKey(_ value: String) -> String {
-        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let first = trimmed.first, first == "{" || first == "[",
-              let data = trimmed.data(using: .utf8),
-              let obj = try? JSONSerialization.jsonObject(with: data),
-              let canonical = try? JSONSerialization.data(
-                  withJSONObject: obj,
-                  options: [.sortedKeys, .withoutEscapingSlashes]
-              ),
-              let s = String(data: canonical, encoding: .utf8)
-        else {
-            return value
-        }
-        return s
     }
 
     // MARK: - Unique Names

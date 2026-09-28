@@ -71,8 +71,28 @@ public final class AROFuture: @unchecked Sendable {
     /// The binding name this future will resolve. Used for diagnostics.
     public let bindingName: String
 
+    /// Where the deferred statement was written. Used for diagnostics.
+    ///
+    /// Held unformatted. Every deferred statement carries one and almost none
+    /// of them is ever printed — the slow-force warning is the only reader —
+    /// so building `"\(line):\(column)"` eagerly was a string allocation per
+    /// statement for a message nobody sees (GitLab #710).
+    enum SourceReference: Sendable {
+        case none
+        case text(String)
+        case lineColumn(line: Int, column: Int)
+    }
+
+    let source: SourceReference
+
     /// Optional source location ("file.aro:42:5"). Used for diagnostics.
-    public let sourceLocation: String?
+    public var sourceLocation: String? {
+        switch source {
+        case .none: return nil
+        case .text(let text): return text
+        case .lineColumn(let line, let column): return "\(line):\(column)"
+        }
+    }
 
     /// Underlying task. Cancelled in deinit when the last consumer goes away.
     /// Nil for pre-resolved futures (literals, SynchronousAction fast-path) —
@@ -92,7 +112,32 @@ public final class AROFuture: @unchecked Sendable {
         _ work: @Sendable @escaping () async throws -> any Sendable
     ) {
         self.bindingName = bindingName
-        self.sourceLocation = sourceLocation
+        self.source = sourceLocation.map { .text($0) } ?? .none
+        let storage = ResultStorage()
+        self.storage = storage
+        self.task = Task(executorPreference: ActionTaskExecutor.shared, priority: priority) {
+            do {
+                let value = try await work()
+                storage.complete(.success(value))
+                return value
+            } catch {
+                storage.complete(.failure(error))
+                throw error
+            }
+        }
+    }
+
+    /// The same, for a caller that has the position but not a rendering of it.
+    /// The string is built only if a diagnostic asks for it.
+    init(
+        bindingName: String,
+        sourceLine: Int,
+        sourceColumn: Int,
+        priority: TaskPriority? = nil,
+        _ work: @Sendable @escaping () async throws -> any Sendable
+    ) {
+        self.bindingName = bindingName
+        self.source = .lineColumn(line: sourceLine, column: sourceColumn)
         let storage = ResultStorage()
         self.storage = storage
         self.task = Task(executorPreference: ActionTaskExecutor.shared, priority: priority) {
@@ -111,7 +156,7 @@ public final class AROFuture: @unchecked Sendable {
     /// for the SynchronousAction fast-path which doesn't need a Task.
     public init(resolved value: any Sendable, bindingName: String = "_literal_") {
         self.bindingName = bindingName
-        self.sourceLocation = nil
+        self.source = .none
         let storage = ResultStorage()
         storage.complete(.success(value))
         self.storage = storage
@@ -209,14 +254,16 @@ private final class ResultStorage: @unchecked Sendable {
 
     /// Phase 6: waits with a budget; if the wait exceeds the budget,
     /// emits a single warning to stderr and continues waiting.
+    /// `sourceLocation` is an autoclosure: it is rendered only when the wait
+    /// actually overruns, which is the rare case (GitLab #710).
     func waitWithDiagnostics(
         budget: Double,
         bindingName: String,
-        sourceLocation: String?
+        sourceLocation: @autoclosure () -> String?
     ) throws -> any Sendable {
         let timeout = DispatchTime.now() + budget
         if group.wait(timeout: timeout) == .timedOut {
-            let location = sourceLocation.map { " at \($0)" } ?? ""
+            let location = sourceLocation().map { " at \($0)" } ?? ""
             let msg = "[AROFuture] Slow force: '\(bindingName)'\(location) — waited >\(String(format: "%.2f", budget))s, still pending\n"
             ForceDiagnostics.warningHandler(msg)
             // Continue waiting indefinitely — the warning is informational,

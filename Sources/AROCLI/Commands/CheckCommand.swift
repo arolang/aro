@@ -136,6 +136,30 @@ struct SourceCheckSubcommand: ParsableCommand {
         var totalErrors = 0
         var totalWarnings = 0
 
+        // One read and one parse of each file, shared by every pass below
+        // (GitLab #713).
+        //
+        // The three cross-file pre-passes — handled events, declared actions,
+        // repository scopes — each used to read and parse the whole directory
+        // for themselves, and they run *before* the compile because their
+        // results are inputs to it. They can share a parse; they cannot share
+        // the compile.
+        //
+        // Tolerant, deliberately: a file that does not parse contributes
+        // nothing to the application-wide picture, and its own errors are
+        // reported when it is compiled. That is the behaviour each pass had
+        // on its own.
+        var sources: [URL: String] = [:]
+        var parsed: [URL: Program] = [:]
+        for file in sourceFiles {
+            guard let source = try? String(contentsOf: file, encoding: .utf8) else { continue }
+            sources[file] = source
+            guard let tokens = try? Lexer.tokenize(source),
+                  let program = try? Parser(tokens: tokens).parse()
+            else { continue }
+            parsed[file] = program
+        }
+
         // Which events the application handles, before checking any single
         // file. An ARO application has no imports — every feature set is
         // visible to every other — but this command compiles a file at a
@@ -148,7 +172,7 @@ struct SourceCheckSubcommand: ParsableCommand {
         // and links.aro — and `aro check` called all three unhandled. Acting
         // on that advice appends a duplicate handler and the real one stops
         // being the only one.
-        let handledEvents = handledEventTypes(in: sourceFiles)
+        let handledEvents = handledEventTypes(in: parsed)
 
         // Same seam, same reason, for `Application.<Name>` (GitLab #587): a
         // user-defined action is visible application-wide, so a call answered
@@ -159,15 +183,20 @@ struct SourceCheckSubcommand: ParsableCommand {
         // an application this invocation was never pointed at, so the
         // diagnostic must not speak for the application.
         let declaredActions: UserActionRegistry? = isDirectory
-            ? UserActionRegistry.declared(inFiles: sourceFiles)
+            ? UserActionRegistry.declared(inPrograms: sourceFiles.compactMap { parsed[$0] })
             : nil
 
         // ARO-0094 §7.2: same seam again. Empty for a single named file, for
         // the reason above — that file may be one of many in an application
         // this invocation was never pointed at, and a repository that looks
         // undeclared here may be declared next door.
-        let scopes = isDirectory ? repositoryScopes(in: sourceFiles) : [:]
+        let scopes = isDirectory ? repositoryScopes(in: sourceFiles.compactMap { parsed[$0] }) : [:]
 
+        // The one compile per file. Everything below reads its result rather
+        // than compiling again: the four report passes used to do their own
+        // `Compiler().compile(source)` over every file, so a directory was
+        // read five times and analysed five times (GitLab #713).
+        var compiled: [URL: CompilationResult] = [:]
         // GitLab #844: whether a bare verb might name a plugin action.
         // A plugin's action names come from `aro_plugin_info()` at load
         // time — `plugin.yaml` does not list them — so an application that
@@ -177,14 +206,26 @@ struct SourceCheckSubcommand: ParsableCommand {
         let pluginActionsPossible = Self.hasPluginDirectory(at: root)
 
         for sourceFile in sourceFiles {
-            let (errors, warnings) = try checkFile(
-                sourceFile,
-                handledEvents: handledEvents,
-                declaredActions: declaredActions,
-                repositoryScopes: scopes,
+            guard let source = sources[sourceFile] else { continue }
+            compiled[sourceFile] = Compiler().compile(
+                source,
+                externallyHandledEvents: handledEvents,
+                declaredUserActions: declaredActions,
+                declaredRepositoryScopes: scopes,
                 pluginActionsPossible: pluginActionsPossible,
                 checksWholeApplication: isDirectory
             )
+        }
+
+        for sourceFile in sourceFiles {
+            guard let result = compiled[sourceFile] else {
+                // Unreadable. `checkFile` reported that as a thrown error
+                // before, and still does — it is the one pass that must not
+                // pass over a file in silence.
+                _ = try checkFile(sourceFile, result: nil)
+                continue
+            }
+            let (errors, warnings) = try checkFile(sourceFile, result: result)
             totalErrors += errors
             totalWarnings += warnings
         }
@@ -193,7 +234,7 @@ struct SourceCheckSubcommand: ParsableCommand {
         // Directory-scoped: the state enums live in `openapi.yaml`, which a
         // single-file check has no application root to find.
         if isDirectory {
-            totalErrors += reportUndeclaredTransitions(directory: resolvedPath, sourceFiles: sourceFiles)
+            totalErrors += reportUndeclaredTransitions(directory: resolvedPath, sourceFiles: sourceFiles, compiled: compiled)
         }
 
         // Exactly one Application-Start (GitLab #581).
@@ -201,12 +242,12 @@ struct SourceCheckSubcommand: ParsableCommand {
         // application this invocation was never pointed at, so it must not
         // speak for the application — the same reasoning as `declaredActions`.
         if isDirectory {
-            totalErrors += reportEntryPoint(directory: resolvedPath, sourceFiles: sourceFiles)
+            totalErrors += reportEntryPoint(directory: resolvedPath, sourceFiles: sourceFiles, compiled: compiled)
         }
 
         // Where each route's request body goes (GitLab #477).
         if isDirectory {
-            totalWarnings += reportBodyPolicies(directory: resolvedPath, sourceFiles: sourceFiles)
+            totalWarnings += reportBodyPolicies(directory: resolvedPath, sourceFiles: sourceFiles, compiled: compiled)
         }
 
         // Summary
@@ -239,15 +280,15 @@ struct SourceCheckSubcommand: ParsableCommand {
     /// `openapi.yaml`, no HTTP server), and a project that never wrote one
     /// must keep checking clean.
     /// - Returns: the number of errors emitted.
-    private func reportUndeclaredTransitions(directory: URL, sourceFiles: [URL]) -> Int {
+    private func reportUndeclaredTransitions(directory: URL, sourceFiles: [URL],
+                                             compiled: [URL: CompilationResult]) -> Int {
         guard let contract = OpenAPILoader.findContract(in: directory),
               let spec = try? OpenAPILoader.load(from: contract)
         else { return 0 }
 
         var errorCount = 0
         for file in sourceFiles {
-            guard let source = try? String(contentsOfFile: file.path, encoding: .utf8) else { continue }
-            let result = Compiler().compile(source)
+            guard let result = compiled[file] else { continue }
             let diagnostics = TransitionContractValidator.validate(
                 result.program.featureSets,
                 against: spec,
@@ -300,10 +341,18 @@ struct SourceCheckSubcommand: ParsableCommand {
     /// `--recursive` needs the same verdict to decide whether a subdirectory
     /// is one application or a container of them, so the classification is
     /// shared rather than duplicated (GitLab #824).
-    private func classifyEntryPoints(directory: URL, sourceFiles: [URL]) -> EntryPointCheck.Result {
+    /// `compiled` is the application's one compile per file (GitLab #713).
+    /// `applicationDirectories(under:)` asks the same question about
+    /// directories it has not compiled — it is deciding which of them *are*
+    /// applications — so a file the map does not hold is compiled here.
+    private func classifyEntryPoints(directory: URL, sourceFiles: [URL],
+                                     compiled: [URL: CompilationResult] = [:]) -> EntryPointCheck.Result {
         var declarations: [EntryPointCheck.Declaration] = []
         for file in sourceFiles {
-            guard let source = try? String(contentsOfFile: file.path, encoding: .utf8) else { continue }
+            let cached = compiled[file]
+            guard let result = cached ?? (try? String(contentsOfFile: file.path, encoding: .utf8))
+                    .map({ Compiler().compile($0) })
+            else { continue }
             // The group is the first path component under the directory being
             // checked, so several entry points in one subdirectory still read
             // as one application.
@@ -318,7 +367,7 @@ struct SourceCheckSubcommand: ParsableCommand {
             // read as a directory of applications (GitLab #824).
             let fileDirectory = file.deletingLastPathComponent()
             let group = Self.group(of: fileDirectory, under: directory)
-            for featureSet in Compiler().compile(source).program.featureSets {
+            for featureSet in result.program.featureSets {
                 declarations.append(EntryPointCheck.Declaration(
                     name: featureSet.name,
                     activity: featureSet.businessActivity,
@@ -329,8 +378,9 @@ struct SourceCheckSubcommand: ParsableCommand {
         return EntryPointCheck.classify(declarations)
     }
 
-    private func reportEntryPoint(directory: URL, sourceFiles: [URL]) -> Int {
-        switch classifyEntryPoints(directory: directory, sourceFiles: sourceFiles) {
+    private func reportEntryPoint(directory: URL, sourceFiles: [URL],
+                                  compiled: [URL: CompilationResult]) -> Int {
+        switch classifyEntryPoints(directory: directory, sourceFiles: sourceFiles, compiled: compiled) {
         case .ok:
             return 0
 
@@ -453,15 +503,15 @@ struct SourceCheckSubcommand: ParsableCommand {
         return found
     }
 
-    private func reportBodyPolicies(directory: URL, sourceFiles: [URL]) -> Int {
+    private func reportBodyPolicies(directory: URL, sourceFiles: [URL],
+                                    compiled: [URL: CompilationResult]) -> Int {
         guard let contract = OpenAPILoader.findContract(in: directory) else { return 0 }
 
         guard let spec = try? OpenAPILoader.load(from: contract) else { return 0 }
 
         var featureSets: [FeatureSet] = []
         for file in sourceFiles {
-            guard let source = try? String(contentsOfFile: file.path, encoding: .utf8) else { continue }
-            let result = Compiler().compile(source)
+            guard let result = compiled[file] else { continue }
             featureSets.append(contentsOf: result.program.featureSets)
         }
         guard !featureSets.isEmpty else { return 0 }
@@ -739,13 +789,9 @@ struct SourceCheckSubcommand: ParsableCommand {
     /// Application-Start and the statements it governs sit in the handler
     /// files, so checking one file at a time would see uses with no
     /// declarations and declarations with no uses.
-    private func repositoryScopes(in files: [URL]) -> [String: String] {
+    private func repositoryScopes(in programs: [Program]) -> [String: String] {
         var declarations: [RepositoryScopeAnalyzer.Declaration] = []
-        for file in files {
-            guard let source = try? String(contentsOf: file, encoding: .utf8),
-                  let tokens = try? Lexer.tokenize(source),
-                  let program = try? Parser(tokens: tokens).parse()
-            else { continue }
+        for program in programs {
             declarations.append(contentsOf: RepositoryScopeAnalyzer.declarations(in: program))
         }
         // Conflicts are reported when the declaring file is checked, so the
@@ -758,36 +804,28 @@ struct SourceCheckSubcommand: ParsableCommand {
     /// Parse-only: the business activity is on the feature-set header, so no
     /// semantic analysis is needed, and a file that does not parse simply
     /// contributes nothing — its own errors are reported when it is checked.
-    private func handledEventTypes(in files: [URL]) -> Set<String> {
+    private func handledEventTypes(in programs: [URL: Program]) -> Set<String> {
         var handled: Set<String> = []
-        for file in files {
-            guard let source = try? String(contentsOf: file, encoding: .utf8),
-                  let tokens = try? Lexer.tokenize(source),
-                  let program = try? Parser(tokens: tokens).parse()
-            else { continue }
+        for program in programs.values {
             handled.formUnion(EventAnalyzer.handledEventTypes(in: program))
         }
         return handled
     }
 
+    /// Print one file's diagnostics.
+    ///
+    /// The compile happens in `checkApplication`, once, because four other
+    /// passes read the same result (GitLab #713). `result: nil` means the
+    /// file could not be read — this is the pass that says so, by rethrowing
+    /// the read error the way it always did.
     private func checkFile(
         _ file: URL,
-        handledEvents: Set<String> = [],
-        declaredActions: UserActionRegistry? = nil,
-        repositoryScopes: [String: String] = [:],
-        pluginActionsPossible: Bool = true,
-        checksWholeApplication: Bool = true
+        result: CompilationResult?
     ) throws -> (errors: Int, warnings: Int) {
-        let source = try String(contentsOf: file, encoding: .utf8)
-        let compiler = Compiler()
-        let result = compiler.compile(
-            source,
-            externallyHandledEvents: handledEvents,
-            declaredUserActions: declaredActions,
-            declaredRepositoryScopes: repositoryScopes,
-            pluginActionsPossible: pluginActionsPossible,
-            checksWholeApplication: checksWholeApplication
-        )
+        guard let result else {
+            _ = try String(contentsOf: file, encoding: .utf8)
+            return (0, 0)
+        }
 
         let errors = result.diagnostics.filter { $0.severity == .error }
         let warningDiags = result.diagnostics.filter { $0.severity == .warning }

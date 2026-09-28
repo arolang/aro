@@ -143,6 +143,23 @@ public struct UserActionRegistry: Sendable, Equatable {
         return UserActionRegistry(actions: actions)
     }
 
+    /// Actions declared anywhere in an application, given its already-parsed
+    /// programs.
+    ///
+    /// The overloads above lex and parse for themselves, which is right for a
+    /// caller that has only sources. A caller that has already parsed the
+    /// application — `aro check` does, for the event and repository-scope
+    /// passes — parses it a second time by going through them (GitLab #713).
+    public static func declared(inPrograms programs: [Program]) -> UserActionRegistry {
+        var actions: [String: UserActionInfo] = [:]
+        for program in programs {
+            for (name, info) in declared(in: program).actions where actions[name] == nil {
+                actions[name] = info
+            }
+        }
+        return UserActionRegistry(actions: actions)
+    }
+
     /// Actions declared anywhere in an application, given its source files.
     /// A file that cannot be read contributes nothing, for the same reason a
     /// file that cannot be parsed does.
