@@ -1,0 +1,715 @@
+# Control flow and actions.
+#
+# Sources, in the order CLAUDE.md gives them: ARO-0002 (control flow),
+# ARO-0004 (actions), ARO-0006 (error philosophy), ARO-0007 (events),
+# ARO-0022 (state guards), ARO-0081 (user-defined actions),
+# ARO-0088 (concurrency), then Sources/ and the live `aro actions` table.
+#
+# Every ARO-looking headline here parses under `aro check`.
+
+facts:
+  # ===== Guards and conditions =====
+
+  - category: Control
+    headline: 'Return an <OK: status> for the <order> when <user: age> >= 18.'
+    explanation: >-
+      A `when` guard decides whether the statement runs at all. A false
+      condition skips that one statement and execution continues at the next
+      line — there is no implicit else branch, so two outcomes are written as
+      two guarded statements.
+
+  - category: Control
+    headline: 'Send the <notice> to the <user: email> when <user: email> exists.'
+    explanation: >-
+      `exists`, `is defined`, `is null` and `is empty` are four different
+      questions and the condition grammar keeps them apart. A missing field and
+      a field holding an empty string are not the same case, so the wrong check
+      guards the wrong thing.
+
+  - category: Control
+    headline: 'Log "sale" to the <console> when <order-date> in <sale-period>.'
+    explanation: >-
+      `in` dispatches on its right operand: a date-range tests interval
+      membership inclusive of both endpoints, a list tests elements, a string
+      tests substrings, an object tests keys. `<xs> contains <x>` asks the same
+      question from the other side.
+
+  - category: Control
+    headline: 'Log "found" to the <console> when <roles> contains "admin".'
+    explanation: >-
+      `contains` picks its comparison from the runtime type of the left
+      operand — list membership, substring, or object key. Every other
+      left-hand type evaluates to false rather than failing, so a guard over a
+      number silently never fires.
+
+  - category: Control
+    headline: 'Log "late" to the <console> when <deadline> before <now>.'
+    explanation: >-
+      `before` and `after` compare two instants — dates, or the ISO-8601
+      strings dates arrive as over HTTP and in JSON — and sit at the same
+      precedence as `<` and `>`. Comparing something that is neither a date nor
+      a number raises instead of answering false.
+
+  - category: Control
+    headline: 'Log "active" to the <console> when not <account: suspended>.'
+    explanation: >-
+      `not` negates one condition, `and` and `or` combine two, and parentheses
+      group where the default precedence is not what was meant. However long the
+      expression grows it still guards a single statement — the guard is a
+      suffix on one line, not a block.
+
+  - category: Control
+    headline: 'Log "hit" to the <console> when <name> matches "^a.c".'
+    explanation: >-
+      `matches` is a regular-expression test, so `^a.c` accepts `axc` as
+      readily as `abc`. The dot is a metacharacter whether or not you meant it
+      that way, which is why a literal prefix or suffix is better said with the
+      affix operators than with an anchored pattern.
+
+  - category: Control
+    headline: 'when <booking-date> before <deadline> { Store the <booking> into the <booking-repository>. }'
+    explanation: >-
+      `when` also takes a block, which is the suffix guard said once instead of
+      once per statement. The block groups statements; it does not open a
+      scope, so what it binds stays visible afterwards, and a `Return` inside it
+      ends the feature set.
+
+  - category: Control
+    headline: 'Compute the <n: length> from <text> |> Log <n> to the <console>.'
+    explanation: >-
+      `|>` marks a run of statements as one data flow. Each stage is a complete
+      statement naming its own result and object: the operator records intent
+      and groups the statements, it does not thread a value from one stage into
+      the next.
+
+  - category: Control
+    headline: 'Require the <API_TOKEN> from the <environment>.'
+    explanation: >-
+      `Require` declares an external dependency rather than performing one, and
+      the source decides who supplies it. With `environment` it binds the
+      variable of that name; reading it when the variable is unset fails the
+      statement in the usual way.
+
+  - category: Control
+    headline: 'Require the <console> from the <framework>.'
+    explanation: >-
+      With `framework` as the source, `Require` is a no-op that documents what
+      the feature set expects the runtime to provide. Any other source names a
+      feature set, and `aro check` warns when nothing publishes that symbol.
+
+  - category: Control
+    headline: 'Create the <config> with { currency: "EUR" }. Publish as <user-config> <config>.'
+    explanation: >-
+      `Publish as` exposes a binding to feature sets that share its business
+      activity — the file it lives in is irrelevant, the activity string is what
+      matters. Publications are evicted when the publishing execution returns;
+      those from `Application-Start` live for the process.
+
+  - category: Control
+    headline: 'Extract the <mode> from the <parameter: mode> default "fast".'
+    explanation: >-
+      `default` supplies a value only when the source is unset. An empty string
+      somebody actually wrote is a value and wins, the same rule the `default`
+      operator follows for `false` and `0`. Without the clause an unset variable
+      still binds an empty string.
+
+  - category: Control
+    headline: 'Filter the <excluded> from <items> where <value> not in <exclude-list>.'
+    explanation: >-
+      `where` filters a collection, `when` guards a statement. Inside a filter
+      the names are fields of each element rather than outer bindings, which is
+      why the predicate reads like a sentence about one item.
+
+  - category: Control
+    headline: 'Retrieve the <user> from the <user-repository> where <id> is <id>.'
+    explanation: >-
+      A `where` on a retrieval selects rows. Matching exactly one row binds that
+      record directly rather than a one-element list; matching several binds the
+      list. The shape follows the data, so read the result before assuming which
+      you have.
+
+  - category: Control
+    headline: 'Read the <content> from "./big.csv".'
+    explanation: >-
+      A statement's action starts where it is written, and the program waits for
+      it at the first read of its result. A later statement that needs nothing
+      from this one runs alongside it, so a feature set costs its critical path
+      rather than the sum of its statements.
+
+  - category: Control
+    headline: 'ARO_NO_DEFER=1 aro run ./MyApp'
+    explanation: >-
+      Deferral is off with this set: every action runs at its own statement. It
+      is the fastest way to find out whether a suspected bug is about ordering —
+      if the behaviour changes, statement overlap is involved.
+
+  # ===== Loops =====
+
+  - category: Loops
+    headline: 'for each <item> in <items> { Store the <reservation> into the <reservation-repository>. }'
+    explanation: >-
+      Iteration is bounded and deterministic: one element at a time, in order.
+      The loop variable belongs to the body and is immutable, so nothing one
+      iteration binds can be read by the next or after the loop.
+
+  - category: Loops
+    headline: 'for each <user> in <users> where <active> is true { Send the <mail> to the <user: email>. }'
+    explanation: >-
+      A `where` on the loop filters as it goes, evaluated per element in that
+      element's own scope. It is the predicate a `Filter` statement takes,
+      without materialising the filtered collection under a second name first.
+
+  - category: Loops
+    headline: 'for each <row> at <index> in <rows> { Log <index> to the <console>. }'
+    explanation: >-
+      `at` binds the position alongside the element. Both names live in the
+      iteration's scope, so the index is available to the body and gone
+      afterwards, like the element itself. Nothing accumulates across
+      iterations, because there is no outer name a body could write to.
+
+  - category: Loops
+    headline: 'for each <n> in [1, 2, 3] { Log <n> to the <console>. }'
+    explanation: >-
+      The collection slot takes a noun or any expression — a list literal, a
+      field access, a parenthesised expression. It is evaluated once, before the
+      first iteration, never per element. There is no range literal: count with
+      `for <n> from 1 to 10` instead.
+
+  - category: Loops
+    headline: 'for each <line> in <order>.lines { Log <line> to the <console>. }'
+    explanation: >-
+      Field access is the expression form of the collection slot. The noun form
+      is not sugar for it: only a name can carry specifiers, and only a name
+      reaches the lazy-stream path that iterates in constant memory.
+
+  - category: Loops
+    headline: 'parallel for each <url> in <urls> { Request the <page> from <url>. }'
+    explanation: >-
+      The one construct that asks for concurrency explicitly. Completion order
+      is non-deterministic, statements inside one iteration stay sequential, and
+      bindings are immutable — so accumulate through a repository rather than
+      into an outer name.
+
+  - category: Loops
+    headline: 'parallel for each <url> in <urls> with <concurrency: 8> { Request the <page> from <url>. }'
+    explanation: >-
+      Left unbounded the default is min(item count, max(4, cores × 4)) rather
+      than one task per item. When the cost of an iteration is dominated by an
+      external service, set the bound to that service's tolerance instead of the
+      machine's.
+
+  - category: Loops
+    headline: 'for <n> from 1 to 10 { Log <n> to the <console>. }'
+    explanation: >-
+      The range loop counts and its upper bound is exclusive: this binds 1
+      through 9. An inverted range is reported as an error naming both bounds,
+      because a range that counts down is a mistake in the program every time.
+
+  - category: Loops
+    headline: 'while <done> == false { Break. }'
+    explanation: >-
+      `while` repeats until its condition goes false. Bindings are immutable, so
+      the condition changes because the body rebinds a name in a new scope, or
+      the loop is left with `Break.` — which is why a while loop in ARO usually
+      reads as a search rather than as a counter.
+
+  - category: Loops
+    headline: 'Break.'
+    explanation: >-
+      One of four forms that are grammar rather than actions, with `Publish as`,
+      `Require` and `match`. It has no role, no prepositions and no object, and
+      it leaves the innermost loop — `for each`, range or `while` alike.
+
+  - category: Loops
+    headline: 'ARO_CONCURRENCY=8 aro run ./Crawler'
+    explanation: >-
+      An application-wide ceiling counts units of work not already running inside
+      one: every triggered feature set and every parallel iteration. At the
+      ceiling work waits for a slot in arrival order — it queues, it is never
+      rejected.
+
+  # ===== Match =====
+
+  - category: Match
+    headline: 'match <status> { case "paid" { Log "paid" to the <console>. } otherwise { Log "other" to the <console>. } }'
+    explanation: >-
+      `match` branches on one value and the first matching case wins. There is
+      no fallthrough to arrange and no break to forget. `otherwise` is optional;
+      with nothing matching and no `otherwise`, nothing runs.
+
+  - category: Match
+    headline: 'match <code> { case 404 { Return a <NotFound: status> for the <request>. } }'
+    explanation: >-
+      A case pattern is a literal, a variable, a regular expression, or `_`.
+      Matching literal codes is the common shape, and a `Return` inside a case
+      ends the feature set exactly as it would anywhere else.
+
+  - category: Match
+    headline: 'match <subscription> { case <premium> where <credits> > 0 { Log "go" to the <console>. } }'
+    explanation: >-
+      `where` adds a guard to a case, so two cases can share a pattern and
+      differ only on a condition. Order decides which one runs: put the guarded
+      case first, or the unguarded one absorbs every value the pattern matches
+      and the guarded case never fires.
+
+  - category: Match
+    headline: 'match <text> { case /^[A-Z]{2}\d{4}$/ { Log "code" to the <console>. } }'
+    explanation: >-
+      A regular expression is a case pattern in its own right, written in the
+      same `/pattern/flags` form `Split` takes. Dispatching on format then reads
+      as a list of shapes rather than a chain of guarded statements.
+
+  - category: Match
+    headline: 'match <n> { case _ { Log "any" to the <console>. } }'
+    explanation: >-
+      `_` matches anything, which makes it a case nothing after it can reach.
+      Put it last, or write `otherwise`, which says the same thing in the place
+      a reader already looks for it. A match with neither runs no branch at all
+      when nothing fits, and execution continues after the block.
+
+  - category: Match
+    headline: 'match <method> { case "GET" { Retrieve the <resource> from the <database>. } case "POST" { Create the <resource> with <data>. } }'
+    explanation: >-
+      Matches nest, and a case body is an ordinary statement list. Routing by
+      method belongs inside a handler that serves several verbs — contract-first
+      dispatch by `operationId` already separates them otherwise.
+
+  # ===== Errors =====
+
+  - category: Errors
+    headline: 'Retrieve the <user> from the <user-repository> where id = <id>.'
+    explanation: >-
+      Write the happy case. When the statement cannot be satisfied the runtime
+      rebuilds it as the message — "Cannot retrieve the user from the
+      user-repository where id = 530" — with the values that were live at the
+      time substituted in.
+
+  - category: Errors
+    headline: 'Retrieve the <queued> from the <order-repository> where <status> is "queued".'
+    explanation: >-
+      A retrieval that matches nothing is not one of those failures. It binds an
+      empty list, and the only throw on that path is a repository that does not
+      exist. Guard on the result — the statement will not fail for you.
+
+  - category: Errors
+    headline: 'Throw a <Conflict: error> for the <order-modification>.'
+    explanation: >-
+      `Throw` is the explicit path, for when a business rule rather than a
+      failure decides the outcome. Left to itself the runtime maps by verb: a
+      failed Extract is 400, a failed Retrieve 404, a failed Validate 422.
+
+  - category: Errors
+    headline: 'Return a <TooManyRequests: status> for the <request>.'
+    explanation: >-
+      Status names come from one catalog, read by the interpreter, the compiled
+      binary and `aro check` alike. Case and separators are not distinctions:
+      `NoContent`, `no-content` and `no_content` are one name.
+
+  - category: Errors
+    headline: 'Return a <PendingVerification: status> for the <request>.'
+    explanation: >-
+      A name nowhere near a real status is a domain status, and is deliberately
+      a 200 on the wire. A name within a typo's distance of a real one is a
+      check-time warning naming the status that was meant.
+
+  - category: Errors
+    headline: 'Return an <Unprocessable: status> for the <request>.'
+    explanation: >-
+      ARO says `Unprocessable`; HTTP says "Unprocessable Content". The catalog
+      keeps the ARO spelling, the canonical name and the wire reason phrase
+      apart, so the response line reads as HTTP requires without the source
+      having to.
+
+  - category: Errors
+    headline: 'Log "processed 1000 records" to the <console: error>.'
+    explanation: >-
+      `Log` writes to stdout by default and to stderr under the `error`
+      qualifier. In a program whose stdout carries data, progress and warnings
+      belong on the other stream so the output stays machine-readable.
+
+  - category: Errors
+    headline: 'Retrieve the <rows> from the <report-repository>.'
+    explanation: >-
+      A statement nobody reads still runs, and its failure is still reported:
+      anything outstanding is forced at feature-set exit. The message names the
+      statement that caused the failure, not the line where it surfaced.
+
+  # ===== Lifecycle =====
+
+  - category: Lifecycle
+    headline: '(Application-Start: File Watcher)'
+    explanation: >-
+      Exactly one per application, in whichever file you like. None is "no entry
+      point defined"; two is an error naming both files. Everything else in an
+      application is reached by an event rather than by being called.
+
+  - category: Lifecycle
+    headline: 'Keepalive the <application> for the <events>.'
+    explanation: >-
+      Without it `Application-Start` returns and the process exits — a server
+      would bind a port and immediately close it. Keepalive blocks the feature
+      set, lets the event bus dispatch, and unblocks on SIGINT or SIGTERM.
+
+  - category: Lifecycle
+    headline: '(Application-End: Success)'
+    explanation: >-
+      Optional, and at most one. It runs after the shutdown signal, once new work
+      has stopped and pending events have drained, so a `Stop` here sees a quiet
+      application rather than one mid-request. Draining has a timeout, after
+      which the runtime warns and continues.
+
+  - category: Lifecycle
+    headline: '(Application-End: Error)'
+    explanation: >-
+      The other optional handler, for the path where the application is going
+      down because something failed. It reads what happened the way any feature
+      set reads a conduit: `Extract the <reason> from the <shutdown: error>.`
+
+  - category: Lifecycle
+    headline: 'Start the <http-server> with <contract>.'
+    explanation: >-
+      The contract is `openapi.yaml` and it is required: with no contract the
+      server does not start and no port is opened. Feature sets are named after
+      `operationId` values, and that is the whole of the route wiring.
+
+  - category: Lifecycle
+    headline: 'Stop the <http-server> with <application>.'
+    explanation: >-
+      Start, Stop, Listen, Connect, Close and Keepalive are the SERVER role —
+      service lifecycle, ordered against everything else by definition. None of
+      them defer, so they happen where they are written.
+
+  - category: Lifecycle
+    headline: '(Application-Start: Crawler takes <url> <depth>)'
+    explanation: >-
+      `takes` declares the positional arguments, so `./crawler
+      https://example.com 3` works rather than only the flag spelling. A flag of
+      the same name wins. The trap predates positionals: `--key value` consumes
+      the next token, so write `--verbose=true`, or `--`, to mean two things.
+
+  # ===== Events =====
+
+  - category: Events
+    headline: 'Emit a <UserCreated: event> with <user>.'
+    explanation: >-
+      A named variable is wrapped under its own name, so the handler reads
+      `<event: user>`. Which form you wrote decides how the handler extracts,
+      and routing is by the event type in the result descriptor — nothing
+      subscribes at the call site.
+
+  - category: Events
+    headline: 'Emit an <OrderPlaced: event> with { id: <id>, total: <total> }.'
+    explanation: >-
+      An object literal is spread instead of wrapped: its fields become
+      top-level payload keys, so the handler reads `<event: id>` and
+      `<event: total>`. Payload values are forced at the emitting statement,
+      never later.
+
+  - category: Events
+    headline: '(Send Welcome Email: UserCreated Handler)'
+    explanation: >-
+      A feature set is triggered by its business activity rather than by being
+      called. `{EventType} Handler` subscribes to a domain event,
+      `{repository-name} Observer` to repository changes, and an `operationId`
+      to an HTTP route.
+
+  - category: Events
+    headline: '(Process Payment: OrderUpdated Handler<status:paid>)'
+    explanation: >-
+      A state guard filters before the handler body runs. Commas are OR,
+      semicolons AND, dots navigate into nested payload fields, and comparison
+      is case-insensitive. An event that does not match is skipped silently.
+
+  - category: Events
+    headline: '(Crawl Page: CrawlPage Handler<dedupe:url>)'
+    explanation: >-
+      `dedupe` names the payload field that identifies an event: the first
+      event carrying a value runs the handler and later ones with the same value
+      are skipped. The store keeps the most recent 100 000 identities, evicting
+      oldest first.
+
+  # ===== State =====
+
+  - category: State
+    headline: 'Accept the <transition: draft_to_placed> on <order: status>.'
+    explanation: >-
+      Two checks at two times. Both halves of the name must be states the
+      contract's enum declares, or the build stops and names the closest
+      declared one. Then at run time the entity must already be in the first of
+      them, or the transition is refused with the state it is actually in.
+
+  - category: State
+    headline: '(Log Transition: status StateObserver<paid_to_shipped>)'
+    explanation: >-
+      A state observer reacts to a transition; a handler guard filters on a
+      current value. `Handler<status:shipped>` fires for any event that says
+      shipped, the observer only for the edge that arrived there.
+
+  - category: State
+    headline: '(Audit Changes: user-repository Observer)'
+    explanation: >-
+      An observer receives `changeType` — created, updated or deleted — with
+      `oldValue`, `newValue` and the repository name alongside it. Observers are
+      awaited by default, so a `Store` does not return until they have run, and
+      the write is visible by the time they do.
+
+  # ===== Actions =====
+
+  - category: Actions
+    headline: 'Extract the <id> from the <pathParameters: id>.'
+    explanation: >-
+      Extract declares the REQUEST role: external to internal. The five roles
+      classify actions by the direction data moves, and they are not decoration
+      — the analyser reads them, so a role is behaviour rather than a label.
+
+  - category: Actions
+    headline: 'aro actions Store'
+    explanation: >-
+      Store, Log, Send and Write read as exports and declare the RESPONSE role.
+      That is a known, deliberate inconsistency rather than a typo waiting to be
+      fixed: roles drive data-flow analysis, so changing one changes what
+      programs do.
+
+  - category: Actions
+    headline: 'aro actions --qualifiers'
+    explanation: >-
+      The live table is the specification: every built-in action with its verbs,
+      prepositions and role, and every Compute qualifier with the types it
+      accepts. The role tables in ARO-0004 are generated from the same source.
+
+  - category: Actions
+    headline: 'Compute the <doubled> from <n> * 2.'
+    explanation: >-
+      Compute is OWN: internal to internal. With no qualifier it evaluates the
+      expression; with one, the qualifier selects the operation and the base
+      becomes the name the result is bound to. Arithmetic, comparison and the
+      built-in operations all arrive through this one verb.
+
+  - category: Actions
+    headline: 'Compute the <first-length: length> from <first-message>.'
+    explanation: >-
+      Qualifier-as-name separates what is computed from what it is called, so
+      two lengths can live in one feature set. Bindings are immutable, so a
+      second result always needs a second name rather than a reassignment.
+
+  - category: Actions
+    headline: 'Compute the <total: sum> from <amounts>.'
+    explanation: >-
+      The qualifier namespace is closed. A Compute qualifier must resolve to a
+      built-in, a plugin qualifier, a chain, or a date offset; anything else is
+      an error naming the closest match rather than a value quietly passed
+      through unchanged.
+
+  - category: Actions
+    headline: 'Compute the <ls: lines> from <content>.'
+    explanation: >-
+      Counting lines is `lines` and then `length`: `lines` already drops the
+      phantom element a trailing newline would otherwise produce. `aro check`
+      rejects an unknown qualifier, so a green check means the name exists.
+
+  - category: Actions
+    headline: 'Compute the <total: fixed> from <raw>.'
+    explanation: >-
+      `fixed` rounds to two decimal places unless told otherwise, which is the
+      shape money wants. `sum`, `avg`, `unique` and `random` are the collection
+      side; `trim`, `replace`, `uppercase` and `html-escape` the text side.
+
+  - category: Actions
+    headline: 'Compute the <n> as Float from <s>.'
+    explanation: >-
+      A result type uses `as`, because the qualifier slot is already taken: it
+      selects an operation. Two other things are mistaken for qualifiers and are
+      actions — `Sort the <s> for the <x>.` and `Reverse the <r> for the <x>.`
+
+  - category: Actions
+    headline: 'Map the <emails: email> from the <users>.'
+    explanation: >-
+      Map takes a field name, not an expression: this and
+      `Map the <emails> from the <users> with email.` are the same statement.
+      There is no per-element binding to compute against, so use `for each`
+      when you need one.
+
+  - category: Actions
+    headline: 'Filter the <adults> from the <people> where <age> >= 18.'
+    explanation: >-
+      Filter selects, Map projects, Group partitions, Reduce collapses. Each
+      takes its collection through `from` and says what to do with it in its own
+      clause, so a pipeline reads as four sentences rather than one nested
+      expression.
+
+  - category: Actions
+    headline: 'Group the <by-country> from the <users> by "country".'
+    explanation: >-
+      Group partitions a collection by a field and binds a record of key to list
+      of items. The field is named as a string, which is what distinguishes it
+      from a value to compare each element against — `by "status"` groups, a
+      `where` clause would have filtered.
+
+  - category: Actions
+    headline: 'Reduce the <revenue> from <rows> with sum(<line_total>).'
+    explanation: >-
+      Reduce takes an aggregation call rather than a qualifier: `sum(<field>)`,
+      `avg(<field>)`, `min(<field>)`, `max(<field>)`, or `count()` with no
+      argument at all. The parentheses are part of the syntax.
+
+  - category: Actions
+    headline: 'Sort the <ranked> from the <scores> by <value> descending.'
+    explanation: >-
+      `by` names the field to order on and `descending` reverses it. Sorting is
+      an action rather than a Compute qualifier, and so is reversing — the
+      diagnostic for the qualifier spelling points at both.
+
+  - category: Actions
+    headline: 'Split the <parts> from the <line> by /,/.'
+    explanation: >-
+      The delimiter is a regular expression in the `/pattern/flags` form that
+      `match`'s regex cases also take. Splitting on a literal comma still writes
+      it as a pattern, which keeps one spelling for both jobs.
+
+  - category: Actions
+    headline: 'Merge the <settings> from the <defaults> with <overrides>.'
+    explanation: >-
+      Merge binds a new variable rather than modifying either input, which is
+      the shape every OWN action takes. Bindings are immutable, so combining two
+      things always produces a third name — and the two originals are still
+      readable afterwards, which is often the point.
+
+  - category: Actions
+    headline: 'Store the <user> into the <user-repository>.'
+    explanation: >-
+      A repository is identified by name alone and is application-global: every
+      feature set naming `user-repository` reads and writes the same storage. A
+      single operation is atomic with respect to the others; nothing larger is.
+
+  - category: Actions
+    headline: 'Store the <ticket> into the <ticket-repository> with { id: 1, state: "new" }.'
+    explanation: >-
+      A trailing `with` clause supplies the record inline and binds it to the
+      result. It is not one of Store's object prepositions — the object of a
+      Store is always the repository, which is what makes the statement read as
+      one sentence about where the record goes.
+
+  - category: Actions
+    headline: 'Delete the <gone> from the <order-repository> where <status> is "cancelled".'
+    explanation: >-
+      The result is a record: `count`, `deleted`, `target` and `success`.
+      `deleted` is always a list, even when one row matched, so no reader has to
+      handle two shapes. Deleting with no `where` clears the repository and
+      counts before it does.
+
+  - category: Actions
+    headline: 'Return an <OK: status> with <users>.'
+    explanation: >-
+      Return ends the feature set: `with` carries a payload, `for` names what
+      the status is about. Like every effect it never defers — it forces what it
+      reads before it runs, which is what keeps observable output in source
+      order.
+
+  - category: Actions
+    headline: 'Send the <welcome-email> to the <user: email>.'
+    explanation: >-
+      Send, Log, Write and Store run at their own statement and force their
+      inputs first. Deferral is an allowlist of value-producing verbs, so an
+      effect can never drift to wherever somebody happened to read its result.
+
+  - category: Actions
+    headline: 'Update the <order> with { status: "paid" }.'
+    explanation: >-
+      Update and Delete sit under OWN beside Compute, which is why the deferral
+      list is written verb by verb rather than derived from roles. Deferring a
+      repository delete would move a world-changing effect somewhere else
+      entirely.
+
+  - category: Actions
+    headline: 'Sleep the <pause> for 2.'
+    explanation: >-
+      Sleep is deliberately left out of the deferrable verbs, because the delay
+      is the effect. Moving it to whoever first read its result would delete the
+      pause the statement exists to create, and a Sleep whose result nobody reads
+      would not pause at all.
+
+  - category: Actions
+    headline: 'Validate the <data: email> for the <email-format>.'
+    explanation: >-
+      Validate, Compare and Accept are excluded from deferral on purpose: they
+      feed branches, and a guard that has not decided yet is not a guard. A
+      failed Validate maps to 422, so the statement doubles as the rule and as
+      the response when the rule is broken.
+
+  - category: Actions
+    headline: 'Compare the <same-length> from the <first-length> against the <second-length>.'
+    explanation: >-
+      Compare takes both operands as inputs and binds a fresh result:
+      `<same-length: matches>` is the boolean and `<same-length: result>` is
+      equal, less or greater. Nothing is rebound, which is what immutability
+      requires.
+
+  - category: Actions
+    headline: 'Execute the <output> with "ls -la".'
+    explanation: >-
+      Execute runs a shell command on the host and declares the OWN role, as
+      Call does — neither manages a service, so neither is SERVER. The role
+      tables in the proposals are generated from the runtime, so what they print
+      is what each action actually declares.
+
+  - category: Actions
+    headline: 'Application.DoubleValue the <d> from 5.'
+    explanation: >-
+      A feature set whose business activity is `Action` is callable
+      application-wide, from any file, with no import. `from` works only when
+      the header declares `takes <field>`; without it, callers pass an object
+      through `with` and the mismatch is a compile error.
+
+  - category: Actions
+    headline: 'Application.SumAndDouble the <res> with { a: 3, b: 4 }.'
+    explanation: >-
+      Arguments arrive on the synthetic `<input>` conduit —
+      `Extract the <a> from the <input: a>.` — the same shape `<event: x>` and
+      `<request: body>` use. An action has no request or event context, and
+      reaching for one is a compile error.
+
+  - category: Actions
+    headline: 'Return an <OK: status> with { doubled: <doubled> }.'
+    explanation: >-
+      The caller's variable holds the returned object flattened at the top
+      level: `status` plus every field of the payload. Field values keep their
+      shape, so a returned list arrives as a list. A bare primitive lands under
+      `value`.
+
+  - category: Actions
+    headline: 'Application.Countdown the <r> from <next>.'
+    explanation: >-
+      A call whose result an unguarded final `Return` hands back untouched
+      reuses its frame, so tail recursion costs nothing in depth. Any work
+      between the call and that return — one `Extract` is enough — means the
+      frame is still needed.
+
+  - category: Actions
+    headline: 'Application.Walk the <result> with { node: <child> }.'
+    explanation: >-
+      Recursion has no depth limit. Frames that cannot be reused live on the
+      heap and are bounded by memory; `ARO_MAX_CALL_DEPTH`, 50 000 by default,
+      stops a runaway with the call chain named rather than letting the OS kill
+      it.
+
+  - category: Actions
+    headline: 'Request the <page> from "https://example.com".'
+    explanation: >-
+      Request is the outbound HTTP action and carries the REQUEST role, along
+      with Extract, Retrieve, Read, Probe, Pull and Clone. Probe is the one that
+      asks whether a target is reachable without halting on failure.
+
+  - category: Actions
+    headline: 'Emit a <PageIndexed: event> with { url: <url> }.'
+    explanation: >-
+      Emit carries the EXPORT role with Publish, Commit, Push, Tag and Schedule
+      — the verbs that make something available beyond the current execution.
+      Emit is also an effect, so its payload is forced at this statement.
+
+  - category: Actions
+    headline: 'Accept the <transition: placed_to_paid> on <order: status>.'
+    explanation: >-
+      Accept is the single-statement state transition. There are no
+      multi-statement transactions in ARO, so where a read-then-write across two
+      statements would race, modelling the change as one action is the answer.
+

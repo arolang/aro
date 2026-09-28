@@ -13,18 +13,22 @@ const MASTODON_INSTANCE = process.env.MASTODON_INSTANCE;
 const ACCESS_TOKEN = process.env.MASTODON_ACCESS_TOKEN;
 const START_DATE = new Date(process.env.START_DATE || '2026-01-01');
 
-// Calculate current week and day
-function getCurrentWeekAndDay() {
-  const today = new Date();
-  const msPerDay = 24 * 60 * 60 * 1000;
-  const daysSinceStart = Math.floor((today - START_DATE) / msPerDay);
-  const weekNumber = Math.floor(daysSinceStart / 7) + 1;
-  const dayOfWeek = today.getDay(); // 0=Sunday, 1=Monday, ..., 6=Saturday
-
-  // Convert to Monday=1, Tuesday=2, ..., Friday=5
-  const weekday = dayOfWeek === 0 ? null : (dayOfWeek === 6 ? null : dayOfWeek);
-
-  return { week: weekNumber, weekday };
+// Which card today gets
+//
+// One card a day, every day, in a fixed order — so the set is a year-long
+// sequence rather than something that depends on when the schedule last ran.
+// The index is the day of the year, which makes the mapping obvious from the
+// outside: the 1st of January is the first card and the 31st of December is
+// the last.
+//
+// The modulo is not decoration. A leap year has a 366th day, and the set is
+// written for 365; wrapping means the extra day repeats the first card
+// instead of posting nothing. It also keeps the script correct while the set
+// is being written, when there may be fewer cards than days.
+function dayOfYear(date = new Date()) {
+  const start = Date.UTC(date.getUTCFullYear(), 0, 1);
+  const today = Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
+  return Math.floor((today - start) / (24 * 60 * 60 * 1000)) + 1;
 }
 
 // Load cards from facts.yaml
@@ -35,30 +39,13 @@ function loadCards() {
   return data.facts;
 }
 
-// Get cards for current week
-function getWeekCards(allCards, weekNumber) {
-  return allCards.filter(card => card.week === weekNumber);
-}
-
-// Distribute cards evenly across weekdays
-function getCardForToday(weekCards, weekday) {
-  if (!weekday || weekCards.length === 0) return null;
-
-  // Sort by day to ensure correct order
-  const sorted = weekCards.sort((a, b) => a.day - b.day);
-  const cardCount = sorted.length;
-
-  if (cardCount >= 5) {
-    // 1:1 mapping - each weekday gets a card
-    return sorted[weekday - 1] || null;
-  }
-
-  // Evenly distribute cards across 5 weekdays
-  // Example: 3 cards → Monday (1), Wednesday (3), Friday (5)
-  const spacing = 5 / cardCount;
-  const targetIndex = Math.floor((weekday - 1) / spacing);
-
-  return sorted[targetIndex] || null;
+// Sorted by the week and day they are filed under, so the order is the order
+// someone reading facts.yaml sees, not the order the parser happened to
+// produce.
+function cardForDay(allCards, doy) {
+  if (allCards.length === 0) return null;
+  const ordered = [...allCards].sort((a, b) => (a.week - b.week) || (a.day - b.day));
+  return ordered[(doy - 1) % ordered.length];
 }
 
 // Retrying transient failures
@@ -71,13 +58,12 @@ function getCardForToday(weekCards, weekday) {
 //
 // which it returns from `service_unavailable` — the handler it uses for, among
 // others, `Seahorse::Client::NetworkingError`, i.e. its own object storage
-// timing out. On the morning this was added the instance was returning that to
-// 16 of its own `media_proxy` fetches and 20 `/inbox` deliveries as well, all
-// of them at almost exactly five seconds.
+// failing. On 2026-09-28 that was a full disk: the instance was returning the
+// same thing to its own media_proxy fetches and inbox deliveries for hours.
 //
-// Waiting and asking again is the right response to that, and the wrong
-// response to a bad token — so `isTransient` decides, and a 401 still fails on
-// the first attempt with the message the server sent.
+// Waiting and asking again is the right response to a busy server, and the
+// wrong response to a bad token — so `isTransient` decides, and a 401 still
+// fails on the first attempt with the message the server sent.
 const MAX_ATTEMPTS = 5;
 const BASE_DELAY_MS = 2000;
 
@@ -92,8 +78,7 @@ function isTransient(status) {
 }
 
 // Honour `Retry-After` when the server sends one, since it knows better than
-// our doubling does. Both forms are legal; only the seconds form is worth
-// parsing here, and an unparseable value falls back rather than throwing.
+// our doubling does. An unparseable value falls back rather than throwing.
 function backoffFor(attempt, response) {
   const header = response && response.headers && response.headers.get('retry-after');
   if (header) {
@@ -192,32 +177,17 @@ async function main() {
       return;
     }
 
-    // Get current week and day
-    const { week, weekday } = getCurrentWeekAndDay();
-    console.log(`Current: Week ${week}, Weekday ${weekday}`);
-
-    if (!weekday) {
-      console.log('Today is weekend - skipping post');
-      return;
-    }
-
-    // Load all cards
-    const allCards = loadCards();
-    const weekCards = getWeekCards(allCards, week);
-    console.log(`Found ${weekCards.length} cards for week ${week}`);
-
-    if (weekCards.length === 0) {
-      console.log('No cards for this week - skipping post');
-      return;
-    }
-
     // Get today's card
-    const todayCard = getCardForToday(weekCards, weekday);
+    const allCards = loadCards();
+    const doy = dayOfYear();
+    const todayCard = cardForDay(allCards, doy);
+
     if (!todayCard) {
-      console.log('No card scheduled for today - skipping post');
+      console.log('facts.yaml has no cards - skipping post');
       return;
     }
 
+    console.log(`Day ${doy} of the year, ${allCards.length} cards in the set`);
     console.log(`Selected card: ${todayCard.id} - ${todayCard.category}`);
 
     // Find card image file
