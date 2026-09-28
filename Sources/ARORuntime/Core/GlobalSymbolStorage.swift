@@ -33,6 +33,15 @@ public actor GlobalSymbolStorage {
     /// Enables O(1) bulk eviction without scanning the entire symbol table.
     private var executionIndex: [String: Set<String>] = [:]
 
+    /// Reverse index: business activity → symbol names published under it.
+    ///
+    /// `FeatureSetExecutor` binds every symbol of the executing feature set's
+    /// activity on entry, and used to find them by walking the whole table —
+    /// once per HTTP request, event and observer invocation (GitLab #703).
+    /// Symbols published with no activity are not indexed: the eager pass
+    /// skips them, because an empty activity matches nothing.
+    private var activityIndex: [String: Set<String>] = [:]
+
     public init() {}
 
     // MARK: - Write
@@ -47,8 +56,13 @@ public actor GlobalSymbolStorage {
     ) {
         // If a previous entry exists under the same name, remove it from the
         // old execution's index to keep the index clean.
-        if let existing = symbols[name], existing.executionId != executionId {
-            executionIndex[existing.executionId]?.remove(name)
+        if let existing = symbols[name] {
+            if existing.executionId != executionId {
+                executionIndex[existing.executionId]?.remove(name)
+            }
+            if existing.businessActivity != businessActivity {
+                removeFromActivityIndex(name: name, activity: existing.businessActivity)
+            }
         }
         symbols[name] = PublishedSymbol(
             value: value,
@@ -57,6 +71,17 @@ public actor GlobalSymbolStorage {
             executionId: executionId
         )
         executionIndex[executionId, default: []].insert(name)
+        if !businessActivity.isEmpty {
+            activityIndex[businessActivity, default: []].insert(name)
+        }
+    }
+
+    private func removeFromActivityIndex(name: String, activity: String) {
+        guard !activity.isEmpty else { return }
+        activityIndex[activity]?.remove(name)
+        if activityIndex[activity]?.isEmpty == true {
+            activityIndex.removeValue(forKey: activity)
+        }
     }
 
     /// Remove all symbols published by a specific execution.
@@ -68,7 +93,8 @@ public actor GlobalSymbolStorage {
         guard let names = executionIndex.removeValue(forKey: executionId) else { return }
         for name in names {
             if symbols[name]?.executionId == executionId {
-                symbols.removeValue(forKey: name)
+                let removed = symbols.removeValue(forKey: name)
+                removeFromActivityIndex(name: name, activity: removed?.businessActivity ?? "")
             }
         }
     }
@@ -173,6 +199,23 @@ public actor GlobalSymbolStorage {
     /// Get all published symbols (for eager binding in feature sets)
     public func allSymbols() -> [String: PublishedSymbol] {
         return symbols
+    }
+
+    /// The symbols published under one business activity.
+    ///
+    /// What `FeatureSetExecutor`'s eager pass actually wants. It used to ask
+    /// for `allSymbols()` and filter, which is O(published symbols) per
+    /// feature-set execution and, worse, probed each candidate through a
+    /// parent-walking resolve (GitLab #703).
+    ///
+    /// An empty activity answers nothing: the eager pass only ever binds
+    /// symbols whose activity matches a non-empty one.
+    public func symbols(forBusinessActivity activity: String) -> [(name: String, value: any Sendable)] {
+        guard !activity.isEmpty, let names = activityIndex[activity] else { return [] }
+        return names.compactMap { name in
+            guard let entry = symbols[name] else { return nil }
+            return (name: name, value: entry.value)
+        }
     }
 
     /// Total number of currently stored symbols. Useful for memory monitoring.

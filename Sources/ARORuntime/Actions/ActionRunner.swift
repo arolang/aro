@@ -103,6 +103,18 @@ public final class ActionRunner: @unchecked Sendable {
         return table
     }
 
+    /// Whether this verb's winning implementation is a `SynchronousAction`.
+    ///
+    /// A table lookup, not an execution: the answer says the action *can* run
+    /// without suspending, not that it will for these particular arguments
+    /// (`executeSynchronously` still rejects a stream with
+    /// `NeedsAsyncExecution`). Used by `FeatureSetExecutor` to decide whether
+    /// deferring a statement could buy anything (GitLab #706).
+    public func hasSynchronousImplementation(_ canonicalVerb: String) -> Bool {
+        syncActionsLock.lock(); defer { syncActionsLock.unlock() }
+        return syncActions[canonicalVerb] != nil
+    }
+
     /// Execute an action on the calling thread if it is a `SynchronousAction`.
     /// Returns `nil` if the verb is unknown or the action signals `NeedsAsyncExecution`.
     private func executeSynchronouslyIfSupported(

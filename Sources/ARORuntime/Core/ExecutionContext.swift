@@ -440,6 +440,30 @@ public protocol ExecutionContext:
 // MARK: - Default Implementations
 
 public extension VariableBinding {
+
+    /// Remove every framework variable that belongs to a single statement.
+    ///
+    /// A statement's modifiers reach its action through `_`-prefixed context
+    /// bindings rather than as arguments, so they have to go when the
+    /// statement does — otherwise the next statement inherits them, and a
+    /// `join` with no `with` clause quietly reuses the previous one's
+    /// separator (GitLab #552).
+    ///
+    /// Both execution modes call this: the interpreter directly, the compiled
+    /// binary through the `aro_context_clear_transients` bridge. That is the
+    /// point of it being one function — the compiled path used to spell the
+    /// sweep out as one `aro_variable_unbind` call per name in the generated
+    /// IR, which was 21 C-ABI crossings before every statement (GitLab #714)
+    /// and, before that, a hand-written list that had drifted from the
+    /// interpreter's by seven names.
+    func clearTransientFrameworkVariables() {
+        for key in FrameworkVariables.transientKeys {
+            unbind(key)
+        }
+    }
+}
+
+public extension VariableBinding {
     func require<T: Sendable>(_ name: String) throws -> T {
         guard let value: T = resolve(name) else {
             throw ActionError.undefinedVariable(name)

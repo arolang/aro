@@ -28,6 +28,46 @@ import AROParser
 /// when their futures are forced by downstream consumers, with no need
 /// for a separate DAG-builder.
 public final class FeatureSetExecutor: Sendable {
+
+    /// What `<terminal>` binds to when no `TerminalService` is registered.
+    private static let defaultTerminalCapabilities: [String: any Sendable] = [
+        "rows": 24, "columns": 80, "width": 80, "height": 24,
+        "supports_color": false, "supports_true_color": false,
+        "is_tty": false, "encoding": "UTF-8"
+    ]
+
+    /// The same dictionary derived from a live `TerminalService`, computed on
+    /// first use and kept (GitLab #703). `TerminalService.detectCapabilities`
+    /// already memoizes, so the answer cannot change under us.
+    private static let terminalCapabilities = AsyncOnce<[String: any Sendable]>()
+
+    /// Compute-once box for an async value.
+    ///
+    /// Two feature sets starting at the same moment may both compute; the
+    /// first stored answer wins and both see it. That is fine here — the
+    /// computation is idempotent and the alternative, a lock held across an
+    /// `await`, is not.
+    final class AsyncOnce<Value: Sendable>: @unchecked Sendable {
+        private let lock = NSLock()
+        private var stored: Value?
+
+        private func read() -> Value? {
+            lock.withLock { stored }
+        }
+
+        private func write(_ value: Value) -> Value {
+            lock.withLock {
+                if let raced = stored { return raced }
+                stored = value
+                return value
+            }
+        }
+
+        func value(_ compute: () async throws -> Value) async rethrows -> Value {
+            if let cached = read() { return cached }
+            return write(try await compute())
+        }
+    }
     // MARK: - Properties
 
     private let actionRegistry: ActionRegistry
@@ -138,37 +178,49 @@ public final class FeatureSetExecutor: Sendable {
         }
 
         // Also eagerly bind all other published variables for this business activity
-        // This handles cases where semantic analyzer misses dependencies in map literals
-        for (name, entry) in await globalSymbols.allSymbols() {
-            // Skip if already bound
-            if context.resolveAny(name) != nil {
+        // This handles cases where semantic analyzer misses dependencies in map literals.
+        //
+        // Indexed by activity rather than scanned (GitLab #703): this ran on
+        // every HTTP request, event and observer invocation, and walked every
+        // published symbol in the application to find the handful that belong
+        // to this activity.
+        //
+        // The already-bound test goes through `resolveAnyRaw` where the
+        // context allows it, for a reason beyond cost: `resolveAny` *forces* a
+        // pending future when a parent holds one, so asking "is this name
+        // taken?" could block on I/O that nothing in this feature set had
+        // asked for.
+        for (name, value) in await globalSymbols.symbols(
+            forBusinessActivity: context.businessActivity
+        ) {
+            if let runtime = context as? RuntimeContext {
+                if runtime.resolveAnyRaw(name) != nil { continue }
+            } else if context.resolveAny(name) != nil {
                 continue
             }
-            // Only bind if business activity matches
-            if !entry.businessActivity.isEmpty && !context.businessActivity.isEmpty &&
-               entry.businessActivity == context.businessActivity {
-                context.bind(name, value: entry.value)
-            }
+            context.bind(name, value: value)
         }
 
         // Bind terminal capabilities dict so ARO code can use <terminal: columns> etc.
+        //
+        // Built once, not per execution (GitLab #703). `detectCapabilities()`
+        // memoizes its answer, so the eight-key dictionary derived from it was
+        // the same object's worth of work on every HTTP request, event and
+        // observer invocation, plus an actor hop to ask for a cached value.
         if let terminalService = context.service(TerminalService.self) {
-            let caps = await terminalService.detectCapabilities()
-            let terminalDict: [String: any Sendable] = [
-                "rows": caps.rows, "columns": caps.columns,
-                "width": caps.columns, "height": caps.rows,
-                "supports_color": caps.supportsColor,
-                "supports_true_color": caps.supportsTrueColor,
-                "is_tty": caps.isTTY, "encoding": caps.encoding
-            ]
+            let terminalDict = try await Self.terminalCapabilities.value {
+                let caps = await terminalService.detectCapabilities()
+                return [
+                    "rows": caps.rows, "columns": caps.columns,
+                    "width": caps.columns, "height": caps.rows,
+                    "supports_color": caps.supportsColor,
+                    "supports_true_color": caps.supportsTrueColor,
+                    "is_tty": caps.isTTY, "encoding": caps.encoding
+                ]
+            }
             context.bind("terminal", value: terminalDict, allowRebind: true)
         } else {
-            let terminalDict: [String: any Sendable] = [
-                "rows": 24, "columns": 80, "width": 80, "height": 24,
-                "supports_color": false, "supports_true_color": false,
-                "is_tty": false, "encoding": "UTF-8"
-            ]
-            context.bind("terminal", value: terminalDict, allowRebind: true)
+            context.bind("terminal", value: Self.defaultTerminalCapabilities, allowRebind: true)
         }
 
         // Execute statements sequentially by source order. Independent I/O
@@ -582,9 +634,7 @@ public final class FeatureSetExecutor: Sendable {
         // (`LLVMCodeGenerator.generateAROStatement`) has to sweep exactly the
         // same set and a second hand-maintained copy drifted for seven of them
         // (GitLab #552).
-        for key in FrameworkVariables.transientKeys {
-            context.unbind(key)
-        }
+        context.clearTransientFrameworkVariables()
         // `unbind` only removes a binding from this scope, so it cannot hide an
         // inherited one. `_expression_name_` is the one name a parent scope may
         // legitimately still hold (EmitAction reads it to key its payload), so
@@ -731,7 +781,11 @@ public final class FeatureSetExecutor: Sendable {
            !ActionRoleCatalog.mustRunForEffect(canonicalVerb),
            !testVerbs.contains(canonicalVerb),
            let owner = outerContext as? RuntimeContext,
-           let scope = context as? RuntimeContext {
+           let scope = context as? RuntimeContext,
+           !runsWithoutSuspending(canonicalVerb: canonicalVerb,
+                                  resultDescriptor: resultDescriptor,
+                                  objectDescriptor: objectDescriptor,
+                                  scope: scope) {
             scope.markDeferredScope()
             let future = deferredResult(
                 statement: statement,
@@ -968,6 +1022,39 @@ public final class FeatureSetExecutor: Sendable {
     /// Failures are wrapped in the same `AROError` the eager path produces, at
     /// construction time, so the message names the statement that failed rather
     /// than the read that observed it (ARO-0088 §4).
+    /// Whether this statement would run to completion on the calling thread,
+    /// so deferring it could not overlap with anything.
+    ///
+    /// A `SynchronousAction` cannot suspend: `Compute the <len: length> from
+    /// <s>` is a handful of instructions. Wrapping one in an `AROFuture` costs
+    /// a task spawn on the action executor, a GCD dispatch, a lock, a
+    /// `DispatchGroup` wait and a thread hand-off — roughly 10–30 µs of
+    /// machinery around a nanosecond of work, and the next statement almost
+    /// always reads the result and pays the force immediately (GitLab #706).
+    ///
+    /// The exception is the input such an action *can* suspend on. A stream or
+    /// an unread request body makes `executeSynchronously` bail with
+    /// `NeedsAsyncExecution` and the async body take over, and that body is
+    /// worth overlapping — so a statement holding one still defers.
+    ///
+    /// Read with `resolveAnyRaw`: `resolveAny` forces a pending future, which
+    /// would turn a question about this statement into a wait on the previous
+    /// one.
+    private func runsWithoutSuspending(
+        canonicalVerb: String,
+        resultDescriptor: ResultDescriptor,
+        objectDescriptor: ObjectDescriptor,
+        scope: RuntimeContext
+    ) -> Bool {
+        guard ActionRunner.shared.hasSynchronousImplementation(canonicalVerb) else { return false }
+        for name in [objectDescriptor.base, resultDescriptor.base] {
+            guard let value = scope.resolveAnyRaw(name) else { continue }
+            if value is AnyStreamingValue { return false }
+            if value is any UnreadBody { return false }
+        }
+        return true
+    }
+
     private func deferredResult(
         statement: AROStatement,
         verb: String,
@@ -982,9 +1069,13 @@ public final class FeatureSetExecutor: Sendable {
         let condition = statement.statementGuard.isPresent ? "when <condition>" : nil
         let featureSet = statementScope.featureSetName
         let activity = statementScope.businessActivity
-        let location = "\(statement.span.start.line):\(statement.span.start.column)"
-
-        return AROFuture(bindingName: resultDescriptor.base, sourceLocation: location) {
+        return AROFuture(
+            bindingName: resultDescriptor.base,
+            // Unformatted: every deferred statement passes one and only a
+            // slow-force warning ever reads it (GitLab #710).
+            sourceLine: statement.span.start.line,
+            sourceColumn: statement.span.start.column
+        ) {
             do {
                 return try await registry.execute(
                     verb: verb,
@@ -1318,20 +1409,26 @@ public final class FeatureSetExecutor: Sendable {
             ofVerb: verb,
             resultQualifiers: statement.result.specifiers
         )
-        let description = "\(statement.action.verb) the <\(statement.result.base)> "
-            + "\(objectDescriptor.preposition.rawValue) the <\(objectDescriptor.fullName)>"
+        // Built only when a body is actually present. This function runs for
+        // every statement in the program; the description is read on the
+        // branches below, which a request body reaches and nothing else does
+        // (GitLab #710).
+        func describeStatement() -> String {
+            "\(statement.action.verb) the <\(statement.result.base)> "
+                + "\(objectDescriptor.preposition.rawValue) the <\(objectDescriptor.fullName)>"
+        }
 
         // The body can be in either slot: `Compute … from <upload>` puts it in
         // the object, `Log <upload> to the <console>` in the result.
         if let body = context.resolveAny(objectDescriptor.base) as? any UnreadBody,
            !objectDescriptor.specifiers.isEmpty || consumption == .wholeValue {
-            let value = try await body.materializedValue(statement: description)
+            let value = try await body.materializedValue(statement: describeStatement())
             context.bind(objectDescriptor.base, value: value, allowRebind: true)
         }
 
         if let body = context.resolveAny(statement.result.base) as? any UnreadBody,
            !statement.result.specifiers.isEmpty || consumption == .wholeValue {
-            let value = try await body.materializedValue(statement: description)
+            let value = try await body.materializedValue(statement: describeStatement())
             context.bind(statement.result.base, value: value, allowRebind: true)
         }
     }

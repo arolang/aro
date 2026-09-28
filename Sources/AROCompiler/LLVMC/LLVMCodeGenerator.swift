@@ -588,15 +588,23 @@ public final class LLVMCodeGenerator {
         // would make the next `Store the <x> into the <repo>.` store the wrong
         // value (GitLab #515).
         //
-        // The names come from `FrameworkVariables.transientKeys`, the same
-        // constant `FeatureSetExecutor.executeAROStatement` iterates. This list
-        // used to be written out here by hand and covered 14 of the
-        // interpreter's 21 names, so seven modifiers leaked in compiled mode
-        // only and the two modes printed different answers for one program.
-        for transientKey in FrameworkVariables.transientKeys {
-            let keyStr = ctx.stringConstant(transientKey)
-            _ = ctx.module.insertCall(externals.variableUnbind, on: [ctx.currentContextVar!, keyStr], at: ctx.insertionPoint)
-        }
+        // One bridge call, not one per name. The sweep lives on the runtime
+        // side in `aro_context_clear_transients`, over
+        // `FrameworkVariables.transientKeys` — the same constant
+        // `FeatureSetExecutor.executeAROStatement` iterates, so the two modes
+        // clear exactly the same names. (That list used to be written out here
+        // by hand and covered 14 of the interpreter's 21, so seven modifiers
+        // leaked in compiled mode only.)
+        //
+        // Emitting it as 21 `aro_variable_unbind` calls put 21 C-ABI
+        // crossings, string conversions and dictionary removals in front of
+        // every statement, inside loop bodies included — 21 million of them
+        // for a ten-statement loop over 100 000 elements, almost all finding
+        // nothing to remove (GitLab #714).
+        _ = ctx.module.insertCall(
+            externals.contextClearTransients,
+            on: [ctx.currentContextVar!],
+            at: ctx.insertionPoint)
 
         // Bind query modifiers if present
         binder.bindQueryModifiers(statement.queryModifiers)

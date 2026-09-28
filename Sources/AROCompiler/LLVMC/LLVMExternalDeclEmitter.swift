@@ -62,6 +62,7 @@ public final class LLVMExternalDeclEmitter {
     private var _variableBindArray: Function?
     private var _variableBindValue: Function?
     private var _variableUnbind: Function?
+    private var _contextClearTransients: Function?
     private var _variableResolve: Function?
     private var _variableResolveString: Function?
     private var _variableResolveInt: Function?
@@ -398,6 +399,12 @@ public final class LLVMExternalDeclEmitter {
             types.voidFunctionType(parameters: [ptr, ptr])
         )
 
+        // void @aro_context_clear_transients(ptr)
+        _contextClearTransients = ctx.module.declareFunction(
+            "aro_context_clear_transients",
+            types.voidFunctionType(parameters: [ptr])
+        )
+
         // ptr @aro_variable_resolve(ptr, ptr)
         _variableResolve = ctx.module.declareFunction(
             "aro_variable_resolve",
@@ -701,6 +708,7 @@ public final class LLVMExternalDeclEmitter {
     public var variableBindArray: Function { _variableBindArray! }
     public var variableBindValue: Function { _variableBindValue! }
     public var variableUnbind: Function { _variableUnbind! }
+    public var contextClearTransients: Function { _contextClearTransients! }
     public var variableResolve: Function { _variableResolve! }
     public var variableResolveString: Function { _variableResolveString! }
     public var variableResolveInt: Function { _variableResolveInt! }

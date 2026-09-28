@@ -547,6 +547,27 @@ public actor RuntimeContext: ExecutionContext {
         "metrics", "application"
     ]
 
+    /// Can a name with this first byte be magic?
+    ///
+    /// Every variable read in the program asks whether the name is one of the
+    /// seven above, and almost none of them is (GitLab #710). One byte
+    /// comparison answers "no" for `<users>`, `<total>`, `<_with_>` and the
+    /// rest without hashing the string or walking a seven-case switch.
+    ///
+    /// Derived by hand from `magicNames` rather than computed, because a
+    /// `Set<UInt8>` lookup would hash — which is the cost being avoided. A
+    /// test asserts the two agree, so adding a magic name that starts with a
+    /// new letter fails the suite instead of making that name unresolvable.
+    static func mayBeMagic(_ name: String) -> Bool {
+        switch name.utf8.first {
+        case UInt8(ascii: "n"), UInt8(ascii: "c"), UInt8(ascii: "C"),
+             UInt8(ascii: "h"), UInt8(ascii: "m"), UInt8(ascii: "a"):
+            return true
+        default:
+            return false
+        }
+    }
+
     /// Resolve a framework-provided name.
     nonisolated func resolveMagic(_ name: String) -> MagicResolution {
         switch name {
@@ -587,7 +608,7 @@ public actor RuntimeContext: ExecutionContext {
     nonisolated func resolveAnyWithoutDraining(_ name: String) -> (any Sendable)? {
         // Names the framework answers itself, before any variable store is
         // consulted (`<now>`, `<contract>`, `<metrics>`, …).
-        if case .resolved(let value) = resolveMagic(name) { return value }
+        if Self.mayBeMagic(name), case .resolved(let value) = resolveMagic(name) { return value }
 
         // Iterative walk without the drain fallback — see `resolveWithoutDraining`
         // for the drain reasoning and `ancestorHolding` for why it is a loop.
@@ -629,7 +650,7 @@ public actor RuntimeContext: ExecutionContext {
     /// Magic variables (e.g. `<now>`, `<contract>`) never produce futures and
     /// fall through to the regular resolveAny path.
     public nonisolated func resolveAnyRaw(_ name: String) -> (any Sendable)? {
-        if Self.magicNames.contains(name) {
+        if Self.mayBeMagic(name), Self.magicNames.contains(name) {
             return resolveAny(name)
         }
         let (owner, foreignParent) = ancestorHolding(name)
@@ -646,7 +667,7 @@ public actor RuntimeContext: ExecutionContext {
     public nonisolated func resolveAnyAsync(_ name: String) async -> (any Sendable)? {
         // Magic variables short-circuit through the sync path — they don't
         // produce futures.
-        if Self.magicNames.contains(name) {
+        if Self.mayBeMagic(name), Self.magicNames.contains(name) {
             return resolveAny(name)
         }
         let (owner, foreignParent) = ancestorHolding(name)

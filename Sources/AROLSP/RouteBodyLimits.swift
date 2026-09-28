@@ -58,6 +58,21 @@ public struct RouteBodyLimits: Sendable {
     /// `sources/users/users.aro` while the contract sits at the application
     /// root, which is the convention the loader documents.
     public static func load(near file: URL?, roots: [URL]) -> RouteBodyLimits {
+        guard let contract = contract(near: file, roots: roots),
+              let spec = try? OpenAPILoader.load(from: contract)
+        else { return .empty }
+        return from(spec: spec)
+    }
+
+    /// The contract nearest to `file`, or `nil` if none of the candidate
+    /// directories holds one that parses.
+    ///
+    /// Split out of `load` so a caller can cache the answer against the
+    /// contract's modification date rather than repeating the walk. The inlay
+    /// hint asks on every viewport scroll, and the walk is up to six
+    /// directories × three filenames of `fileExists` before the YAML is even
+    /// opened (GitLab #720).
+    public static func contract(near file: URL?, roots: [URL]) -> URL? {
         var candidates: [URL] = []
 
         if let file {
@@ -81,12 +96,18 @@ public struct RouteBodyLimits: Sendable {
             for name in OpenAPILoader.contractFilenames {
                 let path = directory.appendingPathComponent(name)
                 guard FileManager.default.fileExists(atPath: path.path) else { continue }
-                guard let spec = try? OpenAPILoader.load(from: path) else { continue }
-                return from(spec: spec)
+                guard (try? OpenAPILoader.load(from: path)) != nil else { continue }
+                return path
             }
         }
 
-        return .empty
+        return nil
+    }
+
+    /// The limits one contract declares, or `nil` if it does not parse.
+    public static func load(from contract: URL) -> RouteBodyLimits? {
+        guard let spec = try? OpenAPILoader.load(from: contract) else { return nil }
+        return from(spec: spec)
     }
 
     static func from(spec: OpenAPISpec) -> RouteBodyLimits {

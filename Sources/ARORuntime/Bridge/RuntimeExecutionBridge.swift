@@ -2138,6 +2138,27 @@ public func aro_variable_unbind(
     contextHandle.context.unbind(nameStr)
 }
 
+/// Clear every per-statement framework variable from the context.
+///
+/// The generated code used to emit one `aro_variable_unbind` per name in
+/// `FrameworkVariables.transientKeys` before every single statement — 21
+/// bridge crossings, each a `String(cString:)` and a dictionary removal that
+/// almost always found nothing (GitLab #714). A ten-statement loop body over
+/// 100 000 elements made 21 million of them.
+///
+/// This is the same sweep the interpreter does in Swift
+/// (`FeatureSetExecutor.executeAROStatement`), over the same list, in one
+/// call.
+/// - Parameter contextPtr: Context handle
+@_cdecl("aro_context_clear_transients")
+public func aro_context_clear_transients(
+    _ contextPtr: UnsafeMutableRawPointer?
+) {
+    guard let ctxPtr = contextPtr else { return }
+    let contextHandle = Unmanaged<AROCContextHandle>.fromOpaque(ctxPtr).takeUnretainedValue()
+    contextHandle.context.clearTransientFrameworkVariables()
+}
+
 /// Apply a specifier to a value (qualifier or property access)
 /// - Parameters:
 ///   - valuePtr: Value handle

@@ -307,15 +307,30 @@ public final class REPLSession: @unchecked Sendable {
         // Record in history
         var entry = HistoryEntry(input: source, type: .statement)
 
-        // Wrap statement in a temporary feature set for compilation
-        var wrappedSource = """
+        // Wrap statement in a temporary feature set for compilation.
+        //
+        // The companions are *not* appended. They used to be, so every cell
+        // re-lexed, re-parsed and re-analysed every definition in the session
+        // — a notebook's 50th cell paying for 49 definitions it had already
+        // compiled 49 times (GitLab #719). What the statement actually needs
+        // from them is two facts: which `Application.<Name>` calls resolve,
+        // and which events the session handles. Both are what
+        // `declaredUserActions:` and `externallyHandledEvents:` are for, and
+        // both are derived once per distinct companion set below.
+        //
+        // The analysed *bodies* are already registered: `defineFeatureSet`
+        // registers a `UserDefinedActionHost` covering every definition, and
+        // `registerUserActions` leaves it alone for a program that declares no
+        // actions of its own — which a bare statement never does.
+        let wrappedSource = """
         (_repl_temp_: Interactive) {
             \(source)
         }
         """
-        if !companions.isEmpty {
-            wrappedSource += "\n\n" + companions.joined(separator: "\n\n")
-        }
+        let companionResult = companionResult(for: companions)
+        let companionActions = companionResult?.analyzedProgram.userActions
+        let companionEvents = companionResult
+            .map { EventAnalyzer.handledEventTypes(in: $0.program) } ?? []
 
         // The session's own bindings are pre-bound as far as this cell is
         // concerned: it is compiled alone, but `<w>` from an earlier cell is
@@ -323,7 +338,11 @@ public final class REPLSession: @unchecked Sendable {
         // analysis — the one statement that *errors* on an undefined name
         // rather than warning, and the one cross-cell operation Publish is for
         // (GitLab #689).
-        let result = compiler.compile(wrappedSource, preboundSymbols: Set(context.variableNames))
+        let result = compiler.compile(
+            wrappedSource,
+            externallyHandledEvents: companionEvents,
+            declaredUserActions: companionActions,
+            preboundSymbols: Set(context.variableNames))
 
         if !result.isSuccess {
             let errorMsg = result.diagnostics.map { $0.message }.joined(separator: "\n")
@@ -337,7 +356,15 @@ public final class REPLSession: @unchecked Sendable {
         // statement can call them. Replaces the previous registration rather
         // than stacking on it — a redefined action must not keep answering
         // with its old body.
-        await registerUserActions(from: result.analyzedProgram)
+        //
+        // Only when the companion set has actually changed. The statement's
+        // own program never declares an action (`_repl_temp_` is
+        // `Interactive`), so re-registering per statement would tear down and
+        // rebuild the same host for every cell.
+        if let companionResult, registeredCompanionKey != companions {
+            await registerUserActions(from: companionResult.analyzedProgram)
+            registeredCompanionKey = companions
+        }
 
         guard let analyzedFS = result.analyzedProgram.byName["_repl_temp_"]
             ?? result.analyzedProgram.featureSets.first else {
@@ -390,6 +417,31 @@ public final class REPLSession: @unchecked Sendable {
     ///
     /// No-op when the program declares none, so the common case — a plain
     /// statement with no companions — costs nothing.
+    /// The session's other definitions, compiled.
+    ///
+    /// Cached against the companion sources that produced it. The set changes
+    /// when a cell defines a feature set and not otherwise, so a run of
+    /// statement cells hits the cache every time and a definition changing
+    /// misses once.
+    ///
+    /// This used to be recompiled with every statement, because the
+    /// companions were appended to the statement's own source before
+    /// compiling: a notebook's 50th cell re-lexed, re-parsed and re-analysed
+    /// 49 definitions it had already compiled 49 times (GitLab #719).
+    private var companionKey: [String] = []
+    private var cachedCompanionResult: CompilationResult?
+    private var registeredCompanionKey: [String]?
+
+    private func companionResult(for companions: [String]) -> CompilationResult? {
+        if companionKey == companions, let cached = cachedCompanionResult { return cached }
+        let result = companions.isEmpty
+            ? nil
+            : compiler.compile(companions.joined(separator: "\n\n"))
+        companionKey = companions
+        cachedCompanionResult = result
+        return result
+    }
+
     private func registerUserActions(from program: AnalyzedProgram) async {
         let host = UserDefinedActionHost(
             analyzedProgram: program,
@@ -582,6 +634,13 @@ public final class REPLSession: @unchecked Sendable {
         _featureSets.removeAll()
         _featureSetSources.removeAll()
         _definitionOrder.removeAll()
+
+        // The companion compile is keyed by the sources that produced it, so
+        // an empty session would miss anyway — cleared explicitly so the
+        // cleared state does not hold a program nothing can reach.
+        companionKey = []
+        cachedCompanionResult = nil
+        registeredCompanionKey = nil
         _history.removeAll()
 
         // Cleared handlers must stop answering events — the definition

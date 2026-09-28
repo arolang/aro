@@ -729,7 +729,32 @@ public final class CCompiler {
         FileHandle.standardError.write(Data("\(message)\n".utf8))
     }
 
+    /// Cached results of the two toolchain lookups below (GitLab #717).
+    ///
+    /// Both spawn `which`, and both are called several times per build —
+    /// `findSwiftLibPath()` from `link()` twice, from `compileAndLink`, and
+    /// from `staticSwiftLibPath()`. The lookups answer a question about the
+    /// machine, which cannot change during one `aro build`, so one answer per
+    /// `CCompiler` is enough. `.some(nil)` records a lookup that found
+    /// nothing, so a failed search is not repeated either.
+    private var cachedCompiler: String?
+    private var cachedSwiftLibPath: String??
+
     private func findCompiler() -> String {
+        if let cached = cachedCompiler { return cached }
+        let resolved = computeCompiler()
+        cachedCompiler = resolved
+        return resolved
+    }
+
+    private func findSwiftLibPath() -> String? {
+        if let cached = cachedSwiftLibPath { return cached }
+        let resolved = computeSwiftLibPath()
+        cachedSwiftLibPath = resolved
+        return resolved
+    }
+
+    private func computeCompiler() -> String {
         #if os(Linux)
         debugLog("[LINKER] findCompiler() called on Linux")
 
@@ -879,7 +904,7 @@ public final class CCompiler {
         return nil
     }
 
-    private func findSwiftLibPath() -> String? {
+    private func computeSwiftLibPath() -> String? {
         // Check environment variable first (allows CI/CD to override)
         if let envPath = ProcessInfo.processInfo.environment["SWIFT_LIB_PATH"] {
             debugLog("[LINKER] SWIFT_LIB_PATH env: \(envPath)")
@@ -1065,46 +1090,13 @@ public final class CCompiler {
         #if os(macOS)
         debugLog("[LINKER-MAC] Primary path discovery failed, trying fallbacks...")
 
-        // Check swift-actions/setup-swift location (GitHub Actions)
-        // The action installs Swift at /Users/runner/hostedtoolcache/swift/...
-        // Try to find via 'which swift' first (respects PATH)
-        do {
-            let whichProcess = Process()
-            whichProcess.executableURL = URL(fileURLWithPath: "/usr/bin/which")
-            whichProcess.arguments = ["swift"]
-
-            let whichPipe = Pipe()
-            whichProcess.standardOutput = whichPipe
-            whichProcess.standardError = FileHandle.nullDevice
-
-            try whichProcess.run()
-            whichProcess.waitUntilExit()
-
-            if whichProcess.terminationStatus == 0 {
-                let data = whichPipe.fileHandleForReading.readDataToEndOfFile()
-                if let swiftPath = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
-                   !swiftPath.isEmpty {
-                    let swiftURL = URL(fileURLWithPath: swiftPath)
-                    let baseDir = swiftURL
-                        .deletingLastPathComponent()  // Remove 'swift'
-                        .deletingLastPathComponent()  // Remove 'bin'
-
-                    // Try both possible structures (standard toolchain and swiftly)
-                    let pathsToTry = [
-                        baseDir.appendingPathComponent("lib/swift/macosx").path,
-                        baseDir.appendingPathComponent("usr/lib/swift/macosx").path
-                    ]
-
-                    debugLog("[LINKER-MAC] Fallback which swift: \(swiftPath)")
-                    for path in pathsToTry {
-                        debugLog("[LINKER-MAC] Fallback trying: \(path) exists=\(FileManager.default.fileExists(atPath: path))")
-                        if FileManager.default.fileExists(atPath: path) {
-                            return path
-                        }
-                    }
-                }
-            }
-        } catch {}
+        // The duplicate `which swift` block that used to sit here has been
+        // removed (GitLab #717). It re-ran the exact command the primary
+        // discovery above already ran, against the same two candidate
+        // directories — so it could only ever succeed where the primary had
+        // already returned, and otherwise cost a second process spawn per
+        // call. What follows are the fallbacks that actually look somewhere
+        // else.
 
         // Check swiftly toolchain location (~/.swiftly/toolchains/)
         // swiftly stores full toolchains here, unlike the temporary symlink directory

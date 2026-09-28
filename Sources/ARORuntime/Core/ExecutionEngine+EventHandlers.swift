@@ -279,9 +279,11 @@ extension ExecutionEngine {
                 (field: field, store: VisitedURLStore(maxSize: RuntimeDefaults.visitedURLStoreMaxSize))
             }
 
-            eventBus.subscribe(to: DomainEvent.self) { event in
-                // Only handle events that match this handler's event type
-                guard event.domainEventType == eventType else { return }
+            // The name test is the subscription's, not the handler's: it now
+            // runs before the fan-out spawns a task, so an `Emit` in an
+            // application with H handlers costs one task rather than H
+            // (GitLab #704).
+            eventBus.subscribe(toDomainEventNamed: eventType) { event in
 
                 if let seen,
                    let identity = DedupeGuard.identity(ofField: seen.field, in: event.payload) {
@@ -351,11 +353,10 @@ extension ExecutionEngine {
             let deps = handlerDependencies
 
             let capturedEventType = eventType
-            eventBus.subscribe(to: DomainEvent.self) { event in
+            eventBus.subscribe(toDomainEventNamed: capturedEventType) { event in
                 if RuntimeEnvironment.isDebug {
                     FileHandle.standardError.write(Data("[ExecutionEngine] Plugin handler received event: \(event.domainEventType), expecting: \(capturedEventType)\n".utf8))
                 }
-                guard event.domainEventType == capturedEventType else { return }
 
                 if !guardSet.isEmpty {
                     guard guardSet.allMatch(payload: event.payload) else { return }
@@ -696,9 +697,7 @@ extension ExecutionEngine {
                 // CRITICAL: Capture values to avoid actor reentrancy deadlock
                 let deps = handlerDependencies
 
-                eventBus.subscribe(to: DomainEvent.self) { event in
-                    // Only handle events that match this watch handler's event type
-                    guard event.domainEventType == eventType else { return }
+                eventBus.subscribe(toDomainEventNamed: eventType) { event in
 
                     await deps.run(
                         analyzedFS,
