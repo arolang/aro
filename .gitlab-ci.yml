@@ -677,7 +677,7 @@ integration:linux:
     - key:
         files:
           - Examples/GreetingPlugin/Plugins/plugin-swift-hello/Package.resolved
-          - Examples/SQLiteExample/plugins/SQLitePlugin/Package.resolved
+          - Examples/SQLiteExample/Plugins/SQLitePlugin/Package.resolved
         prefix: plugin-build
       paths:
         - Examples/*/[Pp]lugins/*/.build

@@ -1146,6 +1146,7 @@ jobs:
             libipc-run-perl \
             libyaml-libyaml-perl \
             libhttp-tiny-perl \
+            libhttp-cookiejar-perl \
             cpanminus || true
           # Install remaining modules via cpan
           cpanm -q --notest Net::EmptyPort Term::ANSIColor 2>/dev/null || true
@@ -1212,17 +1213,26 @@ jobs:
           find Examples -name ".build" -type d -path "*/Plugins/*" -exec rm -rf {} + 2>/dev/null || true
           find Examples -name ".build" -type d -path "*/plugins/*" -exec rm -rf {} + 2>/dev/null || true
           find Examples -name ".build-aro" -type d -exec rm -rf {} + 2>/dev/null || true
-          for plugin_dir in \
-            Examples/QualifierPlugin/Plugins/plugin-swift-collection \
-            Examples/GreetingPlugin/Plugins/plugin-swift-hello \
-            Examples/CustomPlugin/Plugins/GreetingService \
-            Examples/ExternalService/plugins/CounterPlugin \
-            Examples/SQLiteExample/plugins/SQLitePlugin \
-            Examples/ZipService/plugins/ZipPlugin; do
-            if [ -f "$plugin_dir/Package.swift" ]; then
-              echo "=== Building $plugin_dir ==="
-              (cd "$plugin_dir" && swift build -c release 2>&1 | tail -3) || true
-            fi
+          # Discover the plugin packages by glob instead of naming them.
+          # The hardcoded list spelled three of them `plugins/` while the repo
+          # tracks `Plugins/`. macOS matched anyway on its case-insensitive
+          # filesystem, but on Linux the `-f` guard simply found nothing and
+          # skipped them without a word, so SQLiteExample went on to compile
+          # SQLite.swift inside its own 300 s test budget and timed out there
+          # instead (~4-5 min for a first SwiftSyntax build). Globbing both
+          # spellings is what .gitlab-ci.yml already does -- which is why
+          # GitLab stayed green -- and it does not rot when a plugin is added.
+          # Both globs match the same directory on macOS, so dedupe on a
+          # case-folded key to build each plugin once on either filesystem.
+          built=""
+          for pkg in Examples/*/plugins/*/Package.swift Examples/*/Plugins/*/Package.swift; do
+            [ -f "$pkg" ] || continue
+            plugin_dir="$(dirname "$pkg")"
+            key="$(printf '%s' "$plugin_dir" | tr '[:upper:]' '[:lower:]')"
+            case " $built " in *" $key "*) continue ;; esac
+            built="$built $key"
+            echo "=== Building $plugin_dir ==="
+            (cd "$plugin_dir" && swift build -c release 2>&1 | tail -3) || true
           done
 
       - name: Run integration tests
@@ -1410,7 +1420,13 @@ jobs:
 
       - name: Install Perl modules
         run: |
-          cpan -T IPC::Run YAML::XS HTTP::Tiny Net::EmptyPort Term::ANSIColor Time::HiRes 2>&1 || true
+          # HTTP::CookieJar lets the harness be the same caller across two
+          # requests. Without it SessionScopedCart logs in, then arrives at
+          # POST /cart as a fresh caller, and a session-scoped repository that
+          # cannot resolve its caller throws -- so the cart calls 500 rather
+          # than coming back empty (ARO-0094). The Linux container ships it;
+          # this runner had to be told.
+          cpan -T IPC::Run YAML::XS HTTP::Tiny Net::EmptyPort Term::ANSIColor Time::HiRes HTTP::CookieJar 2>&1 || true
 
       - name: Install Rust for plugin compilation
         run: |
@@ -1500,17 +1516,20 @@ jobs:
           # aro compiles Swift plugins on demand, but on CI the first-time
           # SwiftSyntax build (~280 modules) takes 4-5 min per plugin.
           # Compile them upfront so aro run/build finds cached .dylibs.
-          for plugin_dir in \
-            Examples/QualifierPlugin/Plugins/plugin-swift-collection \
-            Examples/GreetingPlugin/Plugins/plugin-swift-hello \
-            Examples/CustomPlugin/Plugins/GreetingService \
-            Examples/ExternalService/plugins/CounterPlugin \
-            Examples/SQLiteExample/plugins/SQLitePlugin \
-            Examples/ZipService/plugins/ZipPlugin; do
-            if [ -f "$plugin_dir/Package.swift" ]; then
-              echo "=== Building $plugin_dir ==="
-              (cd "$plugin_dir" && swift build -c release 2>&1 | tail -3) || true
-            fi
+          # Discovered by glob rather than a hardcoded list, so a renamed or
+          # added plugin cannot silently go unbuilt -- see the Linux job, where
+          # a `plugins/` vs `Plugins/` mismatch did exactly that. Both globs
+          # match the same directory here (case-insensitive filesystem), so
+          # dedupe on a case-folded key to build each plugin once.
+          built=""
+          for pkg in Examples/*/plugins/*/Package.swift Examples/*/Plugins/*/Package.swift; do
+            [ -f "$pkg" ] || continue
+            plugin_dir="$(dirname "$pkg")"
+            key="$(printf '%s' "$plugin_dir" | tr '[:upper:]' '[:lower:]')"
+            case " $built " in *" $key "*) continue ;; esac
+            built="$built $key"
+            echo "=== Building $plugin_dir ==="
+            (cd "$plugin_dir" && swift build -c release 2>&1 | tail -3) || true
           done
 
       - name: Compile Rust plugins
