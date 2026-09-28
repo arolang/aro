@@ -184,8 +184,20 @@ public actor RuntimeContext: ExecutionContext {
     /// Wait state flag
     nonisolated(unsafe) private var _isWaiting: Bool = false
 
-    /// Continuation for wait/shutdown signaling
+    /// Continuation for wait/shutdown signaling.
+    ///
+    /// Read and written only under `storageLock` (GitLab #631). It was
+    /// touched unlocked, which lost wake-ups and could resume twice — see
+    /// `waitForShutdown`.
     nonisolated(unsafe) private var shutdownContinuation: CheckedContinuation<Void, Error>?
+
+    /// Whether shutdown was signalled before anyone waited (GitLab #631).
+    ///
+    /// The signal path can run before `waitForShutdown` has stored its
+    /// continuation — the whole point of a shutdown signal is that it
+    /// arrives at a moment nobody chose. Without this flag that signal was
+    /// dropped and the waiter hung forever.
+    nonisolated(unsafe) private var _shutdownRequested: Bool = false
 
     /// Output context for formatting
     private nonisolated let _outputContext: OutputContext
@@ -1450,20 +1462,64 @@ public actor RuntimeContext: ExecutionContext {
         withExclusiveMutation { _isWaiting = true }
     }
 
+    /// Suspend until `signalShutdown()` (GitLab #631).
+    ///
+    /// Two races, both fatal in their own way, and both from touching
+    /// `shutdownContinuation` without the lock:
+    ///
+    /// - **Lost wake-up.** `signalShutdown()` could run between this
+    ///   function being entered and the continuation being stored. It then
+    ///   saw `nil`, resumed nobody, and the continuation stored a moment
+    ///   later was never resumed by anything — the process hung on exactly
+    ///   the signal that was meant to end it. The signal path is where this
+    ///   is most likely, because a signal arrives at a moment nobody chose.
+    ///
+    /// - **Double resume.** Two concurrent `signalShutdown()` calls could
+    ///   both read the same non-nil continuation before either cleared it,
+    ///   and resuming a `CheckedContinuation` twice traps. `Keepalive`,
+    ///   `Stop` and the signal handler can all call it.
+    ///
+    /// Both sides now take `storageLock`, and a shutdown signalled before
+    /// anyone waited is remembered rather than dropped, so a late waiter
+    /// returns immediately. The remembering is sticky, matching
+    /// `ShutdownCoordinator.isShuttingDown`: a process shuts down once.
+    ///
+    /// Worth knowing which of the two you are looking at. Every waiter that
+    /// actually runs — `Keepalive`, `Schedule`, `Stream`, the compiled
+    /// bridge — waits on `ShutdownCoordinator`, whose `registerWaiter`
+    /// decides "register or return" atomically under its own lock and so
+    /// never had either race. This pair has no callers in the tree. It is
+    /// fixed rather than deleted because it is public API that a plugin or
+    /// SOLARO may hold, and a public function with a data race in it is
+    /// worth more dead than alive only if nobody ever calls it.
     public nonisolated func waitForShutdown() async throws {
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-            shutdownContinuation = continuation
+            let alreadyRequested: Bool = withExclusiveMutation {
+                if _shutdownRequested { return true }
+                shutdownContinuation = continuation
+                return false
+            }
+            if alreadyRequested {
+                continuation.resume(returning: ())
+            }
         }
     }
 
     public nonisolated var isWaiting: Bool {
-        return _isWaiting
+        withExclusiveMutation { _isWaiting }
     }
 
     public nonisolated func signalShutdown() {
-        let continuation = shutdownContinuation
-        shutdownContinuation = nil
-        _isWaiting = false
+        // Take the continuation out under the lock, so two callers cannot
+        // both resume it, and record the request so a waiter that has not
+        // arrived yet does not block forever.
+        let continuation: CheckedContinuation<Void, Error>? = withExclusiveMutation {
+            let pending = shutdownContinuation
+            shutdownContinuation = nil
+            _shutdownRequested = true
+            _isWaiting = false
+            return pending
+        }
         continuation?.resume(returning: ())
     }
 

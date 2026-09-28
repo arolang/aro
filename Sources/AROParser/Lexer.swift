@@ -5,8 +5,20 @@
 
 import Foundation
 
-/// Tokenizes ARO source code
-public final class Lexer: @unchecked Sendable {
+/// Tokenizes ARO source code.
+///
+/// **Not `Sendable`, deliberately** (GitLab #674). It holds `pos`, `tokens`
+/// and `internTable` as plain mutable state with no synchronisation, so the
+/// `@unchecked Sendable` it used to declare asserted a guarantee it does not
+/// provide — it told the compiler to stop checking a claim that was false.
+///
+/// Nothing was racing: every use creates a lexer, tokenizes, and discards it
+/// on one thread. Dropping the annotation is how that stays true. A future
+/// caller that wants to hand a lexer across an isolation boundary now gets a
+/// compiler error instead of silence, and the answer will be to create one
+/// on the far side — lexing is cheap and a lexer is single-use — rather than
+/// to reinstate the annotation.
+public final class Lexer {
     
     // MARK: - Properties
 
