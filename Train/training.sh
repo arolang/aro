@@ -181,8 +181,10 @@ export KERNEL_NAME="${KERNEL_NAME:-aro-train}"
 # was invisible until the entire run finished — which looked like the pipeline
 # "just stopping". Converting the meta notebook to a script and running it with
 # `python -u` streams each line live. The CHILD notebooks are still executed
-# via nbconvert from inside the orchestrator; their full output lands in
-# ${OUT_DIR}/<NN>_*.log and their executed copies in ${OUT_DIR}.
+# from inside the orchestrator, through script/nb_exec.py — which streams each
+# cell's output the same way for the same reason, since the stall watchdog that
+# decides whether a stage is wedged has nothing but that log to read. Their full
+# output lands in ${OUT_DIR}/<NN>_*.log and their executed copies in ${OUT_DIR}.
 META_PY="${OUT_DIR}/00_META_PIPELINE.gen.py"
 "${PYTHON}" -m jupyter nbconvert --to script --stdout "${META_NB}" > "${META_PY}"
 

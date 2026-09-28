@@ -24,11 +24,19 @@ written. `run_notebook()` therefore watches the stage's log: the stage is killed
 when the log stops growing for `stall_timeout` seconds (default 30 minutes),
 however long it has been running. A hard `max_runtime` remains available per
 stage for the few where one makes sense, and defaults to off.
+
+That only works if the log actually reflects the stage. It did not: stages ran
+under `jupyter nbconvert --execute`, which puts cell output in the output
+notebook and prints nothing itself, so every log froze a second in and every
+stage outliving the stall window was killed as wedged. Stages now run through
+`nb_exec.py`, which streams cell output as the kernel emits it.
 """
 
 from __future__ import annotations
 
 import os
+import re
+import signal
 import subprocess
 import sys
 import time
@@ -37,6 +45,8 @@ from pathlib import Path
 
 DEFAULT_STALL_TIMEOUT = 30 * 60       # seconds of silence before a stage is wedged
 POLL_INTERVAL = 5.0                   # how often the watchdog looks at the log
+NB_EXEC = Path(__file__).with_name('nb_exec.py')   # the streaming notebook runner
+_ANSI = re.compile(r'\x1b\[[0-9;]*m')     # kernel tracebacks arrive coloured
 
 
 # ── Uniform stage options ───────────────────────────────────────────────────
@@ -103,11 +113,26 @@ def _log_fingerprint(path: Path):
     return (st.st_size, st.st_mtime)
 
 
+def _signal_group(proc, sig):
+    """Best-effort signal to the stage's whole process group (runner + kernel).
+
+    Never fatal: the group may already be gone, and under test `proc` is a
+    stand-in with no pid at all.
+    """
+    pid = getattr(proc, 'pid', None)
+    if not pid:
+        return
+    try:
+        os.killpg(os.getpgid(pid), sig)
+    except (ProcessLookupError, PermissionError, OSError):
+        pass
+
+
 def run_notebook(name, script_dir, output_dir, kernel_name,
                  stall_timeout=DEFAULT_STALL_TIMEOUT, max_runtime=0,
                  python=None, poll_interval=POLL_INTERVAL, _clock=time.time,
                  _sleep=time.sleep, _popen=subprocess.Popen):
-    """Execute `<name>.ipynb` via nbconvert, killing it only when it goes quiet.
+    """Execute `<name>.ipynb` via nb_exec, killing it only when it goes quiet.
 
     Returns a dict: {'status': 'done'|'failed'|'stalled'|'timeout'|'missing',
                      'error': str|None, 'duration': float, 'log': str}.
@@ -128,17 +153,22 @@ def run_notebook(name, script_dir, output_dir, kernel_name,
                 'error': 'no Python kernel available — run the setup cell first',
                 'duration': 0.0, 'log': str(log_file)}
 
-    cmd = [python or sys.executable, '-m', 'jupyter', 'nbconvert',
-           '--to', 'notebook', '--execute',
-           '--output', str(dest),
-           '--ExecutePreprocessor.timeout', '-1',
-           '--ExecutePreprocessor.kernel_name', kernel_name,
-           str(src)]
+    # `-u` plus nb_exec's own flushing is what makes the log grow while the
+    # stage runs. Under `jupyter nbconvert --execute` it did not: cell output
+    # went into the output notebook and nbconvert's own stdout was three lines,
+    # so the watchdog below saw a frozen log for every healthy long stage and
+    # killed it at the stall timeout. See nb_exec.py.
+    cmd = [python or sys.executable, '-u', str(NB_EXEC),
+           str(src), '--output', str(dest), '--kernel', kernel_name]
 
     started = _clock()
     Path(output_dir).mkdir(parents=True, exist_ok=True)
     with open(log_file, 'w') as log:
-        proc = _popen(cmd, stdout=log, stderr=subprocess.STDOUT)
+        # Own session: a stalled stage is a runner plus a kernel holding the
+        # model, and terminating only the runner leaves the kernel with the
+        # memory the next stage needs. Killing the group takes both down.
+        proc = _popen(cmd, stdout=log, stderr=subprocess.STDOUT,
+                      start_new_session=True)
 
         last_change = _clock()
         fingerprint = _log_fingerprint(log_file)
@@ -161,10 +191,12 @@ def run_notebook(name, script_dir, output_dir, kernel_name,
                 break
 
         if status is not None:
+            _signal_group(proc, signal.SIGTERM)
             proc.terminate()
             try:
                 proc.wait(timeout=30)
             except subprocess.TimeoutExpired:
+                _signal_group(proc, signal.SIGKILL)
                 proc.kill()
                 proc.wait()
 
@@ -187,7 +219,7 @@ def run_notebook(name, script_dir, output_dir, kernel_name,
 
 
 def last_error_line(log_file, default='see log'):
-    """The most useful one-line summary of a failure from an nbconvert log."""
+    """The most useful one-line summary of a failure from a stage log."""
     try:
         lines = Path(log_file).read_text(errors='replace').splitlines()
     except OSError:
@@ -196,8 +228,11 @@ def last_error_line(log_file, default='see log'):
         stripped = line.strip()
         if not stripped:
             continue
-        # nbconvert prints the raised exception last; anything else is noise.
-        if stripped.startswith(('[NbConvertApp]', 'Traceback')):
+        # The runner prints the raised exception last; anything else is noise.
+        if stripped.startswith(('[NbConvertApp]', '[nb_exec] executing',
+                               '[nb_exec] wrote', 'Traceback')):
             continue
-        return stripped[:200]
+        if stripped.startswith('[nb_exec] FAILED: '):
+            stripped = stripped[len('[nb_exec] FAILED: '):]
+        return _ANSI.sub('', stripped)[:200]
     return default
