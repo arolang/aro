@@ -59,7 +59,6 @@ public enum ActionCatalog {
         // Configuration
         "configure",
         // Repository scope (ARO-0094)
-        "declare",
         "attach",
         // Notifications
         "notify", "alert", "signal",

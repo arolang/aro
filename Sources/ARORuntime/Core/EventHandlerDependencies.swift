@@ -90,13 +90,16 @@ struct HandlerDependencies: Sendable {
             let evaluator = ExpressionEvaluator()
             do {
                 let condResult = try await evaluator.evaluate(whenCondition, context: handlerContext)
-                let passes: Bool
-                if let b = condResult as? Bool { passes = b }
-                else if let i = condResult as? Int { passes = i != 0 }
-                else { passes = !String(describing: condResult).isEmpty }
-                guard passes else { return }
+                // The shared rule (GitLab #644). This site read the guard's
+                // value as `!String(describing:).isEmpty`, so `false` — which
+                // prints as "false" — passed it. A handler guarded on a
+                // boolean field therefore ran for every event.
+                guard FeatureSetExecutor.strictBool(condResult) == true else { return }
             } catch {
-                // Guard evaluation error: skip this handler (don't crash)
+                // Not silently: a guard that cannot be evaluated made the
+                // handler cease to exist, with no diagnostic (GitLab #644).
+                FeatureSetExecutor.reportGuardFailure(
+                    analyzedFS.featureSet.name, error, kind: "handler", bus: eventBus)
                 return
             }
         }
@@ -106,7 +109,21 @@ struct HandlerDependencies: Sendable {
             _ = try await makeExecutor().execute(analyzedFS, context: handlerContext)
             AROLogger.debug("Handler executed successfully: \(analyzedFS.featureSet.name)")
         } catch {
-            AROLogger.error("Handler error: \(error)")
+            // Not twice (GitLab #816). When the failure came from a deferred
+            // statement, `recordDeferredFailure` has already written the
+            // whole thing — statement, feature set, trace — to stderr, and
+            // this logged the same error again under a different prefix.
+            // The event still goes out either way: a handler somewhere may
+            // be listening for it, and that is not a duplicate of anything.
+            if !handlerContext.didReportDeferredFailure {
+                AROLogger.error("Handler error: \(error)")
+            }
+            // So `aro run` can exit non-zero (GitLab #816). Recoverable for
+            // the *process* — the application keeps running — but not a
+            // success for the *run*.
+            HandlerFailureLog.record(
+                featureSet: analyzedFS.featureSet.name,
+                error: String(describing: error))
             eventBus.publish(ErrorOccurredEvent(
                 error: String(describing: error),
                 context: analyzedFS.featureSet.name,

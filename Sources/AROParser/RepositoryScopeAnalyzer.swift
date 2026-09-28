@@ -27,7 +27,7 @@ public enum RepositoryScopeAnalyzer {
     /// way `ComputeQualifierCatalog` is pinned to `ComputeAction`.
     public static let scopeNames = ["application", "connection", "session"]
 
-    /// One `Declare the <x-repository> with { scope: "…" }.` statement.
+    /// One `Configure the <x-repository: scope> with "…".` statement.
     public struct Declaration: Sendable, Equatable {
         public let repository: String
         public let scope: String
@@ -39,30 +39,66 @@ public enum RepositoryScopeAnalyzer {
     /// Every scope declaration in one file.
     ///
     /// Declarations are collected across the whole application before any file
-    /// is checked, because `Declare` lives in `Application-Start` while the
+    /// is checked, because the statement lives in `Application-Start` while the
     /// statements it governs are in the handler files — the same shape as
     /// `handledEventTypes`.
+    ///
+    /// Two spellings, because `Configure` has two (GitLab #886):
+    ///
+    ///     Configure the <cart-repository: scope> with "session".
+    ///     Configure the <cart-repository> with { scope: "session", ttl: 3600 }.
+    ///
+    /// The second exists because `Configure` binds its subject, so two
+    /// statements naming one repository are an immutable rebind — setting two
+    /// properties has to be one statement.
     public static func declarations(in program: Program) -> [Declaration] {
         var found: [Declaration] = []
         for featureSet in program.featureSets {
             for statement in featureSet.statements {
                 guard let aro = statement as? AROStatement,
-                      aro.action.verb.lowercased() == "declare" else { continue }
-                guard let scope = scopeText(of: aro) else { continue }
-                found.append(Declaration(repository: aro.result.base,
-                                         scope: scope,
-                                         location: aro.span.start))
+                      aro.action.verb.lowercased() == "configure",
+                      aro.result.base.hasSuffix("-repository") else { continue }
+
+                if aro.result.specifiers.first == "scope" {
+                    guard let scope = valueText(of: aro) else { continue }
+                    found.append(Declaration(repository: aro.result.base,
+                                             scope: scope,
+                                             location: aro.span.start))
+                } else if aro.result.specifiers.isEmpty,
+                          let scope = mapField("scope", of: aro) {
+                    found.append(Declaration(repository: aro.result.base,
+                                             scope: scope,
+                                             location: aro.span.start))
+                }
             }
         }
         return found
     }
 
-    /// The `scope:` field of a `Declare … with { … }`.
+    /// The value of `Configure the <x: scope> with "session".`
+    private static func valueText(of statement: AROStatement) -> String? {
+        if case .literal(.string(let text)) = statement.valueSource { return text }
+        if case .expression(let expression) = statement.valueSource {
+            return text(of: expression)
+        }
+        if let with = statement.rangeModifiers.withClause { return text(of: with) }
+        // `with session` — a bare word is an identifier, so it parses as the
+        // object rather than as a value. Reading it here is what lets the
+        // check say "'session' is not a scope" rather than leaving the program
+        // to die at run time on "Undefined variable" (ARO-0094 §3.1.1).
+        if statement.object.noun.base != "_expression_",
+           statement.object.noun.base != "_literal_" {
+            return statement.object.noun.base
+        }
+        return nil
+    }
+
+    /// One field of a `Configure … with { … }` map.
     ///
     /// `with { … }` reaches the statement as an expression rather than a
     /// literal — the object clause is `with the <_expression_>` and the map is
     /// the value — so this reads the map node rather than `valueSource.asLiteral`.
-    private static func scopeText(of statement: AROStatement) -> String? {
+    private static func mapField(_ name: String, of statement: AROStatement) -> String? {
         let map: MapLiteralExpression?
         if case .expression(let expression) = statement.valueSource {
             map = expression as? MapLiteralExpression
@@ -71,21 +107,27 @@ public enum RepositoryScopeAnalyzer {
         } else {
             map = nil
         }
-        guard let entry = map?.entries.first(where: { $0.key == "scope" }) else { return nil }
+        guard let entry = map?.entries.first(where: { $0.key == name }) else { return nil }
+        return text(of: entry.value)
+    }
 
-        // `{ scope: "session" }`. A bare word is a *variable reference* in ARO
-        // (ARO-0094 §3.1.1), so it arrives as a VariableRefExpression and the
-        // program would fail at run time with "Undefined variable: session".
-        // Reporting the name here is what makes that a check-time diagnostic
-        // naming a scope rather than a runtime one naming a variable.
-        if let literal = entry.value as? LiteralExpression,
-           case .string(let text) = literal.value {
-            return text
+    /// An expression as the scope name it denotes.
+    ///
+    /// `"session"` is a string literal. A bare `session` is a *variable
+    /// reference* in ARO (ARO-0094 §3.1.1), so it arrives as a
+    /// `VariableRefExpression` and the program would fail at run time with
+    /// "Undefined variable: session". Reading the name here is what turns that
+    /// into a check-time diagnostic naming a scope rather than a runtime one
+    /// naming a variable.
+    private static func text(of expression: any Expression) -> String? {
+        if let literal = expression as? LiteralExpression,
+           case .string(let value) = literal.value {
+            return value
         }
-        if let reference = entry.value as? VariableRefExpression {
+        if let reference = expression as? VariableRefExpression {
             return reference.noun.base
         }
-        return entry.value.description
+        return expression.description
     }
 
     /// Reduce declarations to a lookup, reporting the ones that disagree.
@@ -113,7 +155,7 @@ public enum RepositoryScopeAnalyzer {
                     message: "\(declaration.repository) is declared \(existing)-scoped and "
                            + "\(declaration.scope)-scoped",
                     location: declaration.location,
-                    hints: ["One of the two Declare statements is wrong",
+                    hints: ["One of the two Configure statements is wrong",
                             "A repository has one scope for the whole application"]))
                 continue
             }
@@ -202,8 +244,8 @@ public enum RepositoryScopeAnalyzer {
 
             for statement in featureSet.statements {
                 guard let aro = statement as? AROStatement else { continue }
-                let verb = aro.action.verb.lowercased()
-                guard verb != "declare" else { continue }
+                // The statement that *sets* the scope is not a use of it.
+                guard aro.action.verb.lowercased() != "configure" else { continue }
 
                 // A repository appears as the object of a read and as the
                 // object of a write alike, and as the result of nothing, so
@@ -219,7 +261,7 @@ public enum RepositoryScopeAnalyzer {
                                + "can never have a session",
                         location: aro.span.start,
                         hints: ["\(featureSet.businessActivity) is not triggered by a caller",
-                                "Declare it application-scoped, or move this statement to a route"]))
+                                "Configure it application-scoped, or move this statement to a route"]))
 
                 case ("connection", .none):
                     diagnostics.add(Diagnostic(
@@ -228,7 +270,7 @@ public enum RepositoryScopeAnalyzer {
                                + "can never have a connection",
                         location: aro.span.start,
                         hints: ["\(featureSet.businessActivity) is not triggered by a connection",
-                                "Declare it application-scoped, or move this statement to a "
+                                "Configure it application-scoped, or move this statement to a "
                                 + "Socket or WebSocket Event Handler"]))
 
                 case ("connection", .sessionOnly):
@@ -238,7 +280,7 @@ public enum RepositoryScopeAnalyzer {
                                + "connection the program can see",
                         location: aro.span.start,
                         hints: ["HTTP callers are identified by session, not by connection",
-                                "Declare \(repository) with { scope: \"session\" }"]))
+                                "Configure the <\(repository): scope> with \"session\""]))
 
                 default:
                     // A socket handler touching a session repository is not an

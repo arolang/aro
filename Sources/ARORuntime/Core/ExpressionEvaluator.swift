@@ -303,6 +303,20 @@ public struct ExpressionEvaluator: Sendable {
         switch expr.op {
         // Arithmetic operators
         case .add:
+            // `+` on text names `++` (GitLab #851).
+            //
+            // ARO-0001 makes `++` the concatenation operator and `+` strictly
+            // arithmetic, and the language is right — but the diagnostic was
+            // "Cannot convert String to number", which describes the machine's
+            // difficulty rather than the author's mistake. Someone writing
+            // `"Hello, " + <name>` has not asked for a conversion; they have
+            // used the operator every other language spells this way. Naming
+            // `++` turns a puzzle into a correction.
+            if left is String || right is String {
+                throw ExpressionError.typeMismatch(
+                    "'+' adds numbers; use '++' to join text: "
+                    + "Compute the <greeting> from \"Hello, \" ++ <name>.")
+            }
             return try numericOperation(
                 left, right, symbol: "+",
                 intOp: { $0.addingReportingOverflow($1) },
@@ -373,9 +387,9 @@ public struct ExpressionEvaluator: Sendable {
 
         // Logical operators
         case .and:
-            return asBool(left) && asBool(right)
+            return try asBool(left, operator: "and") && asBool(right, operator: "and")
         case .or:
-            return asBool(left) || asBool(right)
+            return try asBool(left, operator: "or") || asBool(right, operator: "or")
 
         // Temporal comparison (Book ch. 42 §42.8, GitLab #516).
         // `compareValues` already orders dates — and ISO strings,
@@ -476,7 +490,7 @@ public struct ExpressionEvaluator: Sendable {
             if let d = operand as? Double { return -d }
             throw ExpressionError.typeMismatch("Cannot negate \(type(of: operand))")
         case .not:
-            return !asBool(operand)
+            return try !asBool(operand, operator: "not")
         }
     }
 
@@ -704,12 +718,26 @@ public struct ExpressionEvaluator: Sendable {
         throw ExpressionError.typeMismatch("Cannot convert \(type(of: value)) to number")
     }
 
-    private func asBool(_ value: any Sendable) -> Bool {
-        if let b = value as? Bool { return b }
-        if let i = value as? Int { return i != 0 }
-        if let s = value as? String { return !s.isEmpty }
-        if let array = value as? [any Sendable] { return !array.isEmpty }
-        return true // Non-nil values are truthy
+    /// An operand of `and` / `or` / `not`, as the boolean it must be.
+    ///
+    /// This was the fifth competing truthiness rule (GitLab #644): a
+    /// non-empty string or array was true and *anything unrecognised* was
+    /// true, so `when <user> and <admin>` was true for two records whatever
+    /// they contained, and `not <name>` was false for every name. ARO-0002
+    /// says conditions are boolean expressions; `Int` stays because 0/1 is
+    /// how a compiled binary carries one across the C ABI.
+    ///
+    /// Naming the operator matters here — the operand is usually a noun, and
+    /// the author needs to know which half of the condition the runtime could
+    /// not read.
+    private func asBool(_ value: any Sendable, operator op: String) throws -> Bool {
+        guard let b = AROTruthiness.strict(value) else {
+            throw ExpressionError.typeMismatch(
+                "'\(op)' needs a condition on each side, but was given "
+                + "\(type(of: value)). Compare it first: <count> > 0, "
+                + "<name> != \"\".")
+        }
+        return b
     }
 
     private func areEqual(_ left: any Sendable, _ right: any Sendable) -> Bool {
@@ -897,7 +925,14 @@ public enum ExpressionError: Error, CustomStringConvertible {
         case .typeMismatch(let msg):
             return "Type mismatch: \(msg)"
         case .indexOutOfBounds(let index, let count):
-            return "Index \(index) out of bounds (count: \(count))"
+            // Same wording as `ActionError.indexOutOfBounds` and the
+            // compiled bridge (GitLab #843) — one behaviour deserves one
+            // sentence, whichever of the three paths produced it.
+            if count == 0 {
+                return "index \(index) on an empty list"
+            }
+            return "index \(index) is past the end of a \(count)-element list "
+                + "(valid indices are 0 to \(count - 1))"
         case .unsupportedExpression(let type):
             return "Unsupported expression type: \(type)"
         }

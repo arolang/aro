@@ -5,7 +5,7 @@
 // ============================================================
 //
 // A repository is application-scoped, which is right for a catalogue and wrong
-// for a shopping cart. `Declare the <cart-repository> with { scope: session }.`
+// for a shopping cart. `Configure the <cart-repository: scope> with "session".`
 // says which, once, where the repository is declared — so no statement has to
 // restate it and none can disagree with the others.
 //

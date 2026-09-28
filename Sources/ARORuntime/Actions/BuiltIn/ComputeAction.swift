@@ -1686,8 +1686,19 @@ public struct ValidateAction: ActionImplementation {
             }
 
         default:
-            // Unknown rule - assume valid
-            isValid = true
+            // An unknown rule does not pass (GitLab #643).
+            //
+            // It used to set `isValid = true`, so `Validate the <ok: emial>
+            // for the <address>.` — a typo — reported success for every input.
+            // This is the same hole GitLab #486 closed for Compute
+            // qualifiers: an invented name that compiles, checks green and
+            // produces a confident wrong answer. A validation that always
+            // passes is worse than no validation, because the program reads
+            // as though it checked something.
+            throw ActionError.invalidInput(
+                "'\(ruleName)' is not a validation rule "
+                + "(\(knownRules.sorted().joined(separator: ", ")))",
+                received: ruleName)
         }
 
         return ValidationResult(isValid: isValid, rule: ruleName)
@@ -1760,17 +1771,28 @@ public struct CompareAction: ActionImplementation {
     }
 
     private func compare(_ lhs: Any, _ rhs: Any) -> ComparisonOutcome {
+        // Numbers before text, including numbers spelled as text.
+        //
+        // The string branch used to come first, so two operands that both
+        // *looked* like numbers were ordered lexicographically and
+        // `Compare the <r> from <"10"> against <"9">` answered `less`
+        // (GitLab #633). That is not an edge case: values read from a CSV, a
+        // query parameter, the environment or a `.store` file are strings, so
+        // the wrong answer was the common one, and it is silently wrong —
+        // a sort or a threshold check just comes out in the wrong order.
+        //
+        // Only when *both* sides parse as numbers. A number against a word
+        // still compares as text, which is the only sensible reading left.
+        if let lhsNum = asDouble(lhs), let rhsNum = asDouble(rhs) {
+            if lhsNum == rhsNum { return .equal }
+            if lhsNum < rhsNum { return .less }
+            return .greater
+        }
+
         // String comparison
         if let lhsStr = lhs as? String, let rhsStr = rhs as? String {
             if lhsStr == rhsStr { return .equal }
             if lhsStr < rhsStr { return .less }
-            return .greater
-        }
-
-        // Numeric comparison
-        if let lhsNum = asDouble(lhs), let rhsNum = asDouble(rhs) {
-            if lhsNum == rhsNum { return .equal }
-            if lhsNum < rhsNum { return .less }
             return .greater
         }
 
@@ -1858,8 +1880,16 @@ public struct TransformAction: ActionImplementation {
             return value
 
         default:
-            // value is already `any Sendable`
-            return value
+            // An unknown format is an error, not the identity (GitLab #643).
+            //
+            // `Transform the <x: jsn> from <y>.` used to return `<y>`
+            // unchanged and answer OK, so a typo became a silent no-op that
+            // `aro check` was happy with — and the program carried the
+            // untransformed value onward as though it had been converted.
+            throw ActionError.invalidInput(
+                "'\(transformType)' is not a Transform format "
+                + "(\(knownTransforms.sorted().joined(separator: ", ")))",
+                received: transformType)
         }
     }
 
@@ -2529,9 +2559,16 @@ public struct DeleteAction: ActionImplementation {
             return dict
         }
 
-        // Delete from array by index (0 = most recent element)
+        // Delete from array by index, counting from the front.
+        //
+        // This used to be `array.count - 1 - index`, so `Delete the <0> from
+        // <list>` removed the *last* element (GitLab #646). The doc comment
+        // said only "removes by index" and nothing else in the language counts
+        // backwards by default: ARO-0038's reverse indexing is a specifier on
+        // `Extract`, not a rule for every index everywhere. A program that
+        // deleted element 0 in a loop silently ate the list from the wrong end.
         if var array = source as? [any Sendable], let index = Int(keyToDelete), index >= 0, index < array.count {
-            array.remove(at: array.count - 1 - index)
+            array.remove(at: index)
             return array
         }
 

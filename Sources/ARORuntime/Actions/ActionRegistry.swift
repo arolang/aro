@@ -252,7 +252,31 @@ public final class ActionRegistry: @unchecked Sendable {
     /// Unregister an action by verb
     public func unregister(verb: String) {
         lock.lock(); defer { lock.unlock() }
-        actions.removeValue(forKey: verb.lowercased())
+        let key = verb.lowercased()
+        let removed = actions.removeValue(forKey: key)
+
+        // And from the overload table (GitLab #649).
+        //
+        // `resolveLocked` prefers `overloads[key]` whenever more than one type
+        // claims a verb, so removing only the `actions` entry left the verb
+        // resolvable through the overload list: after `unregister("clear")`,
+        // `Clear … from …` still reached `DeleteAction`, and a test that
+        // unregisters an action to assert it is gone was asserting nothing.
+        //
+        // Only the type being unregistered, not the whole key. A verb can have
+        // several legitimate claimants — that is what the table is for — and
+        // dropping the list wholesale unregisters actions nobody asked about.
+        // It also fails loudly in the shared-registry test process: three
+        // parity suites started reporting verbs missing from the grammar once
+        // a single blunt removal ran ahead of them.
+        if let removed, var claimants = overloads[key] {
+            claimants.removeAll { ObjectIdentifier($0) == ObjectIdentifier(removed) }
+            if claimants.isEmpty {
+                overloads.removeValue(forKey: key)
+            } else {
+                overloads[key] = claimants
+            }
+        }
     }
 
     /// Type alias for dynamic action handler

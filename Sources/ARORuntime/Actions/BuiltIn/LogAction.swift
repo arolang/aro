@@ -86,12 +86,32 @@ public struct LogAction: ActionImplementation {
                 // `raw` is an escaping directive for template output (#476), not a
                 // value transform — applying it would warn about an unknown qualifier.
                 if TemplateEscaping.isRawQualifier(specifier) { continue }
-                // Apply qualifier; skip on failure (qualifier may not apply to this type)
-                do {
-                    value = try context.container.qualifierRegistry.resolve(specifier, value: value)
-                } catch {
-                    FileHandle.standardError.write(Data("[LogAction] Warning: qualifier '\(specifier)' failed: \(error.localizedDescription)\n".utf8))
+                // A specifier that names nothing is an error (GitLab #648).
+                //
+                // This line used to be `value = try registry.resolve(...)`,
+                // and `resolve` returns an *optional* — nil meaning "not a
+                // plugin qualifier". Assigning that to an `any Sendable`
+                // boxes `Optional.none` rather than failing to compile, so
+                // every specifier the plugin registry did not know turned the
+                // value into nil and `Log the <user: name> to the <console>.`
+                // printed `nil`. The surrounding `catch` then wrote
+                // `[LogAction] Warning: …` to stderr for the *other* failure
+                // mode, which is the one place a program's output never
+                // shows.
+                //
+                // Resolution order is the expression evaluator's, so a
+                // qualified noun means the same thing in both places: plugin
+                // qualifier first, then the field it names, then an error
+                // naming the specifier.
+                if let transformed = try context.container.qualifierRegistry.resolve(specifier, value: value) {
+                    value = transformed
+                    continue
                 }
+                guard let record = value as? [String: any Sendable],
+                      let field = record[specifier] else {
+                    throw ActionError.propertyNotFound(property: specifier, on: result.base)
+                }
+                value = field
             }
             // Message from any variable type
             message = ResponseFormatter.formatValue(value, for: context.outputContext)
@@ -146,8 +166,16 @@ public struct LogAction: ActionImplementation {
         let formattedMessage: String
         switch context.outputContext {
         case .machine:
-            // JSON format for machine consumption
-            formattedMessage = "{\"level\":\"info\",\"source\":\"\(context.featureSetName)\",\"message\":\"\(message.replacingOccurrences(of: "\"", with: "\\\""))\"}"
+            // JSON, built by a JSON encoder (GitLab #641).
+            //
+            // Hand-escaping only `"` produced a line that was not JSON the
+            // moment a message contained a newline, a tab, a backslash or any
+            // control character — which log messages do, since they carry file
+            // contents and error text. The consumer of machine mode is a
+            // parser, so a line it cannot read is worse than no line: it
+            // usually takes the rest of the stream with it.
+            formattedMessage = Self.machineRecord(
+                source: context.featureSetName, message: message)
         case .human:
             // Readable format for CLI/console: the message, and nothing else.
             //
@@ -233,6 +261,29 @@ public struct LogAction: ActionImplementation {
             try FileHandle.standardOutput.write(contentsOf: data)
         }
     }
+
+    /// One machine-mode log record, encoded rather than interpolated.
+    ///
+    /// `JSONSerialization` handles the escapes a hand-rolled string cannot:
+    /// control characters, backslashes, and the newlines that appear whenever
+    /// a message carries file contents. `sortedKeys` keeps the field order
+    /// stable so the output diffs cleanly.
+    static func machineRecord(source: String, message: String) -> String {
+        let record: [String: String] = [
+            "level": "info",
+            "source": source,
+            "message": message
+        ]
+        guard let data = try? JSONSerialization.data(
+                  withJSONObject: record, options: [.sortedKeys]),
+              let text = String(data: data, encoding: .utf8) else {
+            // Unreachable for a dictionary of strings; if it ever happens,
+            // an empty message is better than a malformed record, because the
+            // consumer is a parser.
+            return "{\"level\":\"info\",\"source\":\"\",\"message\":\"\"}"
+        }
+        return text
+    }
 }
 
 /// Logging service protocol
@@ -249,4 +300,5 @@ public enum LogLevel: String, Sendable {
 public struct LogResult: Sendable, Equatable {
     public let message: String
     public let target: String
+
 }

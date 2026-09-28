@@ -105,6 +105,16 @@ public final class LLVMCodeGenerator {
     /// Stack of break target blocks for nested loops (top = innermost loop)
     private var breakBlockStack: [BasicBlock] = []
 
+    /// Whether the loop at the matching depth of `breakBlockStack` entered a
+    /// mutable scope that a `break` has to leave.
+    ///
+    /// Only `generateWhileLoop` enters one; for-each and range loops do not.
+    /// `generateBreakStatement` used to emit `exitMutableScope` unconditionally
+    /// (GitLab #664), so a `break` inside a for-each either popped an empty
+    /// scope stack or popped the *enclosing* while loop's scope — after which
+    /// that loop's rebinds were refused and its variables leaked outward.
+    private var breakEntersMutableScope: [Bool] = []
+
     // MARK: - Initialization
 
     public init() {}
@@ -871,8 +881,24 @@ public final class LLVMCodeGenerator {
         // defined in the array path. To satisfy LLVM dominance, we introduce a dedicated
         // `arrayEndBlock` that frees `collection` and then falls through to `endBlock`.
         // The stream path jumps directly to `endBlock` (no collection box to free).
+        //
+        // Not taken when the body contains a `Break` (GitLab #664). The
+        // streaming body is generated as its own LLVM function and handed to
+        // `aro_runtime_foreach_stream`, which returns `void` — so there is no
+        // channel to tell the driver to stop, and no way to branch to the
+        // loop's `endBlock` from inside another function. `Break` therefore
+        // hit an empty break-target stack and the whole build failed with
+        // "break used outside of loop", for a program `aro run` executes
+        // happily.
+        //
+        // The array path supports `Break` today, so choosing it when the body
+        // needs one is correct and costs only the O(1) memory property, for
+        // exactly the loops that cannot use it anyway. Giving the streaming
+        // body a stop signal means changing that C ABI, which is a bigger
+        // change than a bug fix should carry.
+        let bodyBreaks = containsBreakStatement(loop.body)
         var arrayEndBlock: BasicBlock? = nil
-        if source.specifiers.isEmpty {
+        if source.specifiers.isEmpty && !bodyBreaks {
             arrayEndBlock = ctx.module.appendBlock(named: "\(prefix)_aend", to: ctx.currentFunction!)
 
             let collVarName = ctx.stringConstant(source.base)
@@ -1031,6 +1057,7 @@ public final class LLVMCodeGenerator {
 
         // Push break target so inner BreakStatement knows where to jump
         breakBlockStack.append(endBlock)
+        breakEntersMutableScope.append(false)
 
         // Generate body statements
         for (stmtIndex, stmt) in loop.body.enumerated() {
@@ -1039,6 +1066,7 @@ public final class LLVMCodeGenerator {
 
         // Pop break target when leaving this loop
         breakBlockStack.removeLast()
+        breakEntersMutableScope.removeLast()
 
         // Branch to increment
         ctx.module.insertBr(to: incrBlock, at: ctx.insertionPoint)
@@ -1086,6 +1114,29 @@ public final class LLVMCodeGenerator {
     ///
     /// Creates a separate LLVM loop-body function and passes it to `aro_runtime_foreach_stream`,
     /// which drives iteration from within a Task while blocking the calling thread.
+    /// Whether a loop body contains a `Break`, at any nesting depth that still
+    /// belongs to *this* loop.
+    ///
+    /// A nested loop's own `Break` belongs to that loop, so `while` and
+    /// `for each` bodies are not descended into — only the branching forms
+    /// that a `Break` can sit inside without changing which loop it leaves.
+    private func containsBreakStatement(_ body: [any Statement]) -> Bool {
+        for statement in body {
+            if statement is BreakStatement { return true }
+            if let when = statement as? WhenStatement,
+               containsBreakStatement(when.body) { return true }
+            if let match = statement as? MatchStatement {
+                for caseClause in match.cases where containsBreakStatement(caseClause.body) {
+                    return true
+                }
+                if let otherwise = match.otherwise, containsBreakStatement(otherwise) {
+                    return true
+                }
+            }
+        }
+        return false
+    }
+
     private func generateStreamForEachLoop(
         _ loop: ForEachLoop,
         collectionName: String,
@@ -1305,6 +1356,7 @@ public final class LLVMCodeGenerator {
 
         // Push break target so inner BreakStatement knows where to jump
         breakBlockStack.append(endBlock)
+        breakEntersMutableScope.append(false)
 
         // Generate body statements.
         //
@@ -1323,6 +1375,7 @@ public final class LLVMCodeGenerator {
 
         // Pop break target when leaving this loop
         breakBlockStack.removeLast()
+        breakEntersMutableScope.removeLast()
 
         // Branch to increment
         ctx.module.insertBr(to: incrBlock, at: ctx.insertionPoint)
@@ -1377,6 +1430,7 @@ public final class LLVMCodeGenerator {
 
         // Push break target so inner BreakStatement knows where to jump
         breakBlockStack.append(endBlock)
+        breakEntersMutableScope.append(true)
 
         // Generate body statements
         for (stmtIndex, stmt) in loop.body.enumerated() {
@@ -1385,6 +1439,7 @@ public final class LLVMCodeGenerator {
 
         // Pop break target when leaving this loop
         breakBlockStack.removeLast()
+        breakEntersMutableScope.removeLast()
 
         // Loop back to condition (unless we already have a terminator)
         ctx.module.insertBr(to: condBlock, at: ctx.insertionPoint)
@@ -1409,12 +1464,15 @@ public final class LLVMCodeGenerator {
             return
         }
 
-        // Exit mutable scope before jumping out
-        _ = ctx.module.insertCall(
-            externals.exitMutableScope,
-            on: [ctx.currentContextVar!],
-            at: ctx.insertionPoint
-        )
+        // Leave the mutable scope only if this loop entered one (GitLab #664).
+        // A while loop does; for-each and range loops do not.
+        if breakEntersMutableScope.last == true {
+            _ = ctx.module.insertCall(
+                externals.exitMutableScope,
+                on: [ctx.currentContextVar!],
+                at: ctx.insertionPoint
+            )
+        }
 
         ctx.module.insertBr(to: breakBlock, at: ctx.insertionPoint)
 

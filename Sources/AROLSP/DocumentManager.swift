@@ -125,9 +125,35 @@ public final class DocumentManager: @unchecked Sendable {
     ///
     /// A closure rather than a stored registry, so the server owns the cache
     /// and its invalidation; the manager just asks at compile time.
-    nonisolated(unsafe) public var declaredActionsProvider: (@Sendable () -> UserActionRegistry?)?
+    /// Under `lock`, like every other mutable field here (GitLab #674).
+    ///
+    /// It was `nonisolated(unsafe)`, which is the annotation for state whose
+    /// safety you have reasoned about — and every *other* field of this class
+    /// goes through `lock` precisely because the LSP runs its handlers
+    /// concurrently. The server sets this during initialisation and
+    /// `compile` reads it on whichever thread a request arrives on, so the
+    /// write and the reads are on different threads and nothing ordered
+    /// them.
+    public var declaredActionsProvider: (@Sendable () -> UserActionRegistry?)? {
+        get {
+            lock.lock()
+            defer { lock.unlock() }
+            return _declaredActionsProvider
+        }
+        set {
+            lock.lock()
+            defer { lock.unlock() }
+            _declaredActionsProvider = newValue
+        }
+    }
+
+    private var _declaredActionsProvider: (@Sendable () -> UserActionRegistry?)?
 
     /// Compile `content` with whatever application context the server has.
+    ///
+    /// The provider is read out under the lock and *called* outside it: it
+    /// reaches into the server's own cache, and holding this manager's lock
+    /// across that is how two locks become a deadlock.
     private func compile(_ content: String) -> CompilationResult {
         if let declared = declaredActionsProvider?() {
             return Compiler().compile(content, declaredUserActions: declared)

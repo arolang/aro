@@ -1323,6 +1323,19 @@ public final class Parser {
             advance()
             try expectPreposition(.with, message: "'with' after '\(word)'")
             op = isStarts ? .startsWith : .endsWith
+        case .identifier(let word) where word.lowercased() == "before"
+                                      || word.lowercased() == "after":
+            // `where <deadline> before <now>` (GitLab #656).
+            //
+            // `WhereOperator.before` and `.after` have existed in the AST and
+            // been implemented in `WhereConditionEvaluator` the whole time —
+            // only this switch never accepted the words, so a documented date
+            // comparison died on "comparison operator … expected". CLAUDE.md
+            // lists them in the shared `when`/`where` operator table, which is
+            // the table this switch is supposed to be.
+            let isBefore = word.lowercased() == "before"
+            advance()
+            op = isBefore ? .before : .after
         case .not:
             advance()
             // Must be followed by 'in' for "not in"
@@ -1333,7 +1346,7 @@ public final class Parser {
                 throw ParserError.unexpectedToken(expected: "'in' after 'not' in where clause", got: peek())
             }
         default:
-            throw ParserError.unexpectedToken(expected: "comparison operator (is, =, <, >, <=, >=, !=, contains, matches, starts with, ends with, in, not in, between) after <\(field)> in where clause", got: peek())
+            throw ParserError.unexpectedToken(expected: "comparison operator (is, =, <, >, <=, >=, !=, contains, matches, starts with, ends with, before, after, in, not in, between) after <\(field)> in where clause", got: peek())
         }
 
         // Parse value expression — stops before and/or (see doc comment)
@@ -2504,16 +2517,25 @@ extension Parser {
         // Parse prefix (primary or unary)
         var left = try parsePrefix()
 
-        // Parse infix operators at or above minPrecedence
-        while let prec = infixPrecedence(peek()), prec > minPrecedence {
-            left = try parseInfix(left: left, precedence: prec)
-        }
-
-        // Handle postfix existence check: <expr> exists
-        if check(.exists) {
+        // Infix and postfix, interleaved.
+        //
+        // `exists` is postfix, and it used to be handled *after* the infix
+        // loop had finished — and then returned. So `<a> exists` parsed, and
+        // `<a> exists and <b> exists` stopped at the first one and left `and`
+        // for the caller, which reported "Expected '.', but got and"
+        // (GitLab #657). Postfix `exists` was usable only as the last token of
+        // an expression, which is not a rule anyone would guess and not one
+        // ARO-0002 states.
+        //
+        // Looping instead: consume infix operators, then a postfix `exists`,
+        // then go round again so an operator following the `exists` is seen.
+        while true {
+            while let prec = infixPrecedence(peek()), prec > minPrecedence {
+                left = try parseInfix(left: left, precedence: prec)
+            }
+            guard check(.exists) else { break }
             advance()
-            let span = left.span
-            left = ExistenceExpression(expression: left, span: span)
+            left = ExistenceExpression(expression: left, span: left.span)
         }
 
         return left

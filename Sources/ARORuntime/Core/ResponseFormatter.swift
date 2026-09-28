@@ -120,6 +120,23 @@ public struct ResponseFormatter: Sendable {
             return bool ? "true" : "false"
         case let response as Response:
             return "[\(response.status)] \(response.reason)"
+        case let dict as [String: any Sendable]:
+            // A record inside a collection (GitLab #822).
+            //
+            // There was no case for this, so `Group the <by-status> from the
+            // <orders> by "status".` printed each order as
+            // `["amount": 100, "id": 1, "status": "active"]` — Swift's
+            // `Dictionary` description, whose key order is unspecified and
+            // changes between runs. `Examples/GroupDemo`'s `expected.txt`
+            // asserts only the group keys for exactly that reason.
+            //
+            // Rendered inline with sorted keys rather than as the multi-line
+            // block a top-level record gets, because this one is an element
+            // of a list and the list needs to stay on its line.
+            let pairs = dict.keys.sorted().map { "\($0): \(formatSimpleValueForHuman(dict[$0]!))" }
+            return "{\(pairs.joined(separator: ", "))}"
+        case let array as [any Sendable]:
+            return "[\(array.map { formatSimpleValueForHuman($0) }.joined(separator: ", "))]"
         default:
             return String(describing: value)
         }

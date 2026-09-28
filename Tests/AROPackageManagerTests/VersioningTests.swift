@@ -6,6 +6,7 @@
 import Testing
 import Foundation
 @testable import AROPackageManager
+import AROVersion
 
 // MARK: - AROVersionChecker Tests
 
@@ -89,7 +90,7 @@ struct AROVersionCheckerTests {
 
     @Test("Caret: different major")
     func caretDifferentMajor() {
-        #expect(!AROVersionChecker.satisfies(version: "2.0.0", constraint: "^1.2.0"))
+        #expect(!AROVersionChecker.runningVersionSatisfies("2.0.0", constraint: "^1.2.0"))
     }
 
     // MARK: Tilde (~) constraints
@@ -387,5 +388,50 @@ struct VersionCheckResultTests {
         let pm = PackageManager(applicationDirectory: appDir)
         let results = try pm.checkAROVersionCompatibility(currentAROVersion: "1.0.0")
         #expect(results.allSatisfy { $0.isCompatible })
+    }
+}
+
+// MARK: - One checker, and the dev build (GitLab #883)
+
+@Suite("aro-version is checked, once (GitLab #883)")
+struct AROVersionSingleCheckerTests {
+
+    @Test("A development build satisfies every constraint")
+    func devBuildsSatisfyEverything() {
+        // `AROVersion.version` is the literal "dev" for any un-stamped local
+        // build — the release pipeline overwrites it with the tag — and "dev"
+        // parses to no semver components, so every `>=` against it was false.
+        // `aro add` refused *every* plugin declaring an `aro-version` on a
+        // developer's machine, saying it needed a version of ARO they were
+        // arguably already past.
+        #expect(AROVersionChecker.runningVersionSatisfies("dev", constraint: ">=0.1.0"))
+        #expect(AROVersionChecker.runningVersionSatisfies("dev", constraint: "^2.0.0"))
+        #expect(AROVersionChecker.runningVersionSatisfies("a1b2c3d", constraint: ">=99.0.0"))
+    }
+
+    @Test("A real version is still compared")
+    func realVersionsAreStillChecked() {
+        // The dev-build rule must not swallow the check it exists beside.
+        #expect(AROVersionChecker.runningVersionSatisfies("1.3.0", constraint: ">=1.0.0"))
+        #expect(!AROVersionChecker.runningVersionSatisfies("0.9.0", constraint: ">=1.0.0"))
+        #expect(!AROVersionChecker.runningVersionSatisfies("2.0.0", constraint: "^1.2.0"))
+        #expect(AROVersionChecker.runningVersionSatisfies("v1.2.5-dirty", constraint: "~1.2.0"))
+    }
+
+    @Test("A branch ref still has to match itself")
+    func branchRefsAreNotDevBuilds() {
+        // `DependencyResolver` asks a different question with the same
+        // machinery: there a non-semver string is a `ref:` — a branch or a
+        // pre-release tag — and `main` must satisfy `main` and nothing else.
+        // That is why the development-build rule lives in
+        // `runningVersionSatisfies` rather than in `satisfies`.
+        #expect(AROVersionChecker.satisfies(version: "main", constraint: "main"))
+        #expect(!AROVersionChecker.satisfies(version: "main", constraint: "develop"))
+        #expect(AROVersionChecker.satisfies(version: "1.0.0-beta", constraint: "1.0.0-beta"))
+    }
+
+    @Test("An empty version is a development build, not version zero")
+    func emptyIsNotZero() {
+        #expect(AROVersionChecker.runningVersionSatisfies("", constraint: ">=1.0.0"))
     }
 }

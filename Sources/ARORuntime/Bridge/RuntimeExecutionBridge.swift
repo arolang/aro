@@ -736,8 +736,21 @@ private func memberValue(_ name: String, of base: any Sendable) -> any Sendable 
 private func subscriptValue(_ index: any Sendable, of base: any Sendable) -> any Sendable {
     if let array = base as? [any Sendable], let i = index as? Int {
         if i >= 0 && i < array.count { return array[array.count - 1 - i] }
-        FileHandle.standardError.write(Data("[RuntimeBridge] Warning: index \(i) out of bounds for \(array.count) elements\n".utf8))
-        return ""
+        // Out of bounds fails, in both modes (GitLab #843).
+        //
+        // This wrote `[RuntimeBridge] Warning: …` to stderr and returned
+        // `""`, while the interpreter threw `ExpressionError.indexOutOfBounds`
+        // for the same expression — so `<items>[99]` aborted under `aro run`
+        // and carried an empty string onward under `aro build`. That is the
+        // parity class `CompiledBinaryOperatorParityTests` exists to catch.
+        //
+        // Terminating rather than throwing for the same reason
+        // `aroArithmeticFailure` does: the JSON evaluator is non-throwing all
+        // the way down the C ABI, so there is no channel to raise a catchable
+        // error on. Making it catchable here is GitLab #472.
+        aroCompiledFailure(
+            "index \(i) is past the end of a \(array.count)-element list"
+            + (array.isEmpty ? "" : " (valid indices are 0 to \(array.count - 1))"))
     }
     if let dict = base as? [String: any Sendable], let key = index as? String {
         if let value = dict[key] { return value }
@@ -1124,6 +1137,13 @@ private func stringValue(_ value: any Sendable) -> String {
 /// Making this catchable in compiled mode means threading `throws` through the
 /// JSON evaluator — tracked separately, see GitLab #472.
 private func aroArithmeticFailure(_ message: String) -> Never {
+    aroCompiledFailure(message)
+}
+
+/// The same unrecoverable exit, for the non-arithmetic cases that share the
+/// reason: `evaluateExpressionJSON` cannot throw, so a compiled binary has no
+/// catchable channel for a failure the interpreter raises (GitLab #472).
+private func aroCompiledFailure(_ message: String) -> Never {
     FileHandle.standardError.write(Data("Runtime Error: \(message)\n".utf8))
     exit(1)
 }

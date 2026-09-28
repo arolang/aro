@@ -55,9 +55,28 @@ extension ExecutionEngine {
         for analyzedFS in socketHandlers {
             let featureSetName = analyzedFS.featureSet.name
             let lowercaseName = featureSetName.lowercased()
-            // Determine which event type this handler should respond to.
-            // Check "disconnect" before "connect" since "disconnect" contains "connect".
-            if lowercaseName.contains("disconnect") {
+            // Which event does this handler want?
+            //
+            // The same hole File handlers had (GitLab #570, #571, fixed below):
+            // a name matching none of the keywords fell off the end of the
+            // chain and subscribed to *nothing*. `(Echo Input: Socket Event
+            // Handler)` compiled, passed `aro check`, and never ran, with no
+            // output at any log level to say so (GitLab #632).
+            //
+            // "disconnect" is tested before "connect" because it contains it —
+            // but that ordering also meant `(Log Connection Data: …)` bound
+            // only to connect and never saw a packet. Each keyword is now
+            // independent, and a name with none of them subscribes to all
+            // three: that is what such a name asks for, and it cannot break a
+            // working program, because the alternative was firing never.
+            let wantsDisconnect = lowercaseName.contains("disconnect")
+            let wantsConnect = lowercaseName.contains("connect") && !wantsDisconnect
+            let wantsData = lowercaseName.contains("data")
+                || lowercaseName.contains("message")
+                || lowercaseName.contains("received")
+            let named = wantsDisconnect || wantsConnect || wantsData
+
+            if wantsDisconnect || !named {
                 // Subscribe to ClientDisconnectedEvent
                 // Matches: "Handle Client Disconnected", "Handle Socket Disconnect", etc.
                 eventBus.subscribe(to: ClientDisconnectedEvent.self) { [weak self] event in
@@ -75,7 +94,8 @@ extension ExecutionEngine {
                         ]
                     )
                 }
-            } else if lowercaseName.contains("connect") {
+            }
+            if wantsConnect || !named {
                 // Subscribe to ClientConnectedEvent
                 // Matches: "Handle Client Connected", "Handle Socket Connect", etc.
                 eventBus.subscribe(to: ClientConnectedEvent.self) { [weak self] event in
@@ -93,7 +113,8 @@ extension ExecutionEngine {
                         ]
                     )
                 }
-            } else if lowercaseName.contains("data") || lowercaseName.contains("message") || lowercaseName.contains("received") {
+            }
+            if wantsData || !named {
                 // Subscribe to DataReceivedEvent
                 // Matches: "Handle Data Received", "Handle Socket Message", etc.
                 eventBus.subscribe(to: DataReceivedEvent.self) { [weak self] event in
@@ -184,8 +205,15 @@ extension ExecutionEngine {
             let featureSetName = analyzedFS.featureSet.name
             let lowercaseName = featureSetName.lowercased()
 
-            // Determine which event type this handler should respond to
-            if lowercaseName.contains("message") {
+            // Which event does this handler want? Same rule as sockets above
+            // (GitLab #632): a name with no keyword subscribes to all three
+            // rather than to nothing.
+            let wantsDisconnect = lowercaseName.contains("disconnect")
+            let wantsConnect = lowercaseName.contains("connect") && !wantsDisconnect
+            let wantsMessage = lowercaseName.contains("message")
+            let named = wantsDisconnect || wantsConnect || wantsMessage
+
+            if wantsMessage || !named {
                 // Subscribe to WebSocketMessageEvent
                 eventBus.subscribe(to: WebSocketMessageEvent.self) { [weak self] event in
                     guard let self = self else { return }
@@ -202,7 +230,8 @@ extension ExecutionEngine {
                         ]
                     )
                 }
-            } else if lowercaseName.contains("connect") && !lowercaseName.contains("disconnect") {
+            }
+            if wantsConnect || !named {
                 // Subscribe to WebSocketConnectedEvent
                 eventBus.subscribe(to: WebSocketConnectedEvent.self) { [weak self] event in
                     guard let self = self else { return }
@@ -220,7 +249,8 @@ extension ExecutionEngine {
                         ]
                     )
                 }
-            } else if lowercaseName.contains("disconnect") {
+            }
+            if wantsDisconnect || !named {
                 // Subscribe to WebSocketDisconnectedEvent
                 eventBus.subscribe(to: WebSocketDisconnectedEvent.self) { [weak self] event in
                     guard let self = self else { return }
@@ -440,13 +470,20 @@ extension ExecutionEngine {
                 let evaluator = ExpressionEvaluator()
                 do {
                     let result = try await evaluator.evaluate(condition, context: handlerContext)
-                    let passes: Bool
-                    if let b = result as? Bool { passes = b }
-                    else if let i = result as? Int { passes = i != 0 }
-                    else { passes = false }
-                    guard passes else { return false }
+                    // One rule, shared with statement and match guards
+                    // (GitLab #644). ARO-0002: "Conditions must be boolean
+                    // expressions".
+                    guard FeatureSetExecutor.strictBool(result) == true else { return false }
                 } catch {
-                    return false // Skip handler silently if condition evaluation fails
+                    // Not silently (GitLab #644). A guard that cannot be
+                    // evaluated — a misspelt field in
+                    // `(H: X Handler) when <evnt: kind> = "a"`, say — made the
+                    // handler never fire, with no diagnostic at any log level.
+                    // The program looked like it had no handler for that event,
+                    // which is the hardest kind of bug to find because there is
+                    // nothing to search for.
+                    FeatureSetExecutor.reportGuardFailure(analyzedFS.featureSet.name, error, kind: "handler", bus: eventBus)
+                    return false
                 }
             }
 
@@ -564,6 +601,7 @@ extension ExecutionEngine {
             // Subscribe to RepositoryChangedEvent and filter by repositoryName and guards
             // CRITICAL: Capture values to avoid actor reentrancy deadlock
             let deps = handlerDependencies
+            let capturedBus = eventBus
 
             // Capture the feature-set-level when condition for evaluation
             let whenCondition = analyzedFS.featureSet.whenCondition
@@ -592,20 +630,15 @@ extension ExecutionEngine {
                     let evaluator = ExpressionEvaluator()
                     do {
                         let conditionResult = try await evaluator.evaluate(condition, context: evalContext)
-                        // Convert condition result to boolean
-                        let isTrue: Bool
-                        if let b = conditionResult as? Bool {
-                            isTrue = b
-                        } else if let i = conditionResult as? Int {
-                            isTrue = i != 0
-                        } else {
-                            isTrue = false
-                        }
-                        guard isTrue else {
+                        // Same rule as every other guard (GitLab #644).
+                        guard FeatureSetExecutor.strictBool(conditionResult) == true else {
                             return  // Condition is false - skip this observer
                         }
                     } catch {
-                        // Log error but skip observer silently on evaluation failure
+                        // The comment said "log error" and then did not
+                        // (GitLab #644); an observer whose guard failed simply
+                        // stopped existing.
+                        FeatureSetExecutor.reportGuardFailure(analyzedFS.featureSet.name, error, kind: "observer", bus: capturedBus)
                         return
                     }
                 }

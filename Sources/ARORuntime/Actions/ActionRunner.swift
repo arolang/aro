@@ -505,12 +505,32 @@ extension ActionRunner {
                 // Unregister when task completes
                 context.eventBus?.unregisterPendingHandler()
             }
-            _ = try? await self.executeAsync(
-                verb: verb,
-                result: result,
-                object: object,
-                context: context
-            )
+            do {
+                _ = try await self.executeAsync(
+                    verb: verb,
+                    result: result,
+                    object: object,
+                    context: context
+                )
+            } catch {
+                // Fire-and-forget means nobody is waiting for the result, not
+                // that the result does not matter (GitLab #650). This was a
+                // bare `try?` with no justifying comment, so an `Emit` whose
+                // handler threw inside a compiled binary vanished: no output,
+                // no non-zero exit, no trace. CLAUDE.md requires every `try?`
+                // to say why the fallback is acceptable, and here it was not.
+                //
+                // Reported as a recoverable error event, the same shape the
+                // interpreter's handler path uses, so a program can observe it
+                // and `aro run` can say something happened.
+                context.eventBus?.publish(ErrorOccurredEvent(
+                    error: String(describing: error),
+                    context: "\(verb) (fire-and-forget)",
+                    recoverable: true
+                ))
+                FileHandle.standardError.write(Data((
+                    "[ARO] Fire-and-forget \(verb) failed: \(error)\n").utf8))
+            }
         }
     }
 

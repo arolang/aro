@@ -97,19 +97,18 @@ public enum ActionRoleCatalog {
     /// about, and it is deliberately *not* derived from the role — an effect
     /// verb can be RESPONSE (`Return`, `Log`) or EXPORT (`Emit`, `Publish`),
     /// and the two questions are not the same one.
-    /// `declare` and `attach` (ARO-0094) are here for the same reason the rest
-    /// are, and the reason is worth stating because they do not look like
-    /// output verbs. `Declare the <cart-repository> with { scope: "session" }.`
-    /// takes its argument as an expression, so without this the fast path binds
-    /// the map to `<cart-repository>` and never runs the action — the scope is
-    /// never registered, and every statement that depends on it silently reads
-    /// the application-wide repository instead. The value the statement
-    /// produces is beside the point; registering the scope is the statement.
+    /// `attach` (ARO-0094) is here for the same reason the rest are, and the
+    /// reason is worth stating because it does not look like an output verb.
+    /// `Attach the <session> to the <caller>.` takes its argument as an
+    /// expression, so without this the executor's fast path binds the value and
+    /// never runs the action — nobody is attached to anything, and nothing
+    /// fails. `configure` is here too, and carries repository scope since
+    /// GitLab #886 folded `Declare` into it.
     public static let mustRunForEffect: Set<String> = [
         "return", "throw", "send", "emit", "respond", "output", "write",
         "store", "save", "persist", "log", "print", "debug", "notify",
         "alert", "signal", "broadcast", "render", "repaint", "patch",
-        "declare", "attach",
+        "attach",
     ]
 
     /// Whether `verb`'s statement must run for its effect (see

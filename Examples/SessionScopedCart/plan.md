@@ -10,8 +10,8 @@ a catalogue and wrong for a cart. ARO-0094 adds a **scope**, declared once where
 the repository is declared:
 
 ```aro
-Declare the <catalogue-repository> with { scope: "application" }.
-Declare the <cart-repository>      with { scope: "session" }.
+Configure the <catalogue-repository: scope> with "application".
+Configure the <cart-repository: scope>      with "session".
 ```
 
 Nothing below restates it. `Store the <item> into the <cart-repository>.` is the
@@ -64,11 +64,16 @@ POST /logout                    → 200
 GET  /cart                      → 401                ← the session is gone, and so is the cart
 ```
 
-## Why it does not run in the integration harness
+## How it is tested
 
-Driving this means being the same caller twice, and the harness's HTTP client
-keeps cookies only when `HTTP::CookieJar` is installed. Without them every
-request is a fresh caller — so an empty cart and a broken feature look
-identical, and a green run would mean nothing. The executor picks the jar up
-automatically when the module is present; until then the scoping itself is
-covered by `CallerScopedStorageTests` and `SessionServiceTests`.
+Driving this means being the same caller twice, so the harness keeps a cookie
+jar (`HTTP::CookieJar`, installed by the CI image). The run goes
+`POST /login` → `GET /catalogue` → `POST /cart` → `GET /cart` → `POST /logout`,
+and the assertion that matters is the fourth: `GET /cart` returns the item the
+*previous* request stored. Without a session that read comes back empty, which
+is exactly what a broken caller scope looks like.
+
+Authentication runs first because `get_operation_order` puts `login` in the
+setup group and `logout` in cleanup — a protected route driven before anything
+issues a cookie fails in a way that looks like the feature is broken rather
+than like the test is out of order.
