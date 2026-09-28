@@ -1,7 +1,7 @@
 <idea-plugin>
     <id>com.arolang.aro</id>
     <name>ARO Language</name>
-    <version>1.4.5</version>
+    <version>1.4.6</version>
     <vendor email="team@arolang.org" url="https://arolang.github.io/aro/">ARO Team</vendor>
 
     <description><![CDATA[
@@ -32,6 +32,11 @@
     ]]></description>
 
     <change-notes><![CDATA[
+        <h3>1.4.6</h3>
+        <ul>
+            <li>Merge remote-tracking branch 'origin/main' into refactor/886-fold-declare-configure</li>
+            <li>refactor: fold Declare into Configure (#886)</li>
+        </ul>
         <h3>1.4.5</h3>
         <ul>
             <li>feat(runtime): caller-scoped repositories actually resolve a caller (ARO-0094)</li>
