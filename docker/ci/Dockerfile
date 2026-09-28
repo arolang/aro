@@ -62,8 +62,15 @@ RUN apt-get update -qq \
 
 # LLVM 20 from apt.llvm.org — the reason the jobs each contacted a third-party
 # host. Done once, here.
-RUN wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key \
-      | gpg --dearmor -o /usr/share/keyrings/llvm-archive-keyring.gpg \
+RUN ( for attempt in 1 2 3 4 5; do \
+        wget -nv -O /tmp/llvm.key --tries=3 --timeout=30 --retry-connrefused \
+             https://apt.llvm.org/llvm-snapshot.gpg.key && [ -s /tmp/llvm.key ] && exit 0; \
+        echo "LLVM signing key fetch failed (attempt $attempt of 5); retrying"; \
+        sleep 10; \
+      done; \
+      echo "could not fetch https://apt.llvm.org/llvm-snapshot.gpg.key"; exit 1 ) \
+    && gpg --dearmor -o /usr/share/keyrings/llvm-archive-keyring.gpg < /tmp/llvm.key \
+    && rm -f /tmp/llvm.key \
     && echo "deb [signed-by=/usr/share/keyrings/llvm-archive-keyring.gpg] http://apt.llvm.org/jammy/ llvm-toolchain-jammy-20 main" \
       > /etc/apt/sources.list.d/llvm.list \
     && apt-get update -qq \
