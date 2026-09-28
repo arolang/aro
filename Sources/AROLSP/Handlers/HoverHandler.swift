@@ -59,74 +59,31 @@ public struct HoverHandler: Sendable {
         analyzed: AnalyzedFeatureSet,
         lines: LineIndex
     ) -> [String: Any]? {
-        for statement in statements {
-            if let aro = statement as? AROStatement {
-                if aro.span.contains(position) {
-                    if aro.action.span.contains(position) {
-                        let hoverContent = formatActionHover(aro.action, statement: aro, featureSet: featureSet, analyzed: analyzed)
-                        return createHoverResponse(hoverContent, lines: lines, range: aro.action.span)
-                    }
-                    if aro.result.span.contains(position) {
-                        let symbol = analyzed.symbolTable.lookup(aro.result.base)
-                        let hoverContent = formatVariableHover(
-                            aro.result.base, symbol: symbol, isResult: true,
-                            statement: aro, featureSet: featureSet, analyzed: analyzed
-                        )
-                        return createHoverResponse(hoverContent, lines: lines, range: aro.result.span)
-                    }
-                    if aro.object.noun.span.contains(position) {
-                        let objectName = aro.object.noun.base
-                        let symbol = analyzed.symbolTable.lookup(objectName)
-                        let hoverContent = formatVariableHover(
-                            objectName, symbol: symbol, isResult: false,
-                            statement: aro, featureSet: featureSet, analyzed: analyzed
-                        )
-                        return createHoverResponse(hoverContent, lines: lines, range: aro.object.noun.span)
-                    }
+        // GitLab #723: hovering a name inside `when { … }` used to produce
+        // nothing, because the chain this replaces descended into loops and
+        // match cases only. The walker owns that decision now.
+        for aro in AROStatementWalk.flatten(statements) {
+            if aro.span.contains(position) {
+                if aro.action.span.contains(position) {
+                    let hoverContent = formatActionHover(aro.action, statement: aro, featureSet: featureSet, analyzed: analyzed)
+                    return createHoverResponse(hoverContent, lines: lines, range: aro.action.span)
                 }
-            } else if let forEachLoop = statement as? ForEachLoop {
-                if let hover = findHoverInStatements(forEachLoop.body, position: position, featureSet: featureSet, analyzed: analyzed, lines: lines) {
-                    return hover
+                if aro.result.span.contains(position) {
+                    let symbol = analyzed.symbolTable.lookup(aro.result.base)
+                    let hoverContent = formatVariableHover(
+                        aro.result.base, symbol: symbol, isResult: true,
+                        statement: aro, featureSet: featureSet, analyzed: analyzed
+                    )
+                    return createHoverResponse(hoverContent, lines: lines, range: aro.result.span)
                 }
-            } else if let rangeLoop = statement as? RangeLoop {
-                if let hover = findHoverInStatements(rangeLoop.body, position: position, featureSet: featureSet, analyzed: analyzed, lines: lines) {
-                    return hover
-                }
-            } else if let whileLoop = statement as? WhileLoop {
-                if let hover = findHoverInStatements(whileLoop.body, position: position, featureSet: featureSet, analyzed: analyzed, lines: lines) {
-                    return hover
-                }
-            } else if let matchStmt = statement as? MatchStatement {
-                for caseClause in matchStmt.cases {
-                    if let hover = findHoverInStatements(caseClause.body, position: position, featureSet: featureSet, analyzed: analyzed, lines: lines) {
-                        return hover
-                    }
-                }
-            } else if let pipeline = statement as? PipelineStatement {
-                for stage in pipeline.stages {
-                    if stage.span.contains(position) {
-                        if stage.action.span.contains(position) {
-                            let hoverContent = formatActionHover(stage.action, statement: stage, featureSet: featureSet, analyzed: analyzed)
-                            return createHoverResponse(hoverContent, lines: lines, range: stage.action.span)
-                        }
-                        if stage.result.span.contains(position) {
-                            let symbol = analyzed.symbolTable.lookup(stage.result.base)
-                            let hoverContent = formatVariableHover(
-                                stage.result.base, symbol: symbol, isResult: true,
-                                statement: stage, featureSet: featureSet, analyzed: analyzed
-                            )
-                            return createHoverResponse(hoverContent, lines: lines, range: stage.result.span)
-                        }
-                        if stage.object.noun.span.contains(position) {
-                            let objectName = stage.object.noun.base
-                            let symbol = analyzed.symbolTable.lookup(objectName)
-                            let hoverContent = formatVariableHover(
-                                objectName, symbol: symbol, isResult: false,
-                                statement: stage, featureSet: featureSet, analyzed: analyzed
-                            )
-                            return createHoverResponse(hoverContent, lines: lines, range: stage.object.noun.span)
-                        }
-                    }
+                if aro.object.noun.span.contains(position) {
+                    let objectName = aro.object.noun.base
+                    let symbol = analyzed.symbolTable.lookup(objectName)
+                    let hoverContent = formatVariableHover(
+                        objectName, symbol: symbol, isResult: false,
+                        statement: aro, featureSet: featureSet, analyzed: analyzed
+                    )
+                    return createHoverResponse(hoverContent, lines: lines, range: aro.object.noun.span)
                 }
             }
         }

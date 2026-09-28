@@ -91,12 +91,14 @@ public struct EventAnalyzer {
         // Collect all emitted events and check for orphans.
         //
         // #339: consume the cached flattened statement walk built during
-        // data-flow analysis instead of re-traversing the tree. Filtering the
-        // cache for `emit` verbs yields the identical (eventType, location)
-        // sequence `findEmittedEventsWithLocations` would produce — the cache is
-        // every AROStatement in the same source order — so diagnostics are
-        // unchanged. Feature sets analyzed without the cache (empty list) fall
-        // back to a fresh walk to preserve behaviour for any external caller.
+        // data-flow analysis instead of re-traversing the tree. Feature sets
+        // analyzed without the cache (empty list) fall back to a fresh walk.
+        //
+        // The two really are the same sequence now. The cache is
+        // `AROStatementWalk.flatten`, and the fallback used to be a private
+        // visitor that stopped at while loops, range loops and pipelines — so
+        // an `Emit` inside a `while` body was an orphan-event warning or not
+        // depending on which caller asked (GitLab #723). Both are the walker.
         for analyzed in featureSets {
             let emittedEvents: [(String, SourceLocation)]
             if !analyzed.flattenedAROStatements.isEmpty {
@@ -126,59 +128,8 @@ public struct EventAnalyzer {
 
     /// Finds all emitted events with their source locations
     public static func findEmittedEventsWithLocations(in statements: [Statement]) -> [(String, SourceLocation)] {
-        let collector = EmittedEventLocationCollector()
-        for statement in statements {
-            statement.accept(collector)
-        }
-        return collector.events
-    }
-
-    /// Collects `(eventName, location)` for each `Emit` action, descending into
-    /// match cases/otherwise and for-each bodies in source order. Replaces the
-    /// old three-way `as?`-chain (#434) with `StatementVisitor` dispatch;
-    /// statement kinds the chain ignored — including while / range loop bodies,
-    /// which it never traversed — collect nothing here, preserving the original
-    /// behaviour and ordering exactly.
-    private final class EmittedEventLocationCollector: StatementVisitor {
-        typealias Result = Void
-        var events: [(String, SourceLocation)] = []
-
-        func visit(_ node: AROStatement) {
-            if node.action.verb.lowercased() == "emit" {
-                events.append((node.result.base, node.span.start))
-            }
-        }
-
-        func visit(_ node: WhenStatement) {
-            for bodyStatement in node.body { bodyStatement.accept(self) }
-        }
-
-        func visit(_ node: MatchStatement) {
-            for caseClause in node.cases {
-                for bodyStatement in caseClause.body {
-                    bodyStatement.accept(self)
-                }
-            }
-            if let otherwise = node.otherwise {
-                for bodyStatement in otherwise {
-                    bodyStatement.accept(self)
-                }
-            }
-        }
-
-        func visit(_ node: ForEachLoop) {
-            for bodyStatement in node.body {
-                bodyStatement.accept(self)
-            }
-        }
-
-        // Nodes the original chain matched no case for — no emitted events.
-        func visit(_ node: PublishStatement) {}
-        func visit(_ node: RequireStatement) {}
-        func visit(_ node: WhileLoop) {}
-        func visit(_ node: BreakStatement) {}
-        func visit(_ node: RangeLoop) {}
-        func visit(_ node: PipelineStatement) {}
-        func visit(_ node: ErrorStatement) {}
+        AROStatementWalk.flatten(statements)
+            .filter { $0.action.verb.lowercased() == "emit" }
+            .map { ($0.result.base, $0.span.start) }
     }
 }

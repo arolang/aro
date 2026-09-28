@@ -163,12 +163,12 @@ public final class DocumentManager: @unchecked Sendable {
 
     // MARK: - Document Operations
 
-    // All public mutation / query methods now go through `lock`
+    // All public mutation / query methods go through `lock`
     // (#356 unification). The previous "non-Sync" variants
     // omitted the lock entirely — a real race when the LSP runs
-    // multi-threaded request dispatch. The "Sync" variants
-    // remain as thin forwarders so existing callers don't have
-    // to migrate in this MR.
+    // multi-threaded request dispatch. The "Sync" forwarders that
+    // survived that unification are gone with the transport that
+    // needed the distinction (GitLab #736).
 
     /// Open a document. Compiles **synchronously** — first diagnostics
     /// should not wait for a keystroke.
@@ -355,38 +355,6 @@ public final class DocumentManager: @unchecked Sendable {
     public func isOpen(uri: DocumentUri) -> Bool {
         lock.lock(); defer { lock.unlock() }
         return documents[uri] != nil
-    }
-
-    // MARK: - Legacy "Sync" Aliases (#356)
-    //
-    // Pre-unification the *Sync variants were the only
-    // thread-safe ones. The main methods above now take the
-    // lock too, so these are thin forwarders kept around for
-    // source compatibility. Migrate call sites to the plain
-    // names in follow-ups.
-
-    public func openSync(uri: DocumentUri, content: String, version: Int) -> DocumentState {
-        open(uri: uri, content: content, version: version)
-    }
-
-    public func applyChangesSync(
-        uri: DocumentUri,
-        changes: [TextDocumentContentChangeEvent],
-        version: Int
-    ) -> DocumentState? {
-        applyChanges(uri: uri, changes: changes, version: version)
-    }
-
-    public func closeSync(uri: DocumentUri) {
-        close(uri: uri)
-    }
-
-    public func getSync(uri: DocumentUri) -> DocumentState? {
-        get(uri: uri)
-    }
-
-    public func allSync() -> [DocumentUri: DocumentState] {
-        all()
     }
 }
 

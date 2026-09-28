@@ -1313,7 +1313,11 @@ public struct DataFlowAnalyzer {
     ///
     /// Module-internal so other analyses that meet a bare expression — the
     /// for-each collection slot in `BodyMaterializationAnalyzer`, GitLab #519 —
-    /// read variables the same way rather than growing a second walker.
+    /// read variables the same way rather than growing a second walker. One
+    /// had grown anyway: `VariableNameCollector` in `BodyMaterialization.swift`
+    /// was this visitor transcribed, node for node, and is gone (GitLab #723).
+    /// This is the module's only answer to "which names does this expression
+    /// mention?".
     static func variables(in expression: any Expression) -> Set<String> {
         expression.accept(VariableCollector())
     }

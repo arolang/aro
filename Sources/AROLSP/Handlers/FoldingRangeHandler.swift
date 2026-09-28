@@ -33,60 +33,29 @@ public struct FoldingRangeHandler: Sendable {
                 ))
             }
 
-            // Add folding ranges for match statements
-            for statement in fs.statements {
+            // Every block that spans more than one line can be collapsed,
+            // wherever it was written. This used to look at the feature
+            // set's top-level statements only, and at four node types by
+            // name — so a `when { … }` block folded nowhere, and a loop
+            // inside a loop folded nowhere either. `flattenAll` yields the
+            // containers, which is exactly what a folding range is about
+            // (GitLab #723).
+            for statement in AROStatementWalk.flattenAll(fs.statements) {
                 if let matchStmt = statement as? MatchStatement {
-                    if matchStmt.span.start.line < matchStmt.span.end.line {
-                        ranges.append(createFoldingRange(
-                            startLine: matchStmt.span.start.line - 1,
-                            endLine: matchStmt.span.end.line - 1,
-                            kind: "region"
-                        ))
-                    }
-
-                    // Add folding for each case clause
+                    append(span: matchStmt.span, to: &ranges)
+                    // A case clause is not a `Statement`, so the walker does
+                    // not reach it — each arm folds on its own.
                     for caseClause in matchStmt.cases {
-                        if caseClause.span.start.line < caseClause.span.end.line {
-                            ranges.append(createFoldingRange(
-                                startLine: caseClause.span.start.line - 1,
-                                endLine: caseClause.span.end.line - 1,
-                                kind: "region"
-                            ))
-                        }
+                        append(span: caseClause.span, to: &ranges)
                     }
-                }
-
-                // Add folding ranges for for-each loops
-                if let forEachLoop = statement as? ForEachLoop {
-                    if forEachLoop.span.start.line < forEachLoop.span.end.line {
-                        ranges.append(createFoldingRange(
-                            startLine: forEachLoop.span.start.line - 1,
-                            endLine: forEachLoop.span.end.line - 1,
-                            kind: "region"
-                        ))
-                    }
-                }
-
-                // Add folding ranges for range loops (ARO-0072)
-                if let rangeLoop = statement as? RangeLoop {
-                    if rangeLoop.span.start.line < rangeLoop.span.end.line {
-                        ranges.append(createFoldingRange(
-                            startLine: rangeLoop.span.start.line - 1,
-                            endLine: rangeLoop.span.end.line - 1,
-                            kind: "region"
-                        ))
-                    }
-                }
-
-                // Add folding ranges for while loops
-                if let whileLoop = statement as? WhileLoop {
-                    if whileLoop.span.start.line < whileLoop.span.end.line {
-                        ranges.append(createFoldingRange(
-                            startLine: whileLoop.span.start.line - 1,
-                            endLine: whileLoop.span.end.line - 1,
-                            kind: "region"
-                        ))
-                    }
+                } else if let whenStmt = statement as? WhenStatement {
+                    append(span: whenStmt.span, to: &ranges)
+                } else if let forEachLoop = statement as? ForEachLoop {
+                    append(span: forEachLoop.span, to: &ranges)
+                } else if let rangeLoop = statement as? RangeLoop {
+                    append(span: rangeLoop.span, to: &ranges)
+                } else if let whileLoop = statement as? WhileLoop {
+                    append(span: whileLoop.span, to: &ranges)
                 }
             }
         }
@@ -95,6 +64,17 @@ public struct FoldingRangeHandler: Sendable {
     }
 
     // MARK: - Helpers
+
+    /// A block folds only when it covers more than one line: a one-line
+    /// block has nothing to collapse.
+    private func append(span: SourceSpan, to ranges: inout [[String: Any]]) {
+        guard span.start.line < span.end.line else { return }
+        ranges.append(createFoldingRange(
+            startLine: span.start.line - 1,   // convert to 0-based
+            endLine: span.end.line - 1,
+            kind: "region"
+        ))
+    }
 
     private func createFoldingRange(
         startLine: Int,
