@@ -307,6 +307,7 @@ let package = Package(
                 name: "ARORuntime",
                 dependencies: [
                     "AROParser",
+                    "AROVersion",
                     "Clibgit2",
                     .product(name: "Yams", package: "Yams"),
                     .product(name: "Crypto", package: "swift-crypto"),
@@ -362,6 +363,7 @@ let package = Package(
                 name: "AROPackageManager",
                 dependencies: [
                     "Clibgit2",
+                    "AROVersion",
                     .product(name: "Yams", package: "Yams"),
                 ],
                 path: "Sources/AROPackageManager"
@@ -413,7 +415,7 @@ let package = Package(
             // Package manager tests
             .testTarget(
                 name: "AROPackageManagerTests",
-                dependencies: ["AROPackageManager"],
+                dependencies: ["AROPackageManager", "AROVersion"],
                 path: "Tests/AROPackageManagerTests"
             ),
             // CLI tests — covers the small pieces of pure logic that

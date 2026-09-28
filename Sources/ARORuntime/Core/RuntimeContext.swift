@@ -1199,6 +1199,9 @@ public actor RuntimeContext: ExecutionContext {
     /// (GitLab #561).
     nonisolated(unsafe) private var _deferredFailureLocation: String?
 
+    /// Whether the deferred failure has been written to stderr already.
+    nonisolated(unsafe) private var _deferredFailureReported: Bool = false
+
     nonisolated func recordDeferredFailure(
         _ error: Error,
         binding: String,
@@ -1212,14 +1215,37 @@ public actor RuntimeContext: ExecutionContext {
         // Reads are total, so the caller is about to receive an empty value.
         // Say so: a silently-empty binding is exactly the kind of failure that
         // is impossible to trace back to its cause later.
+        //
+        // Once per failure, though (GitLab #816). The write used to happen on
+        // every call while only the *first* error was stored, so a future
+        // read twice — which is ordinary, a guard and then a use — printed
+        // its multi-line error twice. `Examples/EventReplay` produced 36
+        // stderr lines for three handlers failing once each.
+        let isFirst: Bool = withExclusiveMutation {
+            guard _deferredFailure == nil else { return false }
+            _deferredFailure = error
+            _deferredFailureLocation = sourceLocation
+            _deferredFailureReported = true
+            return true
+        }
+        guard isFirst else { return }
+
         FileHandle.standardError.write(Data(
             "[ARO] Deferred action for '\(binding)' failed: \(error)\n".utf8))
-        withExclusiveMutation {
-            if _deferredFailure == nil {
-                _deferredFailure = error
-                _deferredFailureLocation = sourceLocation
-            }
-        }
+    }
+
+    /// Whether this scope has already written a deferred failure to stderr
+    /// (GitLab #816).
+    ///
+    /// The handler path catches the same failure a moment later and logged
+    /// it again under a different prefix, so one broken statement produced
+    /// two multi-line reports saying the same thing. A caller that is about
+    /// to report an error it caught can ask whether the statement that
+    /// caused it has already spoken.
+    public nonisolated var didReportDeferredFailure: Bool {
+        let owner = statementScopeOwner
+        if owner !== self { return owner.didReportDeferredFailure }
+        return withExclusiveMutation { _deferredFailureReported }
     }
 
     /// Consume the recorded deferred failure, if one was observed.

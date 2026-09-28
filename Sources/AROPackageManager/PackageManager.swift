@@ -4,6 +4,7 @@
 // ============================================================
 
 import Foundation
+import AROVersion
 
 // MARK: - Package Manager
 
@@ -116,8 +117,8 @@ public final class PackageManager: Sendable {
     /// Add a plugin from a local directory
     /// - Parameter path: Path to the plugin directory
     /// - Returns: Installation result
-    public func addLocal(path: URL) throws -> InstallResult {
-        try installer.installLocal(from: path)
+    public func addLocal(path: URL, currentAROVersion: String? = nil) throws -> InstallResult {
+        try installer.installLocal(from: path, currentAROVersion: currentAROVersion)
     }
 
     // MARK: - Remove
@@ -245,7 +246,7 @@ public final class PackageManager: Sendable {
         for plugin in plugins {
             let pluginConstraint: String?
             if let constraint = plugin.manifest.aroVersion,
-               !AROVersionChecker.satisfies(version: currentAROVersion, constraint: constraint) {
+               !AROVersionChecker.runningVersionSatisfies(currentAROVersion, constraint: constraint) {
                 pluginConstraint = constraint
             } else {
                 pluginConstraint = nil
@@ -256,7 +257,7 @@ public final class PackageManager: Sendable {
             for entry in plugin.manifest.provides {
                 for action in entry.actions ?? [] {
                     if let since = action.since,
-                       !AROVersionChecker.satisfies(version: currentAROVersion, constraint: ">=\(since)") {
+                       !AROVersionChecker.runningVersionSatisfies(currentAROVersion, constraint: ">=\(since)") {
                         incompatibleActions.append((actionName: action.name, since: since))
                     }
                 }
