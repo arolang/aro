@@ -314,6 +314,41 @@ Compute the &lt;second-length: length&gt; from the &lt;second-message&gt;.</code
             </tbody>
         </table>
 
+        <h2>URLs</h2>
+        <p>
+            Addresses are parsed and rewritten rather than pasted together (ARO-0019):
+        </p>
+        <table>
+            <thead><tr><th>Qualifier</th><th>Does</th></tr></thead>
+            <tbody>
+                <tr><td><code>url-resolve</code></td><td>Resolve a relative URL against a base &mdash; <code>Compute the &lt;abs: url-resolve&gt; from &lt;href&gt; with { base: &lt;page&gt; }.</code></td></tr>
+                <tr><td><code>url-parts</code></td><td>scheme, host, port, path, query, fragment</td></tr>
+                <tr><td><code>url-defragment</code> / <code>url-normalize</code></td><td>Strip <code>#frag</code>; give one spelling per address</td></tr>
+                <tr><td><code>url-encode</code> / <code>url-decode</code></td><td>Percent-encode a single query value</td></tr>
+            </tbody>
+        </table>
+        <p>
+            <code>url-normalize</code> is what makes a crawler's "have I seen this?" answerable:
+            two spellings of one address compare equal after it.
+        </p>
+
+        <h2>Regex captures</h2>
+        <p>
+            The pattern comes from the same <code>by /pattern/flags</code> clause
+            <code>Split</code> uses. <code>captures</code> binds the first match's groups as a
+            record &mdash; named groups under their names, numbered ones under
+            <code>"1"</code>, <code>"2"</code>, &hellip;, and the whole match under
+            <code>match</code>. <code>all-captures</code> binds a list of those records:
+        </p>
+        <pre><code><span class="code-keyword">Compute</span> the <span class="code-result">&lt;pair: captures&gt;</span> from &lt;line&gt; by /(?&lt;key&gt;\w+)=(?&lt;value&gt;.*)/.
+<span class="code-keyword">Compute</span> the <span class="code-result">&lt;pairs: all-captures&gt;</span> from &lt;line&gt; by /(?&lt;key&gt;\w+)=(?&lt;value&gt;.*)/.</code></pre>
+        <p>
+            A non-match binds an <strong>empty record</strong> (or an empty list) rather than
+            failing &mdash; the same call ARO makes for a <code>Retrieve</code> that matches
+            nothing, so guard on the result. A group that took part in no match is absent
+            rather than empty.
+        </p>
+
         <div class="highlight-box">
             <h4>Escaping and templates</h4>
             <p>

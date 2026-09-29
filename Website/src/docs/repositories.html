@@ -162,6 +162,93 @@
     <span class="action">Return</span> an <span class="result">&lt;OK: status&gt;</span> for the <span class="result">&lt;audit&gt;</span>.
 }</code></pre>
 
+<h2>Who a Repository Belongs To</h2>
+
+<p>
+    A repository is keyed by <strong>name alone</strong> and is shared across the whole
+    application &mdash; and that includes callers. On a multi-user server every visitor
+    reads and writes the same rows, which is right for a catalogue and wrong for a cart.
+</p>
+
+<p>
+    Say who it belongs to once, where it is declared (ARO-0094). The scope is a
+    <code>Configure</code> setting, beside <code>ttl</code> and <code>maxSize</code>:
+</p>
+
+<pre><code><span class="action">Configure</span> the <span class="result">&lt;catalogue-repository: scope&gt;</span> with <span class="string">"application"</span>.
+<span class="action">Configure</span> the <span class="result">&lt;cart-repository: scope&gt;</span>      with <span class="string">"session"</span>.
+<span class="action">Configure</span> the <span class="result">&lt;partial-repository: scope&gt;</span>   with <span class="string">"connection"</span>.</code></pre>
+
+<p>
+    Handlers do not restate it. <code>Store the &lt;item&gt; into the &lt;cart-repository&gt;.</code>
+    is the same statement over HTTP, WebSocket and TCP, and it writes to the calling
+    caller's partition:
+</p>
+
+<pre><code><span class="feature-name">(addToCart: Shop API)</span> {
+    <span class="action">Extract</span> the <span class="result">&lt;item&gt;</span> from the <span class="result">&lt;request: body&gt;</span>.
+    <span class="action">Store</span> the <span class="result">&lt;item&gt;</span> into the <span class="result">&lt;cart-repository&gt;</span>.
+    <span class="action">Return</span> a <span class="result">&lt;Created: status&gt;</span> with <span class="result">&lt;item&gt;</span>.
+}</code></pre>
+
+<h3>The three scopes</h3>
+
+<table>
+    <thead>
+        <tr><th>Scope</th><th>Belongs to</th><th>Lifetime</th></tr>
+    </thead>
+    <tbody>
+        <tr><td><code>application</code></td><td>Everyone. The default, and what every repository was before.</td><td>The process</td></tr>
+        <tr><td><code>session</code></td><td>An identity &mdash; authenticated, survives reconnects, revocable</td><td>Until it expires or is deleted</td></tr>
+        <tr><td><code>connection</code></td><td>A transport peer that identifies nobody</td><td>The connection</td></tr>
+    </tbody>
+</table>
+
+<p>
+    A TCP peer gets <code>connection</code> until
+    <code>Attach the &lt;session&gt; to the &lt;connection&gt;.</code> promotes it.
+    Promotion is irreversible within a connection.
+</p>
+
+<div class="warning-box">
+    <h4>A caller-scoped repository that cannot resolve its caller throws</h4>
+    <p>
+        Never the application-wide repository, and never an empty one &mdash; silently serving
+        the wrong rows is the failure this exists to prevent. <code>aro check</code> reports the
+        statically visible cases: a session repository used in <code>Application-Start</code>, a
+        connection repository on an HTTP route, and conflicting declarations.
+    </p>
+    <p>
+        The scope is a <strong>string</strong>. <code>{ scope: session }</code> is a variable
+        reference and fails.
+    </p>
+</div>
+
+<h3>Sessions are the runtime's</h3>
+
+<p>
+    Minting a 256-bit CSPRNG id, signing the cookie with HMAC, setting
+    <code>HttpOnly</code>/<code>Secure</code>/<code>SameSite</code>, validating on every request,
+    refreshing <code>last-seen</code>, rotating on <code>Attach</code>, and evicting on
+    disconnect and expiry are all the runtime's job. Everything after that is ordinary ARO
+    against the application-scoped <code>&lt;sessions-repository&gt;</code> &mdash; so logging
+    out is a <code>Delete</code>:
+</p>
+
+<pre><code><span class="feature-name">(logout: Shop API)</span> {
+    <span class="action">Extract</span> the <span class="result">&lt;id&gt;</span> from the <span class="result">&lt;session: id&gt;</span>.
+    <span class="action">Delete</span> the <span class="result">&lt;gone&gt;</span> from the <span class="result">&lt;sessions-repository&gt;</span> where id = <span class="result">&lt;id&gt;</span>.
+    <span class="action">Return</span> an <span class="result">&lt;OK: status&gt;</span> with { reason: <span class="string">"logout"</span> }.
+}</code></pre>
+
+<p>
+    The cookie is declared in <code>openapi.yaml</code> as
+    <code>securitySchemes: { type: apiKey, in: cookie }</code>, and a cookie scheme is satisfied
+    by a <em>validated session</em>, not by the cookie merely being present. Developing over
+    plain HTTP, <code>Configure the &lt;session: secure&gt; with false.</code> opts out of the
+    TLS requirement.
+</p>
+
 <h2>Important Notes</h2>
 
 <ul>

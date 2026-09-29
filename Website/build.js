@@ -156,6 +156,7 @@ const docsSubPages = [
     'concurrency.html',
     'testing.html',
     'request-bodies.html',
+    'html-parsing.html',
     'cli.html'
 ];
 docsSubPages.forEach(file => {

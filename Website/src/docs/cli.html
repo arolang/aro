@@ -244,6 +244,29 @@ aro check ./MyApp                   # errors, warnings, and per-route body analy
 aro check ./MyApp --no-warnings     # errors only
 aro test ./MyApp --filter pricing   # run the tests whose name matches</code></pre>
 
+        <h3>Arguments the application reads</h3>
+        <p>
+            <code>Application-Start</code> declares the positionals it reads with the same
+            <code>takes</code> clause user-defined actions use (ARO-0047), so a tool does not
+            have to be invoked entirely in flags:
+        </p>
+<pre><code>(Application-Start: Crawler takes &lt;url&gt; &lt;depth&gt;) {
+    Extract the &lt;site&gt;  from the &lt;parameter: url&gt;.
+    Extract the &lt;args&gt;  from the &lt;parameter: arguments&gt;.   # the whole list
+    Return an &lt;OK: status&gt; for the &lt;startup&gt;.
+}</code></pre>
+<pre><code>./crawler https://example.com 3     # positional
+./crawler --url https://example.com # a flag of the same name wins</code></pre>
+        <div class="warning-box">
+            <h4>One trap, and it predates positionals</h4>
+            <p>
+                <code>--key value</code> consumes the token after it, so
+                <code>--verbose https://x</code> binds <code>verbose</code> to the URL. Write
+                <code>--verbose=true</code>, or put <code>--</code> before the positionals, to
+                mean two things.
+            </p>
+        </div>
+
         <h2>Building a binary</h2>
 <pre><code>aro build ./MyApp                   # native binary, static Swift runtime
 aro build ./MyApp --release         # optimize + size + strip

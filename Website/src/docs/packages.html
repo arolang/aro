@@ -155,9 +155,9 @@ aro remove csv-tools --force</code></pre>
 
         <h3>Listing Installed Packages</h3>
         <p>
-            ARO distinguishes between <strong>managed plugins</strong> (installed via <code>aro add</code>
-            into <code>Plugins/</code>) and <strong>local plugins</strong> (placed manually in
-            <code>plugins/</code>):
+            ARO distinguishes between <strong>managed plugins</strong> (installed via <code>aro add</code>,
+            each with a <code>plugin.yaml</code>) and <strong>local plugins</strong> (dropped into
+            <code>Plugins/</code> by hand, without a manifest). Both live in <code>Plugins/</code>:
         </p>
         <pre><code>$ aro plugins list
 
@@ -217,8 +217,8 @@ Local Plugins (from plugins/):
 &#x2502;       &#x251C;&#x2500;&#x2500; plugin.yaml
 &#x2502;       &#x2514;&#x2500;&#x2500; src/
 &#x2502;           &#x2514;&#x2500;&#x2500; lib.rs
-&#x2514;&#x2500;&#x2500; plugins/                     <span class="code-comment"># Local plugins (manual)</span>
-    &#x2514;&#x2500;&#x2500; MyPlugin.swift</code></pre>
+&#x2502;   &#x2514;&#x2500;&#x2500; MyPlugin.swift            <span class="code-comment"># Local plugin (manual, no manifest)</span>
+&#x2514;&#x2500;&#x2500; main.aro</code></pre>
 
         <div class="tip-box">
             <h4>Lock File</h4>
@@ -230,16 +230,29 @@ Local Plugins (from plugins/):
             </p>
         </div>
 
-        <h3>Plugins/ vs plugins/</h3>
+        <h3>Plugins/ is the only plugin directory</h3>
         <p>
-            ARO loads plugins from two directories:
+            <strong><code>Plugins/</code></strong> (uppercase) is where ARO looks. Each subdirectory
+            holds one plugin with a <code>plugin.yaml</code> manifest &mdash; the layout
+            <code>aro add</code> installs and <code>aro new plugin</code> scaffolds. Every other
+            layout is loaded from there too: bare <code>.swift</code> files, prebuilt libraries and
+            Swift packages without a manifest.
         </p>
-        <ul>
-            <li><strong><code>Plugins/</code></strong> (uppercase) &mdash; Managed plugins installed via
-                <code>aro add</code>. Each subdirectory must contain a <code>plugin.yaml</code> manifest.</li>
-            <li><strong><code>plugins/</code></strong> (lowercase) &mdash; Local plugins for quick prototyping.
-                Supports bare <code>.swift</code> files or Swift packages without a manifest.</li>
-        </ul>
+        <div class="warning-box">
+            <h4>A lowercase <code>plugins/</code> is deprecated</h4>
+            <p>
+                It is still read, with a deprecation warning, and will stop being read. Rename it to
+                <code>Plugins/</code>.
+            </p>
+            <p>
+                The two were never interchangeable, which is why this is worth a paragraph. They used
+                to be handled by two different loaders that accepted different layouts. On macOS and
+                Windows they are the <em>same</em> directory, so both loaders walked it and one
+                succeeded; on Linux they are two directories, and only the matching loader ran. A
+                project therefore loaded a different set of plugins depending on the developer's
+                filesystem.
+            </p>
+        </div>
 
         <h2>Package Types</h2>
         <p>ARO packages can provide different types of content:</p>
