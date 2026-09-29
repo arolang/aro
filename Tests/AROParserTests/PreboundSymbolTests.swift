@@ -66,6 +66,31 @@ struct PreboundSymbolTests {
         #expect(errors(result).isEmpty, "unexpected errors: \(errors(result))")
     }
 
+    private func warnings(_ result: CompilationResult) -> [String] {
+        result.diagnostics.filter { $0.severity == .warning }.map(\.message)
+    }
+
+    @Test("A name from an earlier cell is not an unpublished dependency")
+    func preboundNameIsNotReportedAsUnpublished() {
+        // The session bound <feedback-text> in an earlier cell, so nothing
+        // needs publishing. Reporting it told notebook readers to add a
+        // `Publish` statement that would not have helped.
+        let result = compile(
+            "Compute the <total: length> from <feedback-text>.",
+            prebound: ["feedback-text"])
+        #expect(
+            !warnings(result).contains { $0.contains("External dependency 'feedback-text'") },
+            "unexpected warnings: \(warnings(result))")
+    }
+
+    @Test("A name nothing has bound is still an unpublished dependency")
+    func unknownNameIsStillReported() {
+        // The check keeps doing its job for real applications, where
+        // nothing is pre-bound.
+        let result = compile("Compute the <total: length> from <ghost>.")
+        #expect(warnings(result).contains { $0.contains("External dependency 'ghost'") })
+    }
+
     @Test("Pre-binding does not define the name for anything else")
     func preboundDoesNotSuppressOtherChecks() {
         // It answers exactly one question — "could this have been bound
