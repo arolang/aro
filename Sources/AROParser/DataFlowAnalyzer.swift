@@ -1180,7 +1180,15 @@ public struct DataFlowAnalyzer {
     public func verifyDependencies(_ analyzed: AnalyzedFeatureSet, globalRegistry: GlobalSymbolRegistry) {
         for dependency in analyzed.dependencies {
             if globalRegistry.lookup(dependency) == nil {
-                if !isKnownExternal(dependency)
+                // A prebound name is already bound outside this source — the
+                // REPL passes the session's variables, so `<feedback-text>`
+                // from an earlier cell is there at run time. Reporting it as
+                // unpublished is a false positive: nothing needs publishing,
+                // and the advice ("add a <Publish> statement") is wrong for a
+                // notebook. GitLab #689 passed preboundSymbols in for exactly
+                // this reason but only `Publish` consulted them.
+                if !preboundSymbols.contains(dependency)
+                    && !isKnownExternal(dependency)
                     && !isDeclaredRuntimeProvided(dependency, in: analyzed.symbolTable) {
                     diagnostics.warning(
                         "External dependency '\(dependency)' is not published by any feature set",
