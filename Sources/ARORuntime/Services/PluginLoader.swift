@@ -2589,10 +2589,18 @@ public final class PluginLoader: @unchecked Sendable {
     ///
     /// Use `aro plugins rebuild` to build them.
     ///
-    /// - Parameter directory: Application directory containing `plugins/` folder
+    /// - Parameter directory: the project root. The plugin directory is
+    ///   resolved from it by `PluginDirectory`, so a listing reports the same
+    ///   directory the loader will actually load from (#848). This appended
+    ///   the lowercase spelling directly, which agreed with the loader only on
+    ///   a case-insensitive filesystem: on Linux a plugin in `Plugins/` ran
+    ///   but was missing from `aro plugins list`.
     /// - Returns: Array of LocalPluginInfo
     public func listLocalPlugins(from directory: URL) throws -> [LocalPluginInfo] {
-        let pluginsDir = directory.appendingPathComponent("plugins")
+        guard let resolved = PluginDirectory.resolve(in: directory) else {
+            return []
+        }
+        let pluginsDir = resolved.url
 
         guard FileManager.default.fileExists(atPath: pluginsDir.path) else {
             return []
@@ -2645,7 +2653,7 @@ public final class PluginLoader: @unchecked Sendable {
         let swiftFiles = contents.filter { $0.pathExtension == "swift" }
         for swiftFile in swiftFiles {
             let pluginName = swiftFile.deletingPathExtension().lastPathComponent
-            let relativePath = "plugins/\(swiftFile.lastPathComponent)"
+            let relativePath = "\(pluginsDir.lastPathComponent)/\(swiftFile.lastPathComponent)"
 
             if let cached = pluginMetadata[pluginName] {
                 plugins.append(cached)
@@ -2670,7 +2678,7 @@ public final class PluginLoader: @unchecked Sendable {
             else { continue }
 
             let pluginName = item.lastPathComponent
-            let relativePath = "plugins/\(pluginName)"
+            let relativePath = "\(pluginsDir.lastPathComponent)/\(pluginName)"
 
             if let cached = pluginMetadata[pluginName] {
                 plugins.append(cached)
