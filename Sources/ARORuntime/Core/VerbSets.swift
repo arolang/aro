@@ -29,6 +29,14 @@ public enum VerbSets {
     /// Compute verbs — execute when specifiers present (operations like +7d, hash, format)
     public static let computeVerbs: Set<String> = ["compute", "calculate", "derive"]
 
+    /// Transform verbs — execute when specifiers present. The qualifier IS
+    /// the conversion (`<price: float>`), so the expression fast path binding
+    /// the object's value is never the right answer for a qualified
+    /// `Transform`: it skips the conversion and keeps the source type.
+    /// `map` is deliberately absent — it is in `queryVerbs`, which always
+    /// executes, and listing it here would suggest it were conditional.
+    public static let transformVerbs: Set<String> = ["transform", "convert"]
+
     /// Extract verbs — execute when specifiers present (property extraction like :days, :next)
     /// `parse` deliberately absent: ParseDispatchAction must always run so
     /// dispatch is qualifier-driven, never shape-driven (GitLab #521).

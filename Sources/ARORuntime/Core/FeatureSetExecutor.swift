@@ -82,6 +82,7 @@ public final class FeatureSetExecutor: Sendable {
     private let createVerbs: Set<String>
     private let mergeVerbs: Set<String>
     private let computeVerbs: Set<String>
+    private let transformVerbs: Set<String>
     private let extractVerbs: Set<String>
     private let queryVerbs: Set<String>
     private let deleteVerbs: Set<String>
@@ -105,6 +106,7 @@ public final class FeatureSetExecutor: Sendable {
         self.createVerbs = VerbSets.createVerbs
         self.mergeVerbs = VerbSets.mergeVerbs
         self.computeVerbs = VerbSets.computeVerbs
+        self.transformVerbs = VerbSets.transformVerbs
         self.extractVerbs = VerbSets.extractVerbs
         self.queryVerbs = VerbSets.queryVerbs
         self.deleteVerbs = VerbSets.deleteVerbs
@@ -713,6 +715,15 @@ public final class FeatureSetExecutor: Sendable {
                     updateVerbs.contains(lowerVerb) ||  // Update always needs execution (handles rebind internally)
                     (createVerbs.contains(lowerVerb) && !resultDescriptor.specifiers.isEmpty) ||
                     (computeVerbs.contains(lowerVerb) && !resultDescriptor.specifiers.isEmpty) ||
+                    // GitLab #643 made an unknown Transform format an error
+                    // instead of the identity — but only inside the action,
+                    // which a qualified `Transform` over an expression object
+                    // never reached. `Transform the <price: float> from
+                    // <text>.` bound the string unchanged and answered OK, so
+                    // the conversion silently did not happen and `<price> +
+                    // 0.4` failed as a type mismatch two lines later. Same
+                    // shape as #501, one verb along.
+                    (transformVerbs.contains(lowerVerb) && !resultDescriptor.specifiers.isEmpty) ||
                     (extractVerbs.contains(lowerVerb) && !resultDescriptor.specifiers.isEmpty)
                 if !needsExecution {
                     // The fast path bypasses the action — and used to bypass
