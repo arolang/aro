@@ -485,12 +485,15 @@ facts:
       becomes the name the result is bound to. Arithmetic, comparison and the
       built-in operations all arrive through this one verb.
 
-  - category: Actions
-    headline: 'Compute the <first-length: length> from <first-message>.'
+  - category: Events
+    headline: '(FlagBigOrder: OrderPlaced Handler) when <event: total> > 50 {'
     explanation: >-
-      Qualifier-as-name separates what is computed from what it is called, so
-      two lengths can live in one feature set. Bindings are immutable, so a
-      second result always needs a second name rather than a reassignment.
+      A guard on the declaration decides whether the handler runs at all, and a
+      skipped handler is silent - not firing is a routing decision, not a
+      failure. It reads only the event payload, so a threshold the emitter did
+      not put into the event cannot be tested here. Payload fields are reached
+      the same way the body reaches them, through the event object, not as bare
+      names. The same words after a statement guard only that statement.
 
   - category: Actions
     headline: 'Compute the <total: sum> from <amounts>.'
