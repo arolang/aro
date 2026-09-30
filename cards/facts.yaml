@@ -799,11 +799,13 @@ facts:
 - id: 15-1
   week: 15
   day: 1
-  category: Actions
-  headline: 'Compute the <first-length: length> from <first-message>.'
-  explanation: Qualifier-as-name separates what is computed from what it is called, so two lengths can
-    live in one feature set. Bindings are immutable, so a second result always needs a second name rather
-    than a reassignment.
+  category: Events
+  headline: '(FlagBigOrder: OrderPlaced Handler) when <event: total> > 50 {'
+  explanation: A guard on the declaration decides whether the handler runs at all, and a skipped handler
+    is silent - not firing is a routing decision, not a failure. It reads only the event payload, so a
+    threshold the emitter did not put into the event cannot be tested here. Payload fields are reached the
+    same way the body reaches them, through the event object, not as bare names. The same words after a
+    statement guard only that statement.
 - id: 15-2
   week: 15
   day: 2
