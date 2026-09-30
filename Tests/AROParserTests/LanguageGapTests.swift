@@ -220,3 +220,118 @@ struct LanguageGapTests {
         #expect(HTTPStatusCatalog.closestMatch(to: "Creatd") == "Created")
     }
 }
+
+// ============================================================
+// `subset of` on both sides of the one operator set (GitLab #894)
+// ============================================================
+//
+// The set diverged again, for exactly one operator: `when` accepted
+// `subset of` from #864 and `where` never did. That is the shape #830 was
+// filed about — a predicate you can guard a statement with but cannot filter
+// a collection with — and `subset of` is most useful on the filtering side,
+// since "which records have a role set covered by what the caller was
+// granted" is a `Filter`, not a `when`.
+//
+// It has now drifted twice, so the last test here is a drift guard rather
+// than another example: every operator in the shared table, asserted to parse
+// in *both* grammars. A third divergence fails it by construction.
+
+@Suite("`subset of` is in both operator sets (#894)")
+struct SubsetOperatorParityTests {
+
+    private func errors(_ body: String) -> [String] {
+        Compiler().compile("""
+        (Check: Demo) {
+        \(body)
+            Return an <OK: status> for the <check>.
+        }
+        """).diagnostics.filter { $0.severity == .error }.map(\.message)
+    }
+
+    @Test("`where … subset of` parses")
+    func whereSubsetOf() {
+        #expect(errors("""
+                Create the <teams> with [{ roles: ["read"] }].
+                Create the <granted> with ["read", "write"].
+                Filter the <ok> from the <teams> where <roles> subset of <granted>.
+        """).isEmpty)
+    }
+
+    @Test("`when … subset of` still parses")
+    func whenSubsetOf() {
+        #expect(errors("""
+                Create the <required> with ["read"].
+                Create the <held> with ["read", "write"].
+                Log "ok" to the <console> when <required> subset of <held>.
+        """).isEmpty)
+    }
+
+    /// `of` is part of the operator and optional, in both grammars — one
+    /// operator written in two places must not disagree about its own syntax.
+    @Test("The `of` is optional on both sides")
+    func ofIsOptionalOnBothSides() {
+        #expect(errors("""
+                Create the <rows> with [{ v: ["a"] }].
+                Create the <all> with ["a", "b"].
+                Filter the <ok> from the <rows> where <v> subset <all>.
+                Log "ok" to the <console> when <all> subset <all>.
+        """).isEmpty)
+    }
+
+    /// `<subset>` is a name people write, and making the word an operator
+    /// everywhere would have taken it away.
+    @Test("`subset` is still an ordinary name outside operator position")
+    func subsetIsStillAName() {
+        #expect(errors("""
+                Create the <subset> with ["a"].
+                Log <subset> to the <console>.
+        """).isEmpty)
+    }
+
+    /// The drift guard. CLAUDE.md says `when` and `where` take the same
+    /// operator set; this asserts it instead of repeating it. Adding an
+    /// operator to one grammar and not the other fails here.
+    @Test("Every shared operator parses in both `when` and `where`")
+    func bothGrammarsAcceptTheSharedSet() {
+        // (operator, right-hand side) — the left is always <v>.
+        let operators: [(String, String)] = [
+            ("is", "\"x\""),
+            ("=", "\"x\""),
+            ("!=", "\"x\""),
+            (">", "1"),
+            ("<", "1"),
+            (">=", "1"),
+            ("<=", "1"),
+            ("contains", "\"x\""),
+            ("matches", "\"^x\""),
+            ("starts with", "\"x\""),
+            ("ends with", "\"x\""),
+            ("in", "<pool>"),
+            ("not in", "<pool>"),
+            ("before", "<other>"),
+            ("after", "<other>"),
+            ("subset of", "<pool>"),
+        ]
+
+        let preamble = """
+                Create the <pool> with ["x"].
+                Create the <other> with "2026-01-01".
+                Create the <rows> with [{ v: "x" }].
+        """
+
+        for (op, rhs) in operators {
+            let whereErrors = errors(preamble + """
+            \n        Filter the <hit> from the <rows> where <v> \(op) \(rhs).
+            """)
+            #expect(whereErrors.isEmpty,
+                    "`where … \(op)` did not parse: \(whereErrors)")
+
+            let whenErrors = errors(preamble + """
+            \n        Create the <v> with "x".
+                    Log "ok" to the <console> when <v> \(op) \(rhs).
+            """)
+            #expect(whenErrors.isEmpty,
+                    "`when … \(op)` did not parse: \(whenErrors)")
+        }
+    }
+}
