@@ -88,12 +88,21 @@ final class REPLCellEngine: @unchecked Sendable {
         // A re-run replaces this cell's own bindings. Released before
         // execution so the rebind guard — and the runtime — see the
         // names as free, exactly as they were on the first run.
-        let before = Set(session.variableNames)
         if let cellID, let previous = bindingsByCell[cellID] {
-            for name in previous where before.contains(name) {
+            let bound = Set(session.variableNames)
+            for name in previous where bound.contains(name) {
                 session.unbindVariable(name)
             }
         }
+
+        // AFTER the release, not before it. Taking this snapshot first made
+        // the second run of a cell record an empty binding set — the names it
+        // bound were already in `before`, so `after.subtracting(before)` was
+        // empty — and with nothing recorded, the third run had nothing to
+        // release and failed as an immutable rebind. Re-running a cell is the
+        // one thing a notebook does more than anything else, so it worked
+        // twice and then broke.
+        let before = Set(session.variableNames)
 
         var display: [String: Any]?
 
