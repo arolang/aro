@@ -93,6 +93,11 @@ public final class REPLSession: @unchecked Sendable {
     /// second one — the same rule user-defined actions follow.
     private var handlerSubscriptions: [String: UUID] = [:]
 
+    /// The same, for `{repository} Observer` feature sets. Kept apart from
+    /// `handlerSubscriptions` because the two watch different event types, and
+    /// one feature set is only ever in one of them.
+    private var observerSubscriptions: [String: UUID] = [:]
+
     /// Session history
     private var _history: [HistoryEntry] = []
 
@@ -187,6 +192,7 @@ public final class REPLSession: @unchecked Sendable {
             _featureSetSources[name] = source
         }
         registerDomainHandlerIfNeeded(name: name, featureSet: featureSet)
+        registerRepositoryObserverIfNeeded(name: name, featureSet: featureSet)
     }
 
     // MARK: - Event dispatch (interactive sessions)
@@ -233,6 +239,80 @@ public final class REPLSession: @unchecked Sendable {
             guard let self, event.domainEventType == eventType else { return }
             if !guardSet.isEmpty, !guardSet.allMatch(payload: event.payload) { return }
             await self.runDomainHandler(featureSet, event: event)
+        }
+    }
+
+    /// Subscribe a `{repository} Observer` feature set to this session's
+    /// EventBus, so a `Store`, `Update` or `Delete` in a later cell reaches it.
+    ///
+    /// Repository observers were grouped with the service-bound families and
+    /// left unsubscribed, on the reasoning that those handlers wait on a server
+    /// the session never starts. That reasoning does not hold for this one:
+    /// nothing wires a repository observer up but the bus, and its trigger is
+    /// an ordinary statement — `StoreAction` and its siblings publish
+    /// `RepositoryChangedEvent` through `context.emit`, in-process, with no
+    /// service and no Keepalive loop involved. So a session could always have
+    /// dispatched these; it simply never subscribed them.
+    ///
+    /// Mirrors `ExecutionEngine.registerRepositoryObservers`: the repository
+    /// name comes from the activity, state guards are honoured, and a
+    /// redefinition replaces its own subscription rather than stacking a
+    /// second one.
+    private func registerRepositoryObserverIfNeeded(name: String, featureSet: AnalyzedFeatureSet) {
+        let activity = featureSet.featureSet.businessActivity
+        guard case .repositoryObserver(let repositoryName) = ActivityKind.parse(activity) else {
+            return
+        }
+
+        let guardSet = StateGuardSet.parse(from: activity)
+
+        if let previous = observerSubscriptions.removeValue(forKey: name) {
+            eventBus.unsubscribe(previous)
+        }
+
+        observerSubscriptions[name] = eventBus.subscribe(to: RepositoryChangedEvent.self) { [weak self] event in
+            guard let self, event.repositoryName == repositoryName else { return }
+
+            // A create/update carries the new entity, a delete the old one —
+            // the guard reads whichever the change left behind.
+            if !guardSet.isEmpty {
+                let entity = (event.newValue as? [String: any Sendable])
+                    ?? (event.oldValue as? [String: any Sendable])
+                guard let entity, guardSet.allMatch(payload: entity) else { return }
+            }
+
+            await self.runRepositoryObserver(featureSet, event: event)
+        }
+    }
+
+    /// Run an observer against the current session state, with the same payload
+    /// `ExecutionEngine.runRepositoryObserver` binds — so `<event: changeType>`
+    /// and `<event: entityId>` mean here what they mean in `aro run`.
+    private func runRepositoryObserver(
+        _ featureSet: AnalyzedFeatureSet,
+        event: RepositoryChangedEvent
+    ) async {
+        var payload: [String: any Sendable] = [
+            "repositoryName": event.repositoryName,
+            "changeType": event.changeType.rawValue,
+            "timestamp": event.timestamp
+        ]
+        if let entityId = event.entityId { payload["entityId"] = entityId }
+        if let newValue = event.newValue { payload["newValue"] = newValue }
+        if let oldValue = event.oldValue { payload["oldValue"] = oldValue }
+
+        let child = context.createChild(
+            featureSetName: featureSet.featureSet.name,
+            businessActivity: featureSet.featureSet.businessActivity
+        )
+        child.bind("event", value: payload)
+        for (key, value) in payload {
+            child.bind("event:\(key)", value: value)
+        }
+        do {
+            _ = try await executor.execute(featureSet, context: child)
+        } catch {
+            FileHandle.standardError.write(Data("\(formatError(error))\n".utf8))
         }
     }
 
@@ -649,6 +729,10 @@ public final class REPLSession: @unchecked Sendable {
             eventBus.unsubscribe(subscription)
         }
         handlerSubscriptions.removeAll()
+        for (_, subscription) in observerSubscriptions {
+            eventBus.unsubscribe(subscription)
+        }
+        observerSubscriptions.removeAll()
 
         // Drop any user-defined action verbs this session registered.
         // `clear()` is synchronous (the meta-command protocol is), so the

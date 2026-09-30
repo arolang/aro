@@ -183,3 +183,139 @@ struct REPLEventDispatchTests {
         #expect(REPLSession.domainHandlerEventType(for: "Interactive") == nil)
     }
 }
+
+// ============================================================
+// Repository observers in a session (GitLab #691 family)
+// ============================================================
+//
+// A `{repository} Observer` was left unsubscribed in sessions, grouped with
+// the families whose events come from a server the REPL never starts. Nothing
+// wires an observer up but the bus, and its trigger is an ordinary statement —
+// `Store`/`Update`/`Delete` publish `RepositoryChangedEvent` in-process — so a
+// notebook could define one, see "Defined", and never hear from it again.
+//
+// The observable is a second repository the observer writes into, for the same
+// reason the handler tests use one: it survives the statement that triggered
+// it and can be read back without touching stdout capture.
+
+@Suite("REPL repository observers", .serialized)
+struct REPLRepositoryObserverTests {
+
+    private struct Playground {
+        let session = REPLSession()
+        let token = "o" + String((UUID().uuidString + UUID().uuidString)
+            .lowercased()
+            .filter { $0.isLetter }
+            .prefix(10))
+        var watched: String { "stock\(token)-repository" }
+        var log: String { "seen\(token)-repository" }
+
+        func defineObserver(name: String = "WatchIt",
+                            guards: String = "",
+                            marker: String = "") async throws {
+            let result = try await session.defineFeatureSet(
+                name: name,
+                activity: "\(watched) Observer\(guards)",
+                statements: [
+                    "Extract the <id> from the <event: entityId>.",
+                    "Compute the <note> from \"\(marker)\" ++ <id>.",
+                    "Store the <note> into the <\(log)>.",
+                    "Return an <OK: status> for the <watching>.",
+                ]
+            )
+            guard case .featureSetDefined = result else {
+                Issue.record("observer definition failed: \(result)")
+                return
+            }
+        }
+
+        /// Each call binds a fresh name. Bindings are immutable for the life
+        /// of the session, so reusing one would make the second store a rebind
+        /// error rather than a second event — which is a property of the
+        /// language, not something the observer under test should absorb.
+        func store(_ literal: String, as name: String) async throws {
+            _ = try await session.executeStatement(
+                "Create the <\(name)> with \(literal).")
+            _ = try await session.executeStatement(
+                "Store the <\(name)> into the <\(watched)>.")
+        }
+
+        func seen() async throws -> [String] {
+            _ = try? await session.executeStatement(
+                "Retrieve the <notes> from the <\(log)>.")
+            let value = session.getVariable("notes")
+            if let list = value as? [String] { return list }
+            if let list = value as? [any Sendable] { return list.compactMap { $0 as? String } }
+            if let single = value as? String { return [single] }
+            return []
+        }
+    }
+
+    @Test("A Store reaches an observer defined in an earlier input")
+    func storeReachesObserver() async throws {
+        let p = Playground()
+        try await p.defineObserver(marker: "saw:")
+
+        try await p.store("{ id: \"sku-03\" }", as: "one")
+
+        #expect(try await p.seen() == ["saw:sku-03"])
+    }
+
+    @Test("The observer sees the change type")
+    func observerSeesChangeType() async throws {
+        let p = Playground()
+        let result = try await p.session.defineFeatureSet(
+            name: "WatchKind",
+            activity: "\(p.watched) Observer",
+            statements: [
+                "Extract the <kind> from the <event: changeType>.",
+                "Store the <kind> into the <\(p.log)>.",
+                "Return an <OK: status> for the <watching>.",
+            ]
+        )
+        guard case .featureSetDefined = result else {
+            Issue.record("definition failed: \(result)"); return
+        }
+
+        try await p.store("{ id: \"sku-04\" }", as: "one")
+
+        #expect(try await p.seen() == ["created"])
+    }
+
+    @Test("State guards filter an observer the same way they filter a handler")
+    func guardsFilterObservers() async throws {
+        let p = Playground()
+        try await p.defineObserver(guards: "<category:coffee>", marker: "kept:")
+
+        try await p.store("{ id: \"tea-1\", category: \"tea\" }", as: "tea")
+        try await p.store("{ id: \"cof-1\", category: \"coffee\" }", as: "cof")
+
+        #expect(try await p.seen() == ["kept:cof-1"])
+    }
+
+    @Test("Redefining an observer replaces its subscription")
+    func redefinitionReplaces() async throws {
+        // Stacking a second subscription would run both bodies and record
+        // the entity twice — the bug the handler path already guards against.
+        let p = Playground()
+        try await p.defineObserver(marker: "v1:")
+        try await p.defineObserver(marker: "v2:")
+
+        try await p.store("{ id: \"sku-05\" }", as: "one")
+
+        #expect(try await p.seen() == ["v2:sku-05"])
+    }
+
+    @Test("An observer for another repository stays quiet")
+    func otherRepositoryIgnored() async throws {
+        let p = Playground()
+        try await p.defineObserver(marker: "saw:")
+
+        _ = try await p.session.executeStatement(
+            "Create the <elsewhere> with { id: \"x-1\" }.")
+        _ = try await p.session.executeStatement(
+            "Store the <elsewhere> into the <unrelated\(p.token)-repository>.")
+
+        #expect(try await p.seen().isEmpty)
+    }
+}
