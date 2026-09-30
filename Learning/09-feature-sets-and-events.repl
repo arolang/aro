@@ -86,7 +86,7 @@
       "outputs" : [
 
       ],
-      "source" : "(FlagBigOrder: OrderPlaced Handler) when <total> > 50 {\n    Log \"Large order - brief the kitchen.\" to the <console>.\n    Return an <OK: status> for the <flagging>.\n}"
+      "source" : "(FlagBigOrder: OrderPlaced Handler) when <event: total> > 50 {\n    Log \"Large order - brief the kitchen.\" to the <console>.\n    Return an <OK: status> for the <flagging>.\n}"
     },
     {
       "id" : "nb09-c12",
@@ -94,7 +94,7 @@
       "outputs" : [
 
       ],
-      "source" : "Two guard positions, two meanings — don't confuse them:\n\n- **Declaration guard** (`) when <total> > 50 {`): the *whole handler*\n  is skipped when the condition fails. Silently — no error, no log.\n  Not firing is a routing decision, not a failure.\n- **Statement guard** (`Log … to the <console> when <total> > 50.`):\n  the handler runs; only that one statement is conditional.\n\nDeclaration guards see **only the event payload** — not application\nvariables, not repositories. If a guard needs a threshold, the emitter\nmust put the threshold *into the event*. Both guard styles combine on\none handler; details in [Chapter 16 — Handler\nGuards](..\/Book\/TheLanguageGuide\/Chapter16-HandlerGuards.md).\n\nTime to exercise all four handlers:"
+      "source" : "Two guard positions, two meanings — don't confuse them:\n\n- **Declaration guard** (`) when <event: total> > 50 {`): the *whole handler*\n  is skipped when the condition fails. Silently — no error, no log.\n  Not firing is a routing decision, not a failure.\n- **Statement guard** (`Log … to the <console> when <total> > 50.`):\n  the handler runs; only that one statement is conditional.\n\nDeclaration guards see **only the event payload**, and reach it the way\nthe body does — `<event: total>`, not a bare `<total>`. A bare name has\nnothing to resolve against, so the guard cannot be evaluated and the\nhandler does not run. Application variables and repositories are not\nvisible here either. If a guard needs a threshold, the emitter\nmust put the threshold *into the event*. Both guard styles combine on\none handler; details in [Chapter 16 — Handler\nGuards](..\/Book\/TheLanguageGuide\/Chapter16-HandlerGuards.md).\n\nTime to exercise all four handlers:"
     },
     {
       "id" : "nb09-c13",
