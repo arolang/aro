@@ -206,17 +206,23 @@ Repository writes from concurrent iterations are serialised by the repository's 
 
 ## 7. Event Dispatch
 
-`Emit` hands the event to the bus and the emitting feature set continues; it does not wait for handlers. The bus is an actor, so its own state transitions are serialised, and it offers three delivery strategies:
+`Emit` hands the event to the bus and **waits for every matching handler to finish** before the feature set continues. The next statement therefore runs in the world the handlers left behind, and may rely on what they did — which is the point: ARO-0007 §7.3 keeps causality across an `Emit` so a handler's repository write is visible to the statement after it.
+
+Waiting is not ordering. The handlers run concurrently with *each other*, in unspecified order; `Emit` waits for all of them and sequences none of them. Those are two different promises and the runtime makes only the first.
+
+The bus is an actor, so its own state transitions are serialised, and it offers three delivery strategies. `Emit` uses the second:
 
 ```
 Emit
  |
  +-- publish()              fire-and-forget: one task per matching handler.
  |                          Highest fan-out, no bound on concurrent handlers.
+ |                          NOT what `Emit` uses.
  |
  +-- publishAndTrack()      awaited: the caller resumes only once every
- |                          handler has finished. Used where the emitting
- |                          statement's ordering matters.
+ |                          handler has finished. What `Emit` uses
+ |                          (`EmitAction.swift`), and what repository
+ |                          observers use.
  |
  +-- publishBackpressured() pooled: work items queue and a fixed worker set
                             drains them. Bounds concurrent handler bodies
@@ -400,7 +406,7 @@ A body binding is not a deferred future. It is a value that happens not to have 
 | What happens at the ceiling? | Work queues, in arrival order. Nothing fails. |
 | What is shared? | Repositories and published symbols, both actor-isolated. |
 | What is atomic? | A single repository operation. Nothing larger. |
-| Does `Emit` block? | No. Handlers run independently; shutdown drains them. |
+| Does `Emit` block? | Yes — it waits for every matching handler. It does not order them: they run concurrently with each other (ARO-0007 §7.3). |
 | Is an unread request body a future? | No — see §13. It is a value not yet built (ARO-0090). |
 | Is compiled output different? | Same semantics, tighter concurrency bounds. |
 | When does a failure surface? | At the failing statement's identity, reported no later than feature-set exit. |
