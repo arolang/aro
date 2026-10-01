@@ -800,7 +800,9 @@ non-match binds an empty record (or empty list), it does not fail** — the same
 call ARO makes for a `Retrieve` that matches nothing. A group that took part in
 no match is absent rather than empty.
 
-**`subset of` is an operator, not a qualifier** (ARO-0042 §3.6, GitLab #864).
+**`subset of` is an operator, not a qualifier** (ARO-0042 §3.6, GitLab #864),
+and it works in `where` as well as `when` (GitLab #894) — filtering is the side
+it is most useful on.
 It answers a question rather than producing a collection, so it sits with `in`,
 `contains` and `matches`: `Return an <OK: status> for the <request> when
 <required-roles> subset of <user-roles>.` Set semantics — a duplicate on the
@@ -819,6 +821,7 @@ statement (GitLab #830):
 | `contains` | `when <name> contains "test"` |
 | `matches` | `when <name> matches "^a.c"` |
 | `before` / `after` | `when <deadline> before <now>` |
+| `subset of` | `where <roles> subset of <granted>` |
 
 The affix operators are **literal** — that is the point of having them, since
 `matches "^a.c"` also accepts `axc`. `starts` and `ends` are not reserved: only

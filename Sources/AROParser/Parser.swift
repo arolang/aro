@@ -1336,6 +1336,16 @@ public final class Parser {
             let isBefore = word.lowercased() == "before"
             advance()
             op = isBefore ? .before : .after
+        case .identifier(let word) where word.lowercased() == "subset":
+            // `where <roles> subset of <granted>` (GitLab #894). The `of` is
+            // part of the operator and optional, exactly as the expression
+            // grammar reads it (GitLab #864) — the two spellings of one
+            // operator must not disagree about their own syntax.
+            advance()
+            if case .identifier(let next) = peek().kind, next.lowercased() == "of" {
+                advance()
+            }
+            op = .subsetOf
         case .not:
             advance()
             // Must be followed by 'in' for "not in"
@@ -1346,7 +1356,7 @@ public final class Parser {
                 throw ParserError.unexpectedToken(expected: "'in' after 'not' in where clause", got: peek())
             }
         default:
-            throw ParserError.unexpectedToken(expected: "comparison operator (is, =, <, >, <=, >=, !=, contains, matches, starts with, ends with, before, after, in, not in, between) after <\(field)> in where clause", got: peek())
+            throw ParserError.unexpectedToken(expected: "comparison operator (is, =, <, >, <=, >=, !=, contains, matches, starts with, ends with, before, after, in, not in, subset of, between) after <\(field)> in where clause", got: peek())
         }
 
         // Parse value expression — stops before and/or (see doc comment)

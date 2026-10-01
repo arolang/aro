@@ -132,7 +132,16 @@ when <required-roles> subset of <user-roles> {
 Every other operation here takes two collections and produces a third.
 `subset of` takes two collections and answers a question, so it belongs with
 `in`, `contains` and `matches` in ARO-0002's operator table rather than in the
-qualifier table above (GitLab #864). Writing it as a qualifier would mean
+qualifier table above (GitLab #864). Being in that table means both grammars
+take it — `when` guards a statement with it, `where` filters a collection:
+
+```aro
+Filter the <permitted> from the <teams> where <roles> subset of <granted>.
+```
+
+Filtering is the side it is most useful on: "which records have a role set
+covered by what the caller was granted" is a `Filter`, not a guard (GitLab
+#894). Writing it as a qualifier would mean
 `Compute the <ok: subset> from <a> with <b>.` followed by a guard on `<ok>` —
 two statements where the language already has a shape for one.
 

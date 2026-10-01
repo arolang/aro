@@ -416,6 +416,14 @@ public enum WhereOperator: String, Sendable, Equatable, CustomStringConvertible 
     // same ordering as `<` / `>`, said the way a domain says it.
     case before = "before"
     case after = "after"
+    /// `where <roles> subset of <granted>` (ARO-0042 §3.6, GitLab #864).
+    ///
+    /// `when` has had this since #864; `where` never did, so the operator set
+    /// CLAUDE.md calls shared had diverged for exactly one member — and this
+    /// is the member most useful on the `where` side, since "which records
+    /// have a role set covered by what the caller was granted" is a filter
+    /// rather than a guard (GitLab #894).
+    case subsetOf = "subset of"
 
     public var description: String { rawValue }
 }
