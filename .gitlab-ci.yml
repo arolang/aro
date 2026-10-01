@@ -399,6 +399,46 @@ doc-examples:
 
 
 # =============================================================================
+# The sources the training corpus is mined from must parse (GitLab #810)
+# =============================================================================
+#
+# The REPL-execution, synthetic and fill-in-the-middle stages mine `Examples/`,
+# the Book and the Learning notebooks. Those stages count what they skipped and
+# print what failed, but nothing asserted the sources were green — so drift was
+# only ever visible as a quieter corpus, and commit a2368b0d ("Make the
+# documentation's ARO actually parse") shows the drift is real.
+#
+# `Train/Material` is already covered by `train:corpus`, and the fenced blocks
+# in `Proposals/` and `CLAUDE.md` by `doc-examples`. This job covers the two
+# mined sources that had nothing: every application under `Examples/`, and every
+# code cell of every Learning notebook.
+#
+# It fails the pipeline rather than warning. A source that stopped parsing is a
+# corpus that quietly stopped covering what it claims to cover, and the whole
+# point is that the pipeline consumes only green sources.
+sources:corpus:
+  stage: integration
+  image: $CI_REGISTRY_IMAGE/aro-ci:latest
+  rules:
+    - if: $CI_COMMIT_TAG
+    - if: $CI_COMMIT_BRANCH == "main"
+    - if: $CI_COMMIT_BRANCH =~ /^release\/.*/
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+  needs:
+    - job: build:linux
+      artifacts: true
+  script:
+    - chmod +x aro-dist/aro
+    # `-r`, because `Examples/` is a directory of applications rather than one
+    # application; without it every `.aro` file under it is pooled into a single
+    # pseudo-application and the entry-point rule reports nonsense (#824).
+    - ./aro-dist/aro check -r Examples
+    # Every code cell of every notebook, through a real `aro repl --json`
+    # session — the same way a kernel runs them.
+    - ARO_BIN=$CI_PROJECT_DIR/aro-dist/aro python3 Learning/validate.py
+
+
+# =============================================================================
 # Test Stage - Gate for all builds (main branch only)
 # =============================================================================
 test:
