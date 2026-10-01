@@ -131,11 +131,17 @@ public final class Lexer {
     private let diagnostics: DiagnosticCollector?
 
     public init(source: String, diagnostics: DiagnosticCollector? = nil) {
+        // GitLab #721: encode once. `Array(source.utf8)` allocates a fresh
+        // buffer and copies the whole source every time it is written, so
+        // spelling it twice here transcoded and copied every byte of every
+        // file twice. Binding it to a local and passing that to
+        // `advanceBytePos` shares the storage instead of rebuilding it.
+        let bytes = Array(source.utf8)
         self.source = source
-        self.utf8 = Array(source.utf8)
+        self.utf8 = bytes
         self.pos = 0
         // GitLab #115: Cache the next byte position for O(1) peekNext()
-        self.nextPos = Self.advanceBytePos(0, in: Array(source.utf8))
+        self.nextPos = Self.advanceBytePos(0, in: bytes)
         self.location = SourceLocation()
         self.diagnostics = diagnostics
     }

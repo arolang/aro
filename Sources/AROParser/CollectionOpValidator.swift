@@ -99,9 +99,15 @@ public struct CollectionOpValidator {
     /// unrecognized shape as "no where clause" and `Delete … from the
     /// <x-repository>` with no where CLEARS THE WHOLE REPOSITORY. So
     /// the shape is rejected here, where it can still name the fix.
+    ///
+    /// GitLab #721: the verb set is a `static let` because this runs once per
+    /// ARO statement and the set was built *before* the guard that rejects
+    /// almost every one of them — so a four-element Set was allocated and torn
+    /// down per statement to answer "is this a delete?" with "no".
+    private static let deleteVerbs: Set<String> = ["delete", "remove", "destroy", "clear"]
+
     private func validateDeleteWhereCondition(_ statement: AROStatement) {
-        let deleteVerbs: Set<String> = ["delete", "remove", "destroy", "clear"]
-        guard deleteVerbs.contains(statement.action.verb.lowercased()) else { return }
+        guard Self.deleteVerbs.contains(statement.action.verb.lowercased()) else { return }
         guard let condition = statement.queryModifiers.whereCondition,
               condition.singlePredicate == nil else { return }
 

@@ -42,9 +42,12 @@
 // three levels. Each level's *primary* dispatch is centralized
 // and documented so adding a token/rule is one edit:
 //
-//   1. Statement level  — `statementDispatch` (static table).
+//   1. Statement level  — `parseStatement` (single dispatch site).
 //        Leading keyword → statement parser. Default fallthrough
-//        is an ARO action statement / `|>` pipeline.
+//        is an ARO action statement / `|>` pipeline. A `switch`
+//        for the same reason level 2 is one (GitLab #721): the
+//        keyword is settled by the TokenKind discriminator, and
+//        the kind being matched is usually a payload case.
 //   2. Expression prefix — `parsePrefix` (single dispatch site).
 //        Leading token → prefix expression parser. Payload cases
 //        (identifier/literals) bind their value inline, so this
@@ -72,7 +75,7 @@
 //   - `parseMapEntry`          token → map key
 //   - `parseInterpolatedString` interpolation token → StringPart
 // Adding a new *dispatch* (a token that starts a new kind of
-// statement/expression) touches only the three tables above.
+// statement/expression) touches only the three sites above.
 
 import Foundation
 
@@ -343,44 +346,43 @@ public final class Parser {
     // MARK: - Statement Parsing
 
     /// Parses a statement (ARO, Publish, Require, Match, or ForEach)
-    /// A statement-level parse rule. The leading keyword token has already
-    /// been matched by `statementDispatch`; the parselet consumes it (and any
-    /// lookahead it needs) and produces the corresponding `Statement`.
-    private typealias StatementParselet = @Sendable (Parser) throws -> Statement
-
-    /// Centralized statement dispatch table (#337).
     ///
-    /// This is THE single place that maps a *leading keyword token* to the
-    /// statement parser it selects. Introducing a statement form that begins
-    /// with a dedicated keyword is one entry here — no other method changes,
-    /// and the dispatch strategy is data rather than an implicit `if`/`switch`
-    /// chain. It mirrors the infix `binaryPrecedence` table (#348) so all
-    /// primary parse-rule selection lives in explicit tables.
+    /// Centralized statement dispatch (#337).
     ///
-    /// Tokens NOT listed here (action verbs, identifiers, `<`, literals, …)
-    /// fall through to the default ARO action-statement / `|>` pipeline path
-    /// documented in `parseStatement`. Entries are matched by `TokenKind`
-    /// equality; keys are payload-free keyword kinds, so the scan is exact.
+    /// The `switch` below is THE single place that maps a *leading keyword
+    /// token* to the statement parser it selects. Introducing a statement form
+    /// that begins with a dedicated keyword is one `case` here — no other
+    /// method changes.
+    ///
+    /// Tokens NOT listed (action verbs, identifiers, `<`, literals, …) fall
+    /// through to the default ARO action-statement / `|>` pipeline path below.
     /// `for` appears twice because the lexer may emit it as either the `.for`
     /// keyword or `.preposition(.for)`.
-    private static let statementDispatch: [(match: TokenKind, parse: StatementParselet)] = [
-        (.match,             { try $0.parseMatchStatement() }),               // ARO-0004
-        (.when,              { try $0.parseWhenBlock() }),                     // GitLab #516
-        (.for,               { try $0.parseForOrRangeLoop() }),               // ARO-0005 / ARO-0072
-        (.preposition(.for), { try $0.parseForOrRangeLoop() }),
-        (.parallel,          { try $0.parseParallelForEachLoop() }),
-        (.while,             { try $0.parseWhileLoop() }),                    // ARO-0002 / GitLab #131
-        (.break,             { try $0.parseBreakStatement() }),
-        (.publish,           { try $0.parsePublishStatementForm() }),
-        (.require,           { try $0.parseRequireStatementForm() }),         // ARO-0003
-    ]
-
+    ///
+    /// GitLab #721: this used to be a static array of
+    /// `(TokenKind, (Parser) throws -> Statement)` pairs scanned with
+    /// `first(where:)`. Every statement in the file walked up to nine entries
+    /// calling `TokenKind ==` through a closure, and the common cases — an
+    /// action verb or an identifier — matched nothing and paid for the whole
+    /// scan. A dictionary was the obvious alternative but the wrong one:
+    /// `TokenKind` is `Equatable`, not `Hashable`, and the kind being looked
+    /// up is usually `.identifier(String)`, so keying on it would hash a
+    /// string per statement to answer a question the discriminator alone
+    /// settles. A `switch` compiles to a jump on that discriminator, which is
+    /// also what `parsePrefix` does one level down (see the dispatch-map note
+    /// at the top of this file) and for the same reason.
     private func parseStatement() throws -> Statement {
-        // Centralized keyword dispatch (#337): the leading token selects a
-        // dedicated statement parser. See `statementDispatch`.
-        let kind = peek().kind
-        if let rule = Parser.statementDispatch.first(where: { $0.match == kind }) {
-            return try rule.parse(self)
+        switch peek().kind {
+        case .match:             return try parseMatchStatement()          // ARO-0004
+        case .when:              return try parseWhenBlock()               // GitLab #516
+        case .for,
+             .preposition(.for): return try parseForOrRangeLoop()          // ARO-0005 / ARO-0072
+        case .parallel:          return try parseParallelForEachLoop()
+        case .while:             return try parseWhileLoop()               // ARO-0002 / GitLab #131
+        case .break:             return try parseBreakStatement()
+        case .publish:           return try parsePublishStatementForm()
+        case .require:           return try parseRequireStatementForm()    // ARO-0003
+        default:                 break
         }
 
         // Default path: an ARO action statement (action without angle
