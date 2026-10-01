@@ -177,7 +177,17 @@ struct PluginCompiler: Sendable {
                 // plugins that ship feature sets and nothing to statically link).
                 // Without this guard, the hard-error path below fires on any
                 // plugin that legitimately has no .o files to bake.
+                //
+                // A manifest saying "no native code" is believed. **No manifest
+                // at all is not the same claim**, and treating it as one is how
+                // a Swift package with real sources came to be skipped here
+                // while `aro run` loaded it perfectly well (GitLab #884): the
+                // loader accepts a bare package without a `plugin.yaml`, so the
+                // builder has to recognise one too. Where there is nothing to
+                // read, look at what is on disk instead.
                 let hasNativeType = Self.manifestDeclaresNativePlugin(yamlContent)
+                    || (yamlContent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                        && Self.directoryHoldsNativeSources(pluginDir, sourcePluginsDir: sourcePluginsDir, name: pluginName))
                 if !hasNativeType {
                     if verbose {
                         print("  Skipping '\(pluginName)' — no native plugin code to statically link")
@@ -818,6 +828,43 @@ struct PluginCompiler: Sendable {
     /// (Swift/C/C++/Rust) that must be compiled and statically linked into the
     /// host binary. A manifest with none of these ships only feature sets and
     /// is skipped by the static-link path.
+    /// Whether a plugin directory holds native sources, for a plugin that
+    /// ships no `plugin.yaml` to declare them (GitLab #884).
+    ///
+    /// Only consulted when there is no manifest. A manifest that says a plugin
+    /// is aro-files-only is a statement of intent and is believed; silence is
+    /// not a statement, and the loader reads these layouts regardless — a bare
+    /// Swift package, a Cargo crate, loose `.swift` or C sources. Asking the
+    /// filesystem the question the manifest did not answer keeps the builder
+    /// and the loader agreeing about what a plugin is.
+    static func directoryHoldsNativeSources(
+        _ pluginDir: URL,
+        sourcePluginsDir: URL,
+        name: String
+    ) -> Bool {
+        let fm = FileManager.default
+        let roots = [pluginDir, sourcePluginsDir.appendingPathComponent(name)]
+        for root in roots {
+            // A package or crate manifest is the strongest signal.
+            for marker in ["Package.swift", "Cargo.toml", "CMakeLists.txt", "Makefile"]
+            where fm.fileExists(atPath: root.appendingPathComponent(marker).path) {
+                return true
+            }
+            // Otherwise, loose sources in the usual places.
+            for sub in ["", "Sources", "src"] {
+                let dir = sub.isEmpty ? root : root.appendingPathComponent(sub)
+                guard let found = fm.enumerator(at: dir,
+                                                includingPropertiesForKeys: nil,
+                                                options: [.skipsHiddenFiles]) else { continue }
+                for case let file as URL in found
+                where ["swift", "c", "cc", "cpp", "m", "rs"].contains(file.pathExtension) {
+                    return true
+                }
+            }
+        }
+        return false
+    }
+
     static func manifestDeclaresNativePlugin(_ yaml: String) -> Bool {
         parseManifest(yaml)?.declaresNativePlugin ?? false
     }
