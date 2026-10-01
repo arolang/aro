@@ -378,6 +378,46 @@ def run_is_usable(metrics, warmup=DEFAULT_WARMUP_ITERS):
     return degenerate_run_reason(metrics, warmup=warmup) is None
 
 
+# A multi-turn booster needs enough distinct conversations that the run is
+# learning the shape of a dialogue rather than memorising a handful of them.
+MIN_CONVERSATIONS_FOR_BOOSTER = 200
+
+
+def conversation_corpus_verdict(n_convos, iters=None, batch_size=None,
+                                minimum=MIN_CONVERSATIONS_FOR_BOOSTER):
+    """Why the conversation booster must not run, or None if it should.
+
+    The 2026-08 release fine-tuned on **17** conversations for 300 iterations at
+    batch 1x8 — about 140 epochs over the same seventeen rows — and the README
+    describes that booster as producing the final model (#790). A LoRA applied
+    last and fused into the release is the most consequential stage in the
+    pipeline, and it was the one with the least data behind it.
+
+    There is no gate that makes 17 rows safe, so this is a floor rather than a
+    tuning knob: below it the honest action is to skip the stage and ship the
+    model the previous stage produced, not to fuse a memorised one.
+
+    `iters` and `batch_size` are optional and only sharpen the message, so a
+    reader sees the epoch count that makes the number alarming rather than
+    having to work it out.
+    """
+    try:
+        n = int(n_convos)
+    except (TypeError, ValueError):
+        return None
+    if n >= int(minimum):
+        return None
+
+    detail = f'{n} conversation{"" if n == 1 else "s"} is below the {minimum} this stage needs'
+    if iters and batch_size and n > 0:
+        try:
+            epochs = (int(iters) * int(batch_size)) / n
+            detail += f' — {int(iters)} iterations at batch {batch_size} is about {epochs:.0f} epochs over the same rows'
+        except (TypeError, ValueError, ZeroDivisionError):
+            pass
+    return detail
+
+
 def source_to_task_type(source):
     """Map a knowledge_pairs `source` tag to a coarse task type.
     Mirrors NB16's mapping so NB05's per-task validation uses the same
