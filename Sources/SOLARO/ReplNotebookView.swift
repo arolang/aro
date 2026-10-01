@@ -55,11 +55,72 @@ struct ReplNotebookView: View {
             }
         }
         .background(SolaroColor.backdrop)
+        .environment(\.openURL, OpenURLAction(handler: followLink))
         .onAppear { notebook.undoManager = undoManager }
         .onChange(of: undoManager) { _, manager in
             notebook.undoManager = manager
         }
         .onDisappear { notebook.saveNow() }
+    }
+
+    /// Where a markdown link in a notebook cell goes.
+    ///
+    /// The Learning course is written as a course: lessons cite each other
+    /// (`[04](04-immutability.repl)`) and cite the specification
+    /// (`[ARO-0088 §7](../Proposals/ARO-0088-concurrency-model.md)`). Both read
+    /// as links and neither went anywhere, so a cross-reference was a thing to
+    /// retype into a file browser.
+    ///
+    /// Three destinations, decided by what the link actually points at:
+    ///
+    /// * **A web address** opens in the default browser, which is
+    ///   `.systemAction` — SwiftUI's own behaviour, kept rather than replaced.
+    /// * **A file inside the project** opens in SOLARO. That is what makes a
+    ///   reference to another notebook open the notebook rather than hand a
+    ///   `.repl` file to whatever the OS thinks owns the extension.
+    /// * **A file outside the project** goes to the default application for
+    ///   its type, since SOLARO only edits what the open project contains.
+    ///
+    /// A path that resolves to nothing is handed back to the system rather than
+    /// swallowed: a broken link should fail visibly, the way it does elsewhere.
+    private func followLink(_ url: URL) -> OpenURLAction.Result {
+        if let scheme = url.scheme?.lowercased(), scheme != "file" {
+            return .systemAction
+        }
+
+        guard let target = resolvedFile(for: url) else { return .systemAction }
+
+        // Inside the project: hand it to the workspace, which is the same
+        // route a double-clicked file in Finder takes. The workspace checks
+        // the project prefix itself, so this checks it too rather than
+        // posting a notification that would be silently dropped.
+        if target.path.hasPrefix(notebook.project.rootPath.standardizedFileURL.path) {
+            NotificationCenter.default.post(
+                name: .solaroFocusFile, object: nil, userInfo: ["url": target])
+            return .handled
+        }
+
+        NSWorkspace.shared.open(target)
+        return .handled
+    }
+
+    /// A link's target as an existing file, or nil.
+    ///
+    /// A path in a notebook is relative to the notebook, not to the process's
+    /// working directory — `04-immutability.repl` means the lesson beside this
+    /// one. Markdown percent-encodes a path with spaces in it, so the encoding
+    /// is undone before the filesystem sees it.
+    private func resolvedFile(for url: URL) -> URL? {
+        let base = notebook.url.deletingLastPathComponent()
+        let raw = url.isFileURL ? url.path : url.relativePath
+        let path = raw.removingPercentEncoding ?? raw
+        guard !path.isEmpty else { return nil }
+
+        let candidate = url.isFileURL
+            ? URL(fileURLWithPath: path)
+            : URL(fileURLWithPath: path, relativeTo: base)
+        let resolved = candidate.standardizedFileURL
+        return FileManager.default.fileExists(atPath: resolved.path) ? resolved : nil
     }
 
     private func loadErrorView(_ message: String) -> some View {
