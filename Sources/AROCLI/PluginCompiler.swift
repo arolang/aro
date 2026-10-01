@@ -17,6 +17,7 @@ import ArgumentParser
 import Foundation
 import AROCompiler
 import ARORuntime
+import AROToolchain
 import AROPackageManager
 
 /// Pre-compiles managed plugins (from a `Plugins/` directory) for inclusion in
@@ -857,17 +858,10 @@ struct PluginCompiler: Sendable {
     /// host binary needs a staticlib — we build it transparently rather than
     /// asking every plugin author to edit their Cargo.toml.
     static func produceRustStaticLib(at projectDir: URL, verbose: Bool) throws {
-        let cargoCandidates = [
-            ProcessInfo.processInfo.environment["CARGO"],
-            "/root/.cargo/bin/cargo",
-            "\(FileManager.default.homeDirectoryForCurrentUser.path)/.cargo/bin/cargo",
-            "/usr/local/cargo/bin/cargo",
-            "/opt/homebrew/bin/cargo",
-            "/usr/local/bin/cargo",
-            "/usr/bin/cargo",
-        ].compactMap { $0 }
-
-        guard let cargoPath = cargoCandidates.first(where: { FileManager.default.isExecutableFile(atPath: $0) }) else {
+        // The candidate list moved to `Toolchain` (GitLab #733), which `aro
+        // plugins rebuild` was already searching through a second, differently
+        // ordered copy of its own.
+        guard let cargoPath = Toolchain.find("cargo") else {
             throw StaticLibBuildError.cargoNotFound
         }
 

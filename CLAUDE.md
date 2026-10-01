@@ -1017,6 +1017,11 @@ See the [Action Developer Guide](https://github.com/arolang/aro/wiki/Action-Deve
 ```
 Sources/
 ├── AROParser/          # Core parser library
+├── AROToolchain/       # One table of build-tool locations + ToolResolver
+│                       # (GitLab #733). A leaf target with no dependencies, so
+│                       # the runtime, compiler, CLI and package manager can all
+│                       # reach it — tool discovery was implemented nine times
+│                       # with nine candidate lists before it existed.
 ├── ARORuntime/         # Runtime execution (interpreter)
 │   ├── Actions/        # Action protocol, registry, built-ins
 │   ├── Core/           # ExecutionEngine, Context

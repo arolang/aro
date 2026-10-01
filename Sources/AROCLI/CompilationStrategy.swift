@@ -20,6 +20,7 @@ import ArgumentParser
 import Foundation
 import AROParser
 import ARORuntime
+import AROToolchain
 import AROCompiler
 
 /// Owns the native binary pipeline for `aro build`: LLVM IR generation → write
@@ -321,6 +322,14 @@ struct CompilationStrategy: Sendable {
 
     // MARK: - Runtime library lookup
 
+    /// Locate `libARORuntime.a`.
+    ///
+    /// This is a *file* search rather than a tool search, so it keeps its own
+    /// candidate list — the locations are derived from where `aro` itself is
+    /// running, which no shared table can express. What it borrows from
+    /// `ToolResolver` is the probe at the end (GitLab #733): the hand-rolled
+    /// loop that followed used to classify each candidate as absolute or
+    /// relative with a three-branch `if` whose last two branches were identical.
     private func findARORuntimeLibrary() -> String? {
         let fm = FileManager.default
 
@@ -390,33 +399,16 @@ struct CompilationStrategy: Sendable {
         #endif
 
 
-        for path in searchPaths {
-            var fullPath: String
-            if path.hasPrefix("/") {
-                // Absolute path
-                fullPath = path
-            } else if path.hasPrefix(".") {
-                // Relative to current directory
-                fullPath = fm.currentDirectoryPath + "/" + path
-            } else {
-                // Relative to current directory
-                fullPath = fm.currentDirectoryPath + "/" + path
-            }
-
-            if fm.fileExists(atPath: fullPath) {
-                return fullPath
-            }
-        }
-
-
-        return nil
+        // Relative candidates (the `.build/…` development locations) resolve
+        // against the working directory; absolute ones are taken as given.
+        return ToolResolver.firstExistingPath(searchPaths)
     }
 
     // MARK: - Post-link tooling
 
     #if os(macOS)
     private func runCodesignCommand(on binaryPath: String, identity: String, hardened: Bool) throws {
-        guard let codesignPath = ToolResolver.findTool("codesign", fallbackPaths: ["/usr/bin/codesign"]) else {
+        guard let codesignPath = Toolchain.find("codesign") else {
             throw CodesignError.failed(status: -1)
         }
         let process = Process()
@@ -510,17 +502,16 @@ struct CompilationStrategy: Sendable {
            FileManager.default.fileExists(atPath: envPath) {
             return envPath
         }
-        let candidates = [
+        return ToolResolver.firstExistingPath([
             "/usr/share/swift/usr/lib/swift/linux",
             "/usr/lib/swift/linux",
             "/usr/local/lib/swift/linux",
-        ]
-        return candidates.first { FileManager.default.fileExists(atPath: $0) }
+        ])
     }
     #endif
 
     private func runStripCommand(on binaryPath: String) throws {
-        guard let stripPath = ToolResolver.findTool("strip", fallbackPaths: ["/usr/bin/strip"]) else {
+        guard let stripPath = Toolchain.find("strip") else {
             return  // strip is optional — skip silently if not found
         }
         let process = Process()

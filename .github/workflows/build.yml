@@ -236,15 +236,15 @@ jobs:
         run: |
           brew install llvm@20 libgit2 zeromq
           # Detect LLVM path (ARM64 vs Intel)
+          # No symlink from the rolling 'llvm' prefix onto llvm@20 is needed:
+          # tool discovery searches the llvm@20 prefix itself, and LLVM_PATH
+          # below, before anything else (GitLab #733). It used to be needed
+          # because Linker.swift's llc probe only looked in the unversioned
+          # prefix — and it deleted a real Homebrew symlink to do it.
           if [ -d "/opt/homebrew/opt/llvm@20" ]; then
             LLVM_PREFIX="/opt/homebrew/opt/llvm@20"
-            # Ensure the default 'llvm' symlink points to llvm@20 for Linker.swift
-            sudo rm -f /opt/homebrew/opt/llvm 2>/dev/null || true
-            sudo ln -sf /opt/homebrew/opt/llvm@20 /opt/homebrew/opt/llvm
           else
             LLVM_PREFIX="/usr/local/opt/llvm@20"
-            sudo rm -f /usr/local/opt/llvm 2>/dev/null || true
-            sudo ln -sf /usr/local/opt/llvm@20 /usr/local/opt/llvm
           fi
           echo "LLVM_PATH=$LLVM_PREFIX" >> $GITHUB_ENV
           echo "$LLVM_PREFIX/bin" >> $GITHUB_PATH
@@ -1401,15 +1401,15 @@ jobs:
         run: |
           brew install llvm@20 libgit2 zeromq
           # Detect LLVM path (ARM64 vs Intel)
+          # No symlink from the rolling 'llvm' prefix onto llvm@20 is needed:
+          # tool discovery searches the llvm@20 prefix itself, and LLVM_PATH
+          # below, before anything else (GitLab #733). It used to be needed
+          # because Linker.swift's llc probe only looked in the unversioned
+          # prefix — and it deleted a real Homebrew symlink to do it.
           if [ -d "/opt/homebrew/opt/llvm@20" ]; then
             LLVM_PREFIX="/opt/homebrew/opt/llvm@20"
-            # Ensure the default 'llvm' symlink points to llvm@20 for Linker.swift
-            sudo rm -f /opt/homebrew/opt/llvm 2>/dev/null || true
-            sudo ln -sf /opt/homebrew/opt/llvm@20 /opt/homebrew/opt/llvm
           else
             LLVM_PREFIX="/usr/local/opt/llvm@20"
-            sudo rm -f /usr/local/opt/llvm 2>/dev/null || true
-            sudo ln -sf /usr/local/opt/llvm@20 /usr/local/opt/llvm
           fi
           echo "LLVM_PATH=$LLVM_PREFIX" >> $GITHUB_ENV
           echo "$LLVM_PREFIX/bin" >> $GITHUB_PATH
