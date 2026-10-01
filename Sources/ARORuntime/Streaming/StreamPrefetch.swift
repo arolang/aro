@@ -43,16 +43,23 @@ actor BoundedChannel<Element: Sendable> {
         ObjectIdentifier(monitorAnchor)
     }
     private let monitorLabel: String
+    /// Where occupancy is reported. `.shared` for every channel a
+    /// program builds; injectable so a test that has to `enable`
+    /// and `reset` a monitor does it to one nobody else is reading
+    /// (GitLab #890).
+    private nonisolated let monitor: BackpressureMonitor
 
-    init(capacity: Int, label: String = "stream") {
+    init(capacity: Int, label: String = "stream",
+         monitor: BackpressureMonitor = .shared) {
         self.capacity = max(1, capacity)
         self.monitorLabel = label
-        BackpressureMonitor.shared.register(
+        self.monitor = monitor
+        monitor.register(
             ObjectIdentifier(monitorAnchor), label: label, capacity: self.capacity)
     }
 
     deinit {
-        BackpressureMonitor.shared.unregister(monitorToken)
+        monitor.unregister(monitorToken)
     }
 
     /// Offer an element, suspending while the buffer is full.
@@ -75,12 +82,12 @@ actor BoundedChannel<Element: Sendable> {
                 producers.append(continuation)
             }
             let elapsed = DispatchTime.now().uptimeNanoseconds &- parkedAt
-            BackpressureMonitor.shared.recordStall(
+            monitor.recordStall(
                 monitorToken, seconds: Double(elapsed) / 1_000_000_000)
         }
         guard !finished else { return }
         buffer.append(element)
-        BackpressureMonitor.shared.recordDepth(monitorToken, depth: buffer.count)
+        monitor.recordDepth(monitorToken, depth: buffer.count)
 
         // Wake a parked consumer with the *head* of the buffer, not the element
         // just appended — order matters, and a consumer can be parked while the
@@ -120,7 +127,7 @@ actor BoundedChannel<Element: Sendable> {
     func next() async throws -> Element? {
         if !buffer.isEmpty {
             let element = buffer.removeFirst()
-            BackpressureMonitor.shared.recordDepth(monitorToken, depth: buffer.count)
+            monitor.recordDepth(monitorToken, depth: buffer.count)
             if let producer = producers.first {
                 producers.removeFirst()
                 producer.resume()
@@ -151,11 +158,13 @@ public extension AROStream {
     /// pass the binding the elements flow through so a canvas wire
     /// can be matched to its buffer.
     func prefetch(_ capacity: Int = RuntimeDefaults.streamPrefetchCapacity,
-                  label: String = "stream") -> AROStream<Element> {
+                  label: String = "stream",
+                  monitor: BackpressureMonitor = .shared) -> AROStream<Element> {
         let upstream = self
         return AROStream {
             AsyncThrowingStream { continuation in
-                let channel = BoundedChannel<Element>(capacity: capacity, label: label)
+                let channel = BoundedChannel<Element>(capacity: capacity, label: label,
+                                                      monitor: monitor)
 
                 // Producer: pull from upstream into the bounded channel.
                 let producer = Task {

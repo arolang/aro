@@ -14,30 +14,41 @@ import Testing
 @Suite("Backpressure monitor (#444)", .serialized)
 struct BackpressureMonitorTests {
 
-    /// The monitor is process-wide, so each test starts from a
-    /// known state and leaves sampling off.
-    private func withMonitor(_ body: () async throws -> Void) async rethrows {
-        BackpressureMonitor.shared.reset()
-        BackpressureMonitor.shared.enable()
-        defer { BackpressureMonitor.shared.disable() }
-        try await body()
+    /// A monitor for this test alone, already recording.
+    ///
+    /// `enable`, `disable` and `reset` reconfigure whichever monitor
+    /// they are called on, so a suite that calls them on
+    /// `BackpressureMonitor.shared` is reconfiguring the instance
+    /// every other suite in the process is also reading — and
+    /// swift-testing runs suites in parallel (GitLab #890). The
+    /// channels under test are told to report here instead, which
+    /// is what the `monitor:` argument on `prefetch` exists for.
+    private func withMonitor(
+        _ body: (BackpressureMonitor) async throws -> Void
+    ) async rethrows {
+        let monitor = BackpressureMonitor()
+        monitor.enable()
+        try await body(monitor)
     }
 
     @Test("Sampling is off unless something asks for it")
     func disabledByDefault() {
         // A plain `aro run` must not pay for a UI feature nobody is
         // watching, so this is a behaviour, not an implementation
-        // detail.
-        BackpressureMonitor.shared.disable()
-        #expect(!BackpressureMonitor.shared.isEnabled)
-        BackpressureMonitor.shared.enable()
-        #expect(BackpressureMonitor.shared.isEnabled)
-        BackpressureMonitor.shared.disable()
+        // detail. Asserted on a monitor nobody has touched, which is
+        // a straighter reading of "off by default" than switching
+        // the process-wide one off first.
+        let monitor = BackpressureMonitor()
+        #expect(!monitor.isEnabled)
+        monitor.enable()
+        #expect(monitor.isEnabled)
+        monitor.disable()
+        #expect(!monitor.isEnabled)
     }
 
     @Test("A disabled monitor records nothing")
     func disabledRecordsNothing() async throws {
-        BackpressureMonitor.shared.disable()
+        let monitor = BackpressureMonitor()
         let stream = AROStream<Int> {
             AsyncThrowingStream { continuation in
                 for value in 1...20 { continuation.yield(value) }
@@ -45,14 +56,16 @@ struct BackpressureMonitorTests {
             }
         }
         var seen = 0
-        for try await _ in stream.prefetch(4, label: "quiet").stream { seen += 1 }
+        for try await _ in stream.prefetch(4, label: "quiet", monitor: monitor).stream {
+            seen += 1
+        }
         #expect(seen == 20)
-        #expect(BackpressureMonitor.shared.snapshot().isEmpty)
+        #expect(monitor.snapshot().isEmpty)
     }
 
     @Test("A full buffer parks its producer and the stall is recorded")
     func fullBufferParksProducer() async throws {
-        try await withMonitor {
+        try await withMonitor { monitor in
             // Deliberately not "run a fast producer against a slow
             // consumer and hope the buffer fills". That version
             // passed locally and reported stallCount == 0 on the
@@ -65,7 +78,8 @@ struct BackpressureMonitorTests {
             // *cannot* proceed — no scheduling outcome lets it
             // through — and the stall is read after the consumer
             // releases it.
-            let channel = BoundedChannel<Int>(capacity: 1, label: "parked-stage")
+            let channel = BoundedChannel<Int>(capacity: 1, label: "parked-stage",
+                                              monitor: monitor)
             await channel.send(1)
 
             let blocked = Task { await channel.send(2) }
@@ -83,7 +97,7 @@ struct BackpressureMonitorTests {
             await blocked.value
             #expect(try await channel.next() == 2)
 
-            let sample = BackpressureMonitor.shared.snapshot()
+            let sample = monitor.snapshot()
                 .first { $0.label == "parked-stage" }
             let found = try #require(sample)
             #expect(found.capacity == 1)
@@ -97,7 +111,7 @@ struct BackpressureMonitorTests {
         // What the producer/consumer pairing can assert without
         // depending on which side wins: instrumentation must not
         // change delivery.
-        try await withMonitor {
+        try await withMonitor { monitor in
             let stream = AROStream<Int> {
                 AsyncThrowingStream { continuation in
                     for value in 1...40 { continuation.yield(value) }
@@ -105,12 +119,13 @@ struct BackpressureMonitorTests {
                 }
             }
             var received: [Int] = []
-            for try await value in stream.prefetch(2, label: "slow-stage").stream {
+            for try await value in stream.prefetch(2, label: "slow-stage",
+                                                   monitor: monitor).stream {
                 received.append(value)
                 try await Task.sleep(nanoseconds: 1_000_000)
             }
             #expect(received == Array(1...40))
-            let sample = BackpressureMonitor.shared.snapshot()
+            let sample = monitor.snapshot()
                 .first { $0.label == "slow-stage" }
             #expect(sample?.capacity == 2)
         }
@@ -118,7 +133,7 @@ struct BackpressureMonitorTests {
 
     @Test("Backpressure does not change what the stream delivers")
     func orderingPreserved() async throws {
-        try await withMonitor {
+        try await withMonitor { monitor in
             let stream = AROStream<Int> {
                 AsyncThrowingStream { continuation in
                     for value in 1...50 { continuation.yield(value) }
@@ -126,7 +141,8 @@ struct BackpressureMonitorTests {
                 }
             }
             var received: [Int] = []
-            for try await value in stream.prefetch(3, label: "ordered").stream {
+            for try await value in stream.prefetch(3, label: "ordered",
+                                                   monitor: monitor).stream {
                 received.append(value)
             }
             #expect(received == Array(1...50))
@@ -177,15 +193,15 @@ struct BackpressureMonitorTests {
 
     @Test("Snapshots list the tightest stage first")
     func snapshotSorted() async throws {
-        try await withMonitor {
+        try await withMonitor { monitor in
             let fast = AROStream<Int> {
                 AsyncThrowingStream { continuation in
                     for value in 1...5 { continuation.yield(value) }
                     continuation.finish()
                 }
             }
-            for try await _ in fast.prefetch(64, label: "roomy").stream {}
-            let samples = BackpressureMonitor.shared.snapshot()
+            for try await _ in fast.prefetch(64, label: "roomy", monitor: monitor).stream {}
+            let samples = monitor.snapshot()
             // Sorted by fill descending — the head of the list is
             // where a reviewer should look first.
             let fills = samples.map(\.fill)
@@ -195,34 +211,34 @@ struct BackpressureMonitorTests {
 
     @Test("Reset clears readings between runs")
     func resetClears() async throws {
-        try await withMonitor {
+        try await withMonitor { monitor in
             let stream = AROStream<Int> {
                 AsyncThrowingStream { continuation in
                     continuation.yield(1)
                     continuation.finish()
                 }
             }
-            for try await _ in stream.prefetch(2, label: "one-shot").stream {}
-            #expect(!BackpressureMonitor.shared.snapshot().isEmpty)
-            BackpressureMonitor.shared.reset()
-            #expect(BackpressureMonitor.shared.snapshot().isEmpty)
+            for try await _ in stream.prefetch(2, label: "one-shot", monitor: monitor).stream {}
+            #expect(!monitor.snapshot().isEmpty)
+            monitor.reset()
+            #expect(monitor.snapshot().isEmpty)
         }
     }
 
     @Test("A finished stage keeps its stall total but reports no depth")
     func finishedStageKeepsHistory() async throws {
-        try await withMonitor {
+        try await withMonitor { monitor in
             let stream = AROStream<Int> {
                 AsyncThrowingStream { continuation in
                     for value in 1...10 { continuation.yield(value) }
                     continuation.finish()
                 }
             }
-            for try await _ in stream.prefetch(2, label: "done").stream {}
+            for try await _ in stream.prefetch(2, label: "done", monitor: monitor).stream {}
             // Post-run review is exactly when someone asks "where
             // did the time go", so the totals have to survive the
             // channel finishing.
-            let sample = BackpressureMonitor.shared.snapshot()
+            let sample = monitor.snapshot()
                 .first { $0.label == "done" }
             #expect(sample != nil)
         }

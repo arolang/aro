@@ -100,9 +100,16 @@ public enum CallerIdentity: Sendable, Equatable {
 
 /// The scopes an application has declared, by repository name.
 ///
-/// Populated by `Declare` at startup and read on every repository statement, so
-/// it is a lock-guarded singleton rather than something threaded through every
-/// call site. Declaration happens once in `Application-Start`; reads are hot.
+/// Populated by `Configure` at startup and read on every repository statement,
+/// so it is lock-guarded rather than something threaded through every call site.
+/// Declaration happens once in `Application-Start`; reads are hot.
+///
+/// Reached through `RuntimeContainer.repositoryScopes`, never as `.shared`
+/// directly: an application has one of these, but a *process* can run several
+/// applications — most obviously a parallel test suite — and a registry shared
+/// between them is one whose declarations arrive and vanish underneath its
+/// readers (GitLab #890). `.shared` remains the container's default, so a
+/// program that never says otherwise behaves exactly as before.
 public final class RepositoryScopeRegistry: @unchecked Sendable {
 
     public static let shared = RepositoryScopeRegistry()
@@ -152,12 +159,12 @@ public final class RepositoryScopeRegistry: @unchecked Sendable {
         return scopes
     }
 
-    /// Forget everything. Tests only — a process has one application.
-    public func reset() {
-        lock.lock()
-        defer { lock.unlock() }
-        scopes.removeAll()
-    }
+    // There is deliberately no `reset()`. It existed for tests, had no caller
+    // in `Sources/`, and was the whole of GitLab #890: two suites emptying one
+    // process-wide registry while the other was reading it. A caller that wants
+    // a clean set of declarations builds `RepositoryScopeRegistry()` and hands
+    // it to a `RuntimeContainer`, which costs nothing and cannot disturb
+    // anybody else. Adding the method back re-opens the flake.
 
     // MARK: - Resolution
 
@@ -217,8 +224,15 @@ public extension ExecutionContext {
     /// and returning an empty partition would let `Store` write where nothing
     /// reads; both are silent, and the second is the kind of bug that surfaces
     /// weeks later as missing data.
+    ///
+    /// The declarations come from the context's container, not from
+    /// `RepositoryScopeRegistry.shared`. In production the container's registry
+    /// *is* the shared one, so nothing about a running application changes; the
+    /// difference is that a caller who needs its own set of declarations — a
+    /// test — can have one instead of mutating process-wide state its parallel
+    /// neighbours are also reading (GitLab #890).
     func repositoryPartition(of repository: String) throws -> String {
-        switch RepositoryScopeRegistry.shared.resolve(repository: repository, caller: caller) {
+        switch container.repositoryScopes.resolve(repository: repository, caller: caller) {
         case .success(let partition):
             return partition
         case .failure(let error):
