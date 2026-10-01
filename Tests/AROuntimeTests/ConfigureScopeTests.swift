@@ -13,6 +13,11 @@
 // subject, so two statements naming one repository are an immutable rebind
 // (the existing hint says as much). Setting scope *and* ttl therefore has to
 // be one statement.
+//
+// Every test here declares into a registry of its own, handed to the action
+// through a `RuntimeContainer`. Declaring into `RepositoryScopeRegistry.shared`
+// and clearing it either side made these tests race `CallerScopedStorageTests`,
+// which was doing the same to the same object (GitLab #890).
 
 import Testing
 @testable import ARORuntime
@@ -21,13 +26,24 @@ import AROParser
 @Suite("Repository scope through Configure (GitLab #886)", .serialized)
 struct ConfigureScopeTests {
 
+    /// A container nothing else in the process shares: its own scope registry,
+    /// and its own storage so a `ttl` set here is not a `ttl` set everywhere.
+    private func isolated() -> (RuntimeContainer, RepositoryScopeRegistry) {
+        let registry = RepositoryScopeRegistry()
+        return (RuntimeContainer(repositoryStorage: InMemoryRepositoryStorage(),
+                                 repositoryScopes: registry), registry)
+    }
+
     private func configure(
+        in container: RuntimeContainer,
         repository: String = "cart-repository",
         specifier: String?,
         payload: any Sendable,
         bindAs: String = "_with_"
     ) async throws {
-        let context = RuntimeContext(featureSetName: "Application-Start", businessActivity: "Shop")
+        let context = RuntimeContext(featureSetName: "Application-Start",
+                                     businessActivity: "Shop",
+                                     container: container)
         context.bind(bindAs, value: payload)
         _ = try await ConfigureAction().execute(
             result: ResultDescriptor(base: repository,
@@ -40,21 +56,19 @@ struct ConfigureScopeTests {
 
     @Test("The specifier form sets the scope")
     func specifierForm() async throws {
-        RepositoryScopeRegistry.shared.reset()
-        defer { RepositoryScopeRegistry.shared.reset() }
-        try await configure(specifier: "scope", payload: "session")
-        #expect(RepositoryScopeRegistry.shared.scope(of: "cart-repository") == .session)
+        let (container, scopes) = isolated()
+        try await configure(in: container, specifier: "scope", payload: "session")
+        #expect(scopes.scope(of: "cart-repository") == .session)
     }
 
     @Test("The object form sets several properties at once")
     func objectForm() async throws {
         // The spelling that exists because two Configure statements on one
         // repository collide — this is how you set scope and ttl together.
-        RepositoryScopeRegistry.shared.reset()
-        defer { RepositoryScopeRegistry.shared.reset() }
-        try await configure(specifier: nil,
+        let (container, scopes) = isolated()
+        try await configure(in: container, specifier: nil,
                             payload: ["scope": "connection", "ttl": 3600] as [String: any Sendable])
-        #expect(RepositoryScopeRegistry.shared.scope(of: "cart-repository") == .connection)
+        #expect(scopes.scope(of: "cart-repository") == .connection)
     }
 
     @Test("A compiled binary binds the payload elsewhere, and it still works")
@@ -63,45 +77,41 @@ struct ConfigureScopeTests {
         // binds it to `_with_` *and* `_expression_` while compiled code binds
         // only `_expression_`. Reading one name worked under `aro run` and
         // silently did nothing under `aro build` (ARO-0094).
-        RepositoryScopeRegistry.shared.reset()
-        defer { RepositoryScopeRegistry.shared.reset() }
-        try await configure(specifier: nil,
+        let (container, scopes) = isolated()
+        try await configure(in: container, specifier: nil,
                             payload: ["scope": "session"] as [String: any Sendable],
                             bindAs: "_expression_")
-        #expect(RepositoryScopeRegistry.shared.scope(of: "cart-repository") == .session)
+        #expect(scopes.scope(of: "cart-repository") == .session)
     }
 
     @Test("An unknown scope is refused, and nothing is registered")
     func unknownScope() async {
-        RepositoryScopeRegistry.shared.reset()
-        defer { RepositoryScopeRegistry.shared.reset() }
+        let (container, scopes) = isolated()
         await #expect(throws: (any Error).self) {
-            try await configure(specifier: "scope", payload: "user")
+            try await configure(in: container, specifier: "scope", payload: "user")
         }
-        #expect(!RepositoryScopeRegistry.shared.isDeclared("cart-repository"))
+        #expect(!scopes.isDeclared("cart-repository"))
     }
 
     @Test("An unknown repository property is refused rather than ignored")
     func unknownProperty() async {
         // Silently dropping it is how `{ scpoe: "session" }` becomes an
         // application-wide repository nobody notices.
-        RepositoryScopeRegistry.shared.reset()
-        defer { RepositoryScopeRegistry.shared.reset() }
+        let (container, _) = isolated()
         await #expect(throws: (any Error).self) {
-            try await configure(specifier: nil,
+            try await configure(in: container, specifier: nil,
                                 payload: ["scpoe": "session"] as [String: any Sendable])
         }
     }
 
     @Test("Two Configure statements that disagree are refused")
     func conflictingScope() async throws {
-        RepositoryScopeRegistry.shared.reset()
-        defer { RepositoryScopeRegistry.shared.reset() }
-        try await configure(specifier: "scope", payload: "session")
+        let (container, scopes) = isolated()
+        try await configure(in: container, specifier: "scope", payload: "session")
         await #expect(throws: (any Error).self) {
-            try await configure(specifier: "scope", payload: "application")
+            try await configure(in: container, specifier: "scope", payload: "application")
         }
-        #expect(RepositoryScopeRegistry.shared.scope(of: "cart-repository") == .session,
+        #expect(scopes.scope(of: "cart-repository") == .session,
                 "the first declaration stands")
     }
 
@@ -109,10 +119,11 @@ struct ConfigureScopeTests {
     func storageSettingsUnaffected() async throws {
         // The fold must not disturb what `Configure` already did for
         // repositories (ARO-0035).
-        RepositoryScopeRegistry.shared.reset()
-        defer { RepositoryScopeRegistry.shared.reset() }
-        try await configure(repository: "cache-repository", specifier: "ttl", payload: 60)
-        try await configure(repository: "other-repository", specifier: "maxSize", payload: 10)
-        #expect(RepositoryScopeRegistry.shared.scope(of: "cache-repository") == .application)
+        let (container, scopes) = isolated()
+        try await configure(in: container, repository: "cache-repository",
+                            specifier: "ttl", payload: 60)
+        try await configure(in: container, repository: "other-repository",
+                            specifier: "maxSize", payload: 10)
+        #expect(scopes.scope(of: "cache-repository") == .application)
     }
 }

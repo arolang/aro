@@ -473,7 +473,7 @@ public enum ConfigurableSettings {
                     RepositoryScopeError.unknownScope(repository: repository, raw: text).description,
                     received: text)
             }
-            if case .failure(let error) = RepositoryScopeRegistry.shared.declare(repository, scope: scope) {
+            if case .failure(let error) = context.container.repositoryScopes.declare(repository, scope: scope) {
                 throw ActionError.invalidInput(error.description, received: scope.rawValue)
             }
             return scope.rawValue
