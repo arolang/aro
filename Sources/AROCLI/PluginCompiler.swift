@@ -387,6 +387,17 @@ struct PluginCompiler: Sendable {
                     }
                 }
 
+                if objectFiles.isEmpty, !Self.manifestDeclaresNativePlugin(yamlContent) {
+                    // Reached only via the no-manifest fallback above. Before
+                    // that fallback existed this plugin was skipped silently;
+                    // turning that into a failed build would be a worse
+                    // regression than the bug being fixed, so it degrades to
+                    // the old behaviour and says why.
+                    print("Warning: plugin '\(pluginName)' has native sources but produced no object files — not statically linked.")
+                    print("  The binary will not carry it. Build with `aro build --dynamic`, or add a plugin.yaml declaring its type.")
+                    continue
+                }
+
                 if objectFiles.isEmpty {
                     print("Error: No object files found for plugin '\(pluginName)' — cannot statically link.")
                     if let compileError = pluginCompileFailures[pluginName] {
@@ -704,11 +715,35 @@ struct PluginCompiler: Sendable {
         guard (try? process.run()) != nil else { return nil }
         let data = pipe.fileHandleForReading.readDataToEndOfFile()
         process.waitUntilExit()
-        guard process.terminationStatus == 0,
-              let path = String(data: data, encoding: .utf8)?
-                  .trimmingCharacters(in: .whitespacesAndNewlines),
-              !path.isEmpty else { return nil }
-        return URL(fileURLWithPath: path)
+        if process.terminationStatus == 0,
+           let path = String(data: data, encoding: .utf8)?
+               .trimmingCharacters(in: .whitespacesAndNewlines),
+           !path.isEmpty {
+            return URL(fileURLWithPath: path)
+        }
+
+        // `--show-bin-path` re-resolves dependencies, so it fails on a runner
+        // with no route to the dependency host even when the package is
+        // already built in `scratchPath` — which is how a plugin that CI had
+        // just compiled successfully reported no bin path at all. The layout
+        // is conventional, so look for it rather than giving up (GitLab #884).
+        let conventional = [
+            scratchPath.appendingPathComponent("release"),
+            scratchPath.appendingPathComponent("debug"),
+        ]
+        for dir in conventional where FileManager.default.fileExists(atPath: dir.path) {
+            return dir
+        }
+        // Triple-prefixed layout: <scratch>/<arch>-<vendor>-<os>/release.
+        if let entries = try? FileManager.default.contentsOfDirectory(
+            at: scratchPath, includingPropertiesForKeys: [.isDirectoryKey],
+            options: [.skipsHiddenFiles]) {
+            for entry in entries {
+                let release = entry.appendingPathComponent("release")
+                if FileManager.default.fileExists(atPath: release.path) { return release }
+            }
+        }
+        return nil
     }
 
     /// Put the plugin's shared library where the runtime looks for it.
