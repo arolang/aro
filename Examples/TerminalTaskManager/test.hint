@@ -1,16 +1,13 @@
 # TerminalTaskManager uses Keepalive for event loop
 # Timeout is expected behavior - application stays alive until Ctrl+C
 #
-# 3 s was the tightest budget in the suite and the compiled binary could not
-# meet it. The two Log lines land immediately, but in compiled mode the first
-# repository observer does not dispatch until ~2.6 s after startup; the three
-# renders themselves then take ~0.8 s (the same as the interpreter), so the
-# dashboard only completes at ~3.4-3.9 s. The interpreter passed because it
-# emits the dashboards *before* the Log lines. At 3 s the compiled run was
-# cut off after "Press Ctrl+C to exit." and every expected dashboard line was
-# reported missing. 10 s leaves headroom on a loaded runner without changing
-# what the test checks; occurrence-check keeps it order-independent.
-timeout: 10
+# The dashboard is complete well inside a second: the three renders finish by
+# ~0.8 s and the two Log lines follow. It was 10 s for a while because the
+# compiled binary appeared to take ~3.4 s to produce them — that was `Render`
+# output sitting in a stdio buffer until process exit, not work taking time
+# (GitLab #891). With `Render` flushing like `Log`, the original budget is
+# three times what the example needs again.
+timeout: 3
 mode: both
 # Binary mode outputs return value fields that interpreter doesn't
 occurrence-check: true

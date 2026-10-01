@@ -267,8 +267,20 @@ public struct RenderAction: ActionImplementation {
             let positions = context.resolveAny(positionsKey) as? [String: TerminalVarPosition] ?? [:]
             await terminalService.renderSection(name: result.base, content: content, variablePositions: positions)
         } else {
-            // Non-TTY fallback (tests, pipes): output like Log
-            print(content)
+            // Non-TTY fallback (tests, pipes): output like Log — which means
+            // writing the way `Log` writes, not merely producing the same text.
+            //
+            // `print()` is fully buffered when stdout is not a terminal, so a
+            // render reached the pipe only when the buffer filled or the
+            // process exited. In a compiled binary that put the entire output
+            // of `Render` at shutdown: it arrived after statements written
+            // below it, and a run that was signalled first lost it altogether.
+            // `LogAction` uses `FileHandle` for exactly this reason and says
+            // so; this fallback claimed to behave like `Log` while differing
+            // in the one respect that mattered (GitLab #891).
+            if let data = (content + "\n").data(using: .utf8) {
+                try? FileHandle.standardOutput.write(contentsOf: data)
+            }
         }
 
         return RenderResult(content: content)
