@@ -74,6 +74,10 @@ struct PluginCompiler: Sendable {
         var pythonPluginIRInfos: [EmbeddedPythonPluginIRInfo] = []
         /// Extra linker flags (e.g. `-lpython3.12`) required by embedded Python plugins.
         var pythonLinkerFlags: [String] = []
+        /// System libraries a statically linked plugin's Swift package depends
+        /// on (e.g. `-lsqlite3`), which SwiftPM resolves for its own link and
+        /// we have to resolve for ours. See `swiftPackageSystemLibraryFlags`.
+        var pluginLinkerFlags: [String] = []
         /// Set when an embeddable CPython was found: the standard library to
         /// copy next to the finished binary, and the version that names the
         /// directory. Staging happens after linking, because only the build
@@ -177,7 +181,17 @@ struct PluginCompiler: Sendable {
                 // plugins that ship feature sets and nothing to statically link).
                 // Without this guard, the hard-error path below fires on any
                 // plugin that legitimately has no .o files to bake.
+                //
+                // A manifest saying "no native code" is believed. **No manifest
+                // at all is not the same claim**, and treating it as one is how
+                // a Swift package with real sources came to be skipped here
+                // while `aro run` loaded it perfectly well (GitLab #884): the
+                // loader accepts a bare package without a `plugin.yaml`, so the
+                // builder has to recognise one too. Where there is nothing to
+                // read, look at what is on disk instead.
                 let hasNativeType = Self.manifestDeclaresNativePlugin(yamlContent)
+                    || (yamlContent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                        && Self.directoryHoldsNativeSources(pluginDir, sourcePluginsDir: sourcePluginsDir, name: pluginName))
                 if !hasNativeType {
                     if verbose {
                         print("  Skipping '\(pluginName)' — no native plugin code to statically link")
@@ -377,6 +391,17 @@ struct PluginCompiler: Sendable {
                     }
                 }
 
+                if objectFiles.isEmpty, !Self.manifestDeclaresNativePlugin(yamlContent) {
+                    // Reached only via the no-manifest fallback above. Before
+                    // that fallback existed this plugin was skipped silently;
+                    // turning that into a failed build would be a worse
+                    // regression than the bug being fixed, so it degrades to
+                    // the old behaviour and says why.
+                    print("Warning: plugin '\(pluginName)' has native sources but produced no object files — not statically linked.")
+                    print("  The binary will not carry it. Build with `aro build --dynamic`, or add a plugin.yaml declaring its type.")
+                    continue
+                }
+
                 if objectFiles.isEmpty {
                     print("Error: No object files found for plugin '\(pluginName)' — cannot statically link.")
                     if let compileError = pluginCompileFailures[pluginName] {
@@ -410,6 +435,21 @@ struct PluginCompiler: Sendable {
                     print("    • C/C++: use the ARO_PLUGIN(...) macro from aro_plugin_sdk.h")
                     print("    • Swift: apply @AROExport to your AROPlugin definition")
                     throw ExitCode.failure
+                }
+
+                // The package's object files are only half of what SwiftPM
+                // linked. Carry its system-library dependencies across too, or
+                // the binary is short every symbol they provide (GitLab #884).
+                if hasPackageManifest {
+                    let systemLibraries = Self.swiftPackageSystemLibraryFlags(
+                        packageDir: packageDir, scratchPath: spmBuildDir
+                    )
+                    for flag in systemLibraries where !result.pluginLinkerFlags.contains(flag) {
+                        result.pluginLinkerFlags.append(flag)
+                    }
+                    if verbose, !systemLibraries.isEmpty {
+                        print("  Plugin '\(pluginName)' links \(systemLibraries.joined(separator: " "))")
+                    }
                 }
 
                 result.staticPluginInfos.append(StaticPluginInfo(
@@ -694,11 +734,140 @@ struct PluginCompiler: Sendable {
         guard (try? process.run()) != nil else { return nil }
         let data = pipe.fileHandleForReading.readDataToEndOfFile()
         process.waitUntilExit()
-        guard process.terminationStatus == 0,
-              let path = String(data: data, encoding: .utf8)?
-                  .trimmingCharacters(in: .whitespacesAndNewlines),
-              !path.isEmpty else { return nil }
-        return URL(fileURLWithPath: path)
+        if process.terminationStatus == 0,
+           let path = String(data: data, encoding: .utf8)?
+               .trimmingCharacters(in: .whitespacesAndNewlines),
+           !path.isEmpty {
+            return URL(fileURLWithPath: path)
+        }
+
+        // `--show-bin-path` re-resolves dependencies, so it fails on a runner
+        // with no route to the dependency host even when the package is
+        // already built in `scratchPath` — which is how a plugin that CI had
+        // just compiled successfully reported no bin path at all. The layout
+        // is conventional, so look for it rather than giving up (GitLab #884).
+        let conventional = [
+            scratchPath.appendingPathComponent("release"),
+            scratchPath.appendingPathComponent("debug"),
+        ]
+        for dir in conventional where FileManager.default.fileExists(atPath: dir.path) {
+            return dir
+        }
+        // Triple-prefixed layout: <scratch>/<arch>-<vendor>-<os>/release.
+        if let entries = try? FileManager.default.contentsOfDirectory(
+            at: scratchPath, includingPropertiesForKeys: [.isDirectoryKey],
+            options: [.skipsHiddenFiles]) {
+            for entry in entries {
+                let release = entry.appendingPathComponent("release")
+                if FileManager.default.fileExists(atPath: release.path) { return release }
+            }
+        }
+        return nil
+    }
+
+    /// The system libraries a Swift package plugin's dependency graph declares,
+    /// as linker flags.
+    ///
+    /// Harvesting a package's `.o` files and linking them into the ARO binary
+    /// takes the code but not the link line SwiftPM built around it. A package
+    /// that reaches a C library does so through a **system-library target**,
+    /// whose module map carries the `link "sqlite3"` directive that puts
+    /// `-lsqlite3` on SwiftPM's link. Nothing re-reads that directive here, so
+    /// SQLite.swift compiled, linked on macOS, and failed on Linux with a page
+    /// of `undefined reference to 'sqlite3_*'` (GitLab #884).
+    ///
+    /// Why it only ever broke on Linux: Swift also records these dependencies
+    /// in the object files — `LC_LINKER_OPTION` on Mach-O, a
+    /// `.swift1_autolink_entries` section on ELF — and `ld64` reads the Mach-O
+    /// form by itself. No ELF linker reads the other one; the Swift driver runs
+    /// `swift-autolink-extract` to turn it into flags, and the static-link path
+    /// never does. This runs on both platforms anyway, so the mechanism is
+    /// exercised where it can be tested; on macOS it finds nothing to add, and
+    /// a flag ld64 had already worked out for itself would be a duplicate
+    /// rather than a problem.
+    ///
+    /// Reading the module maps rather than the autolink sections is what makes
+    /// this need no exclusion list: a system-library target names a C library
+    /// and nothing else, so `libswiftCore` and `libFoundation` — already on the
+    /// link line, inside a `-Bstatic` bracket for `--static` — can never come
+    /// back through here and be linked a second time, dynamically.
+    ///
+    /// A library the host does not have is dropped instead of emitted. A
+    /// package may declare a system target for a platform this build is not,
+    /// and a `-l` that resolves to nothing would turn a link error naming the
+    /// real missing symbols into one naming a library nobody asked for.
+    static func swiftPackageSystemLibraryFlags(packageDir: URL, scratchPath: URL) -> [String] {
+        var names: [String] = []
+        var seen = Set<String>()
+        for root in [scratchPath.appendingPathComponent("checkouts"), packageDir] {
+            for name in moduleMapLinkDirectives(under: root) where seen.insert(name).inserted {
+                names.append(name)
+            }
+        }
+        return names.filter { hostHasLibrary($0) }.map { "-l\($0)" }
+    }
+
+    /// Every `link "name"` directive in the module maps under `root`.
+    ///
+    /// `link framework "name"` is ignored. A framework is not a `-l`, and
+    /// taking the last quoted token off that line would emit `-lSecurity` —
+    /// which resolves to nothing on Linux, replacing a real missing-symbol
+    /// error with a missing-library one.
+    static func moduleMapLinkDirectives(under root: URL) -> [String] {
+        guard let walker = FileManager.default.enumerator(
+            at: root,
+            includingPropertiesForKeys: [.isRegularFileKey],
+            options: [.skipsHiddenFiles]
+        ) else { return [] }
+
+        // A dependency graph with swift-syntax in it is tens of thousands of
+        // files, and none of the ones worth reading are under a checkout's own
+        // build or history directories.
+        let pruned: Set<String> = [".build", ".build-aro", ".git", ".index-build"]
+
+        var names: [String] = []
+        for case let url as URL in walker {
+            if pruned.contains(url.lastPathComponent) {
+                walker.skipDescendants()
+                continue
+            }
+            guard url.lastPathComponent == "module.modulemap" else { continue }
+            guard let text = try? String(contentsOf: url, encoding: .utf8) else { continue }
+            for line in text.split(separator: "\n") {
+                let trimmed = line.trimmingCharacters(in: .whitespaces)
+                guard trimmed.hasPrefix("link "), !trimmed.hasPrefix("link framework") else { continue }
+                guard let open = trimmed.firstIndex(of: "\""),
+                      let close = trimmed.lastIndex(of: "\""),
+                      open < close else { continue }
+                let name = String(trimmed[trimmed.index(after: open)..<close])
+                if !name.isEmpty { names.append(name) }
+            }
+        }
+        return names
+    }
+
+    /// Whether `-l<name>` will resolve on this host.
+    ///
+    /// Answered by linking it rather than by looking for the file. Guessing at
+    /// `/usr/lib` misses the multiarch directories; `-print-file-name` searches
+    /// a different set of paths than the link does. The question here is
+    /// exactly "would the linker find this", so the probe is a link: an empty
+    /// shared object against that one library.
+    static func hostHasLibrary(_ name: String) -> Bool {
+        guard let clang = ToolchainLocator.find("clang") else { return false }
+        let output = FileManager.default.temporaryDirectory
+            .appendingPathComponent("aro-lib-probe-\(UUID().uuidString).so")
+        defer { try? FileManager.default.removeItem(at: output) }
+
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: clang)
+        process.arguments = ["-shared", "-o", output.path, "-x", "c", "/dev/null", "-l\(name)"]
+        process.environment = ToolchainEnvironment.forExternalToolchain()
+        process.standardOutput = FileHandle.nullDevice
+        process.standardError = FileHandle.nullDevice
+        guard (try? process.run()) != nil else { return false }
+        process.waitUntilExit()
+        return process.terminationStatus == 0
     }
 
     /// Put the plugin's shared library where the runtime looks for it.
@@ -818,6 +987,43 @@ struct PluginCompiler: Sendable {
     /// (Swift/C/C++/Rust) that must be compiled and statically linked into the
     /// host binary. A manifest with none of these ships only feature sets and
     /// is skipped by the static-link path.
+    /// Whether a plugin directory holds native sources, for a plugin that
+    /// ships no `plugin.yaml` to declare them (GitLab #884).
+    ///
+    /// Only consulted when there is no manifest. A manifest that says a plugin
+    /// is aro-files-only is a statement of intent and is believed; silence is
+    /// not a statement, and the loader reads these layouts regardless — a bare
+    /// Swift package, a Cargo crate, loose `.swift` or C sources. Asking the
+    /// filesystem the question the manifest did not answer keeps the builder
+    /// and the loader agreeing about what a plugin is.
+    static func directoryHoldsNativeSources(
+        _ pluginDir: URL,
+        sourcePluginsDir: URL,
+        name: String
+    ) -> Bool {
+        let fm = FileManager.default
+        let roots = [pluginDir, sourcePluginsDir.appendingPathComponent(name)]
+        for root in roots {
+            // A package or crate manifest is the strongest signal.
+            for marker in ["Package.swift", "Cargo.toml", "CMakeLists.txt", "Makefile"]
+            where fm.fileExists(atPath: root.appendingPathComponent(marker).path) {
+                return true
+            }
+            // Otherwise, loose sources in the usual places.
+            for sub in ["", "Sources", "src"] {
+                let dir = sub.isEmpty ? root : root.appendingPathComponent(sub)
+                guard let found = fm.enumerator(at: dir,
+                                                includingPropertiesForKeys: nil,
+                                                options: [.skipsHiddenFiles]) else { continue }
+                for case let file as URL in found
+                where ["swift", "c", "cc", "cpp", "m", "rs"].contains(file.pathExtension) {
+                    return true
+                }
+            }
+        }
+        return false
+    }
+
     static func manifestDeclaresNativePlugin(_ yaml: String) -> Bool {
         parseManifest(yaml)?.declaresNativePlugin ?? false
     }

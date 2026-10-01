@@ -60,6 +60,9 @@ struct CompilationStrategy: Sendable {
         var staticPluginIRInfos: [StaticPluginIRInfo]
         var pythonPluginIRInfos: [EmbeddedPythonPluginIRInfo]
         var pythonLinkerFlags: [String]
+        /// System libraries a statically linked plugin's Swift package needs
+        /// (e.g. `-lsqlite3`), discovered from its system-library targets.
+        var pluginLinkerFlags: [String] = []
 
         // Resolved flags.
         var optimize: Bool
@@ -248,6 +251,10 @@ struct CompilationStrategy: Sendable {
             }
             // Add Python library if Python plugins are embedded
             allObjectFiles.append(contentsOf: request.pythonLinkerFlags)
+            // …and the system libraries the static plugins' packages link
+            // against. They go after every object file that references them,
+            // which is what a `-l` on a GNU link line requires (GitLab #884).
+            allObjectFiles.append(contentsOf: request.pluginLinkerFlags)
 
             try linker.link(
                 objectFiles: allObjectFiles,
