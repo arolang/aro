@@ -291,6 +291,7 @@ struct BuildCommand: AsyncParsableCommand {
         let staticPluginIRInfos = compiledPlugins.staticPluginIRInfos
         let pythonPluginIRInfos = compiledPlugins.pythonPluginIRInfos
         let pythonLinkerFlags = compiledPlugins.pythonLinkerFlags
+        let pluginLinkerFlags = compiledPlugins.pluginLinkerFlags
 
         // Generate LLVM IR
         if verbose {
@@ -332,6 +333,7 @@ struct BuildCommand: AsyncParsableCommand {
             staticPluginIRInfos: staticPluginIRInfos,
             pythonPluginIRInfos: pythonPluginIRInfos,
             pythonLinkerFlags: pythonLinkerFlags,
+            pluginLinkerFlags: pluginLinkerFlags,
             optimize: optimize,
             size: size,
             strip: strip,
