@@ -48,10 +48,18 @@ ENV GIT_CONFIG_COUNT=1 \
 # gcc does not disturb the Swift toolchain's clang: it installs under its own
 # names (`gcc`, `cc`), so nothing shadows the clang `swift build` invokes --
 # see the -index-store-path note below.
+#
+# `software-properties-common` is deliberately absent. The only thing that ever
+# wanted it was `add-apt-repository`, and the LLVM step below adds the
+# repository with a keyring and a sources.list entry instead. Installing it
+# would drag in the systemd/dbus chain, whose postinst scripts cannot take over
+# `/etc/resolv.conf` or reach a message bus inside a container under QEMU
+# emulation — apt then exits 2 and the layer dies, which is what it did to
+# `docker/buildsystem/Dockerfile` on arm64.
 RUN apt-get update -qq \
     && apt-get install -y -qq --no-install-recommends \
         build-essential \
-        git ca-certificates wget curl gnupg software-properties-common \
+        git ca-certificates wget curl gnupg \
         libgit2-dev libzmq3-dev libcurl4 libzstd-dev \
         zlib1g-dev libsqlite3-dev libxml2 \
         python3 python3-pip \
