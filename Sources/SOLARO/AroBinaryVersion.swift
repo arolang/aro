@@ -142,7 +142,6 @@ struct AroBinaryMismatchBanner: View {
                 Text("Using `\(displayPath)` (\(binaryVersion)) — SOLARO was built against \(solaroVersion). Some flags may not be recognised. Pick a different binary in Settings → Backends, or rebuild the project's `aro` CLI to match.")
                     .font(SolaroFont.caption)
                     .foregroundStyle(SolaroColor.textSecondary)
-                    .lineLimit(3)
                     .fixedSize(horizontal: false, vertical: true)
             }
             Spacer()

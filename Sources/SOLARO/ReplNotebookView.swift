@@ -944,6 +944,7 @@ private struct ReplCellOutputView: View, Equatable {
                                  ? SolaroColor.stateWarn
                                  : SolaroColor.textSecondary)
                 .textSelection(.enabled)
+                .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
         case .result:
             resultView
@@ -966,6 +967,7 @@ private struct ReplCellOutputView: View, Equatable {
                 .font(SolaroFont.mono)
                 .foregroundStyle(SolaroColor.textPrimary)
                 .textSelection(.enabled)
+                .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
@@ -980,12 +982,14 @@ private struct ReplCellOutputView: View, Equatable {
                     .font(SolaroFont.monoCaption.weight(.semibold))
                     .foregroundStyle(SolaroColor.stateError)
                     .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             if let traceback = output.traceback, traceback.count > 1 {
                 Text(traceback.dropFirst().joined(separator: "\n"))
                     .font(SolaroFont.monoCaption)
                     .foregroundStyle(SolaroColor.textSecondary)
                     .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
         .padding(SolaroSpace.s)
@@ -1152,7 +1156,7 @@ private struct ReplDisplayTableView: View {
                                 Text(cellValue)
                                     .font(SolaroFont.monoCaption)
                                     .foregroundStyle(SolaroColor.textPrimary)
-                                    .lineLimit(3)
+                                    .fixedSize(horizontal: false, vertical: true)
                                     .textSelection(.enabled)
                                     .padding(.horizontal, SolaroSpace.s)
                                     .padding(.vertical, 4)
