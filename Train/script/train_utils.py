@@ -316,6 +316,68 @@ def select_min_max_checkpoint(per_ckpt_task_losses):
     return best_name, best_stats
 
 
+# Default warmup for the SFT stages (config.py: "warmup 40→100", #440). A run
+# whose best validation iteration lands inside warmup never actually learned
+# anything — the schedule was still ramping the learning rate.
+DEFAULT_WARMUP_ITERS = 100
+
+
+def degenerate_run_reason(metrics, warmup=DEFAULT_WARMUP_ITERS):
+    """Why this training run must not be fused, or None if it is usable.
+
+    `metrics` is a run's metrics dict — `experiments.db`'s `metrics` column, or
+    the `meta.json` a fine-tune stage writes beside its adapter.
+
+    Three questions, in the order they became necessary:
+
+    * **Did it say it failed?** `training_failed` is the explicit flag.
+    * **Is the best iteration degenerate?** `experiments.db` row 12 of the
+      2026-08 run recorded `best_val_iter: 1` with `stopped_early: True`, was
+      fused, trained on top of, and shipped as the teacher. A best iteration
+      inside warmup is not an early stop that found its minimum quickly; it is
+      a run whose validation loss never improved after the first evaluation,
+      and the schedule had not finished ramping the learning rate (#788).
+    * **Did it stop early?** Only when the best iteration is unknown. An early
+      stop is *normal* when the run found its minimum and the patience window
+      then expired — row 1 of the same table stopped early with
+      `best_val_iter: 450` and is a perfectly good model. Rejecting on the flag
+      alone throws away healthy runs, which is why it cannot be the whole test.
+
+    Returns a human-readable reason, so callers can print why a model was
+    skipped rather than skipping it in silence.
+    """
+    if not isinstance(metrics, dict):
+        return None
+
+    if metrics.get('training_failed'):
+        return 'the run recorded training_failed'
+
+    best_iter = metrics.get('best_val_iter')
+    if best_iter is not None:
+        try:
+            best_iter = int(best_iter)
+        except (TypeError, ValueError):
+            return None
+        if best_iter < int(warmup):
+            return (f'best validation iteration {best_iter} is inside warmup '
+                    f'({warmup}) — the run never improved past its first '
+                    f'evaluation')
+        # A known, healthy best iteration. `stopped_early` here means the
+        # patience window expired after a real minimum, which is what early
+        # stopping is for.
+        return None
+
+    if metrics.get('stopped_early'):
+        return 'the run stopped early and recorded no best_val_iter'
+
+    return None
+
+
+def run_is_usable(metrics, warmup=DEFAULT_WARMUP_ITERS):
+    """Convenience inverse of `degenerate_run_reason`."""
+    return degenerate_run_reason(metrics, warmup=warmup) is None
+
+
 def source_to_task_type(source):
     """Map a knowledge_pairs `source` tag to a coarse task type.
     Mirrors NB16's mapping so NB05's per-task validation uses the same
