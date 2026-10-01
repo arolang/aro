@@ -220,6 +220,78 @@ struct GitServiceTests {
         #expect(one.count == 1)
         #expect(three.count == 3)
     }
+
+    @Test("log reads a shallow clone")
+    func testLogShallowClone() throws {
+        // A `--depth` clone is what CI checks out, and libgit2 1.1 — what the
+        // Linux CI image ships — has no shallow support: `push_head` succeeds
+        // and then the first `git_revwalk_next` returns ENOTFOUND, because
+        // preparing the walk resolves a parent that is past the graft. `log`
+        // came back EMPTY for a checkout that plainly has history, and
+        // Learning notebook 22 then failed on `<log: first>` — a line that is
+        // correct (GitLab #810).
+        //
+        // Nothing here asserts which code path answered. On a libgit2 that
+        // supports shallow the revwalk does; on one that does not the
+        // first-parent fallback does. What must hold either way is that a
+        // repository with commits does not report none.
+        let source = try makeTempRepo(commitCount: 4)
+        defer { try? FileManager.default.removeItem(at: source) }
+
+        let clone = FileManager.default.temporaryDirectory
+            .appendingPathComponent("aro-git-shallow-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: clone) }
+
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
+        process.arguments = [
+            "clone", "--depth", "2", "file://\(source.path)", clone.path,
+        ]
+        process.standardOutput = FileHandle.nullDevice
+        process.standardError = FileHandle.nullDevice
+        try process.run()
+        process.waitUntilExit()
+        try #require(process.terminationStatus == 0, "git clone --depth failed")
+
+        let entries = try GitService.shared.log(limit: 10, in: clone)
+        #expect(!entries.isEmpty, "a shallow clone has history; log must not report none")
+        let head = try #require(entries.first)
+        #expect(head.message == "Commit 4")
+        #expect(head.short.count == 7, "the field notebook 22 reads must be there")
+    }
+
+    @Test("log reads a shallow clone with a detached HEAD")
+    func testLogShallowDetached() throws {
+        // CI checks out a merge-request ref, so HEAD is detached as well as
+        // shallow. The two are independent failure modes and both were in
+        // play, so both are pinned.
+        let source = try makeTempRepo(commitCount: 3)
+        defer { try? FileManager.default.removeItem(at: source) }
+
+        let clone = FileManager.default.temporaryDirectory
+            .appendingPathComponent("aro-git-detached-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: clone) }
+
+        func run(_ args: [String], in directory: URL?) throws -> Int32 {
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
+            process.arguments = args
+            process.currentDirectoryURL = directory
+            process.standardOutput = FileHandle.nullDevice
+            process.standardError = FileHandle.nullDevice
+            try process.run()
+            process.waitUntilExit()
+            return process.terminationStatus
+        }
+
+        try #require(run(["clone", "--depth", "2", "file://\(source.path)", clone.path],
+                         in: nil) == 0)
+        try #require(run(["checkout", "--detach", "HEAD"], in: clone) == 0)
+
+        let entries = try GitService.shared.log(limit: 10, in: clone)
+        #expect(!entries.isEmpty)
+        #expect(entries.first?.message == "Commit 3")
+    }
 }
 
 // MARK: - GitStatus Result Tests
