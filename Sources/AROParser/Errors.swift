@@ -320,12 +320,36 @@ extension Array where Element == Diagnostic {
             case .consequential: return 1
             }
         }
+        // Source position within a class, emission order only to break a tie.
+        //
+        // Ranking by (severity, category, emission index) was stable but not
+        // deterministic: it preserved whatever order the producer emitted, and
+        // producers that walk a `Dictionary` have no order to preserve. Swift
+        // seeds its hasher per process, so `DataFlowAnalyzer`'s unused-variable
+        // and unpublished-dependency passes shuffled their findings on every
+        // run of an unmodified binary, and `aro check` printed the same
+        // diagnostics in a different order each time (GitLab #892).
+        //
+        // Sorting here rather than in each producer fixes every one at once,
+        // including the ones nobody has noticed yet — a diagnostic's position
+        // in a file is a property of the diagnostic, not of the order the
+        // analyzer happened to find it.
+        //
+        // A diagnostic with no location sorts after the located ones in its
+        // class, keeping whole-file findings ("no Application-Start") below the
+        // lines they are about rather than interleaved by an offset of zero.
+        func key(_ e: (offset: Int, element: Diagnostic)) -> (Int, Int, Int, Int, Int, Int) {
+            let d = e.element
+            // `located` first, so a diagnostic with no position sorts after
+            // the ones that have one rather than ahead of line 1.
+            let located = d.location == nil ? 1 : 0
+            return (severityRank(d.severity), categoryRank(d.category),
+                    located, d.location?.line ?? 0, d.location?.column ?? 0,
+                    e.offset)
+        }
+
         return self.enumerated()
-            .sorted { lhs, rhs in
-                let l = (severityRank(lhs.element.severity), categoryRank(lhs.element.category), lhs.offset)
-                let r = (severityRank(rhs.element.severity), categoryRank(rhs.element.category), rhs.offset)
-                return l < r
-            }
+            .sorted { key($0) < key($1) }
             .map(\.element)
     }
 }

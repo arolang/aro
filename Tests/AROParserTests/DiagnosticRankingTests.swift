@@ -99,6 +99,69 @@ struct DiagnosticRankingTests {
         #expect(ranked.map(\.message) == ["real", "fallout"])
     }
 
+    // ========================================================
+    // Deterministic order (GitLab #892)
+    // ========================================================
+    //
+    // Ranking by emission index was stable but not deterministic: it kept
+    // whatever order the producer emitted, and a producer walking a
+    // `Dictionary` has no order to keep. Swift seeds its hasher per process,
+    // so `aro check` printed one file's warnings in a different order on every
+    // run of an unmodified binary — which makes the output useless as a diff
+    // target or a CI baseline.
+
+    @Test("Within one class, located diagnostics sort by position")
+    func locatedSortByPosition() {
+        func at(_ line: Int, _ column: Int, _ message: String) -> Diagnostic {
+            Diagnostic(severity: .warning, message: message,
+                       location: SourceLocation(line: line, column: column, offset: 0))
+        }
+        // Emitted out of order, as a dictionary walk would.
+        let ranked = [at(28, 5, "b"), at(3, 1, "a"), at(28, 2, "c")].ranked()
+        #expect(ranked.map(\.message) == ["a", "c", "b"],
+                "column breaks a tie on line")
+    }
+
+    @Test("Emission order no longer decides a located pair")
+    func emissionOrderDoesNotDecide() {
+        // The property #892 needs: two orderings of the same findings rank
+        // identically. A producer whose iteration order varies per process
+        // cannot change the output any more.
+        func at(_ line: Int, _ message: String) -> Diagnostic {
+            Diagnostic(severity: .warning, message: message,
+                       location: SourceLocation(line: line, column: 5, offset: 0))
+        }
+        let forwards = [at(27, "text"), at(28, "name"), at(35, "qty")].ranked()
+        let backwards = [at(35, "qty"), at(28, "name"), at(27, "text")].ranked()
+        #expect(forwards.map(\.message) == backwards.map(\.message))
+        #expect(forwards.map(\.message) == ["text", "name", "qty"])
+    }
+
+    @Test("A diagnostic with no location sorts after the located ones")
+    func unlocatedSortsLast() {
+        // "No Application-Start" is about the file, not a line in it, and
+        // belongs under the lines rather than ahead of line 1.
+        let ranked = [
+            Diagnostic(severity: .error, message: "whole file"),
+            Diagnostic(severity: .error, message: "line 9",
+                       location: SourceLocation(line: 9, column: 1, offset: 0)),
+        ].ranked()
+        #expect(ranked.map(\.message) == ["line 9", "whole file"])
+    }
+
+    @Test("Severity and category still outrank position")
+    func classStillOutranksPosition() {
+        // Position orders *within* a class; it must not promote a late-line
+        // warning above an early-line error (#509's guarantee).
+        let ranked = [
+            Diagnostic(severity: .warning, message: "early warning",
+                       location: SourceLocation(line: 1, column: 1, offset: 0)),
+            Diagnostic(severity: .error, message: "late error",
+                       location: SourceLocation(line: 99, column: 1, offset: 0)),
+        ].ranked()
+        #expect(ranked.map(\.message) == ["late error", "early warning"])
+    }
+
     @Test("Within one class, emission order is preserved")
     func stableWithinClass() {
         let ranked = [
