@@ -359,6 +359,46 @@ train:unit:
     - rc=0; python3 Train/script/mlx_preflight.py --no-record || rc=$?; test "$rc" -eq 2
 
 # =============================================================================
+# The oracle tests need the thing they are an oracle for (GitLab #900)
+# =============================================================================
+# `train:unit` runs on python:3.12-slim, which has no `aro`. Thirty-eight tests
+# across Train/script/tests are marked `skipif(aro_bin() is None)` — the gates
+# that decide whether a corpus pair is valid, the execution oracle, the pair
+# gate — so in CI they were collected, skipped, and reported as a pass.
+#
+# That is how `test_aro_check_alone_does_not_catch_an_invented_verb` stayed
+# broken on main for a release: the checker closed the gap its premise rested
+# on, and the only machines that ran the test were developers' own.
+#
+# So the tests that need a toolchain get a job that has one, rather than
+# `train:unit` growing a Swift build. Same shape as `doc-examples`: the
+# aro-ci image, build:linux's artifact, ARO_BIN pointing at it. `aro --version`
+# runs first because a missing binary must fail this job rather than skip its
+# way to green — and pytest exits 5 when `-m needs_binary` selects nothing,
+# which fails it too if the marker is ever lost.
+train:oracle:
+  stage: integration
+  image: $CI_REGISTRY_IMAGE/aro-ci:latest
+  rules:
+    - if: $CI_COMMIT_TAG
+    - if: $CI_COMMIT_BRANCH == "main"
+    - if: $CI_COMMIT_BRANCH =~ /^release\/.*/
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+  needs:
+    - job: build:linux
+      artifacts: true
+  variables:
+    ARO_BIN: $CI_PROJECT_DIR/aro-dist/aro
+  script:
+    - chmod +x aro-dist/aro
+    - ./aro-dist/aro --version
+    # Ubuntu 24.04 marks its python environment externally managed (#897); the
+    # bare form is the fallback for an image that predates that.
+    - python3 -m pip install --quiet --break-system-packages pytest PyYAML
+      || python3 -m pip install --quiet pytest PyYAML
+    - python3 -m pytest Train/script/tests -q -m needs_binary -rs
+
+# =============================================================================
 # Fenced ARO blocks in the documentation must parse (GitLab #834)
 # =============================================================================
 # The proposals and the examples are the reference *and* the corpus `aro ask`
