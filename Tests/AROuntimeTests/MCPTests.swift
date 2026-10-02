@@ -149,6 +149,82 @@ struct MCPTests {
             #expect(toolNames.contains("aro_syntax"))
         }
 
+        // MARK: - The capabilities #696 added
+        //
+        // An agent driving ARO over MCP could run a program but not run its
+        // tests, see what a branch changed, or find out which plugins an
+        // application has — the operations automated work is made of.
+
+        @Test("The test, graph-diff and plugin tools are offered")
+        func offersTheAutomationTools() {
+            let names = MCPToolProvider().listTools().tools.map { $0.name }
+            #expect(names.contains("aro_test"))
+            #expect(names.contains("aro_graph_diff"))
+            #expect(names.contains("aro_plugins"))
+        }
+
+        @Test("Each new tool declares the arguments it needs")
+        func newToolsDeclareRequiredArguments() {
+            // An MCP client builds its call from the schema. A required
+            // argument that is not declared is one the model omits, and the
+            // tool then answers "missing required argument" to a call it
+            // could have got right.
+            let tools = MCPToolProvider().listTools().tools
+            let required: [String: String] = [
+                "aro_test": "directory",
+                "aro_graph_diff": "range",
+            ]
+            for (toolName, argument) in required {
+                guard let tool = tools.first(where: { $0.name == toolName }) else {
+                    Issue.record("\(toolName) is not offered")
+                    continue
+                }
+                let names = tool.inputSchema.objectValue?["required"]?
+                    .arrayValue?.compactMap { $0.stringValue } ?? []
+                #expect(names.contains(argument),
+                        "\(toolName) does not declare '\(argument)' as required")
+            }
+        }
+
+        @Test("aro_plugins needs no arguments")
+        func pluginsToolTakesNoRequiredArguments() {
+            // It defaults to the current directory, so a bare call is valid
+            // and the schema must not claim otherwise.
+            let tool = MCPToolProvider().listTools().tools
+                .first { $0.name == "aro_plugins" }
+            let required = tool?.inputSchema.objectValue?["required"]?.arrayValue
+            #expect(required == nil || required?.isEmpty == true)
+        }
+
+        @Test("aro_test without a directory is refused, not guessed")
+        func testToolRequiresDirectory() async {
+            let result = await MCPToolProvider().callTool(
+                name: "aro_test", arguments: .object([:]))
+            #expect(result.isError == true)
+        }
+
+        @Test("aro_graph_diff without a range is refused")
+        func graphDiffRequiresRange() async {
+            // Running it against the working tree by default would compare
+            // against whatever revision happened to be checked out, which is
+            // an answer to a question nobody asked.
+            let result = await MCPToolProvider().callTool(
+                name: "aro_graph_diff", arguments: .object([:]))
+            #expect(result.isError == true)
+
+            let empty = await MCPToolProvider().callTool(
+                name: "aro_graph_diff", arguments: .object(["range": .string("")]))
+            #expect(empty.isError == true)
+        }
+
+        @Test("An unknown tool is still an error")
+        func unknownToolStillErrors() async {
+            // The dispatch grew three cases; the default must survive them.
+            let result = await MCPToolProvider().callTool(
+                name: "aro_nonexistent", arguments: nil)
+            #expect(result.isError == true)
+        }
+
         @Test("aro_check validates correct code")
         func aroCheckValidatesCorrectCode() async {
             let provider = MCPToolProvider()

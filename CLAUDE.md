@@ -67,7 +67,12 @@ aro add github:org/repo  # Install a plugin from Git
 aro plugins              # List installed plugins
 aro actions              # List built-in and plugin actions
 aro lsp                  # Start the Language Server (stdio)
-aro mcp                  # Start the MCP server (Model Context Protocol)
+aro mcp                  # Start the MCP server (Model Context Protocol).
+                         # 11 tools: check, run, test, compile, graph_diff,
+                         # plugins, examples, actions, qualifiers, parse, syntax.
+                         # `aro_test` reports a FAILING test as a result, not a
+                         # tool error — the agent asked what the tests say, and
+                         # "three fail, here they are" is the answer (#696).
 
 aro ask                  # Interactive AI coding assistant with tool calling
 aro ask "fix this"       # One-shot prompt; uses native MLX on macOS,
