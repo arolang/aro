@@ -1,7 +1,7 @@
 name: ZipPlugin
 version: 1.0.0
 handle: Zip
-description: Archive compression/extraction service via the Zip Swift package
+description: Archive compression/extraction service via the ZIPFoundation Swift package
 author: ARO Team
 license: MIT
 provides:
