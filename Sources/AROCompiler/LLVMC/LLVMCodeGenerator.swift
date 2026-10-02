@@ -625,6 +625,37 @@ public final class LLVMCodeGenerator {
         // Bind value source if present
         binder.bindValueSource(statement.valueSource, prefix: prefix)
 
+        // `Start the <socket-server> with { port: 9123 }.` has nowhere to put
+        // the map except the object slot, so it parses as `with the
+        // <_expression_>` rather than as a `rangeModifiers.withClause`. The
+        // interpreter binds that value to `_with_` as well as `_expression_`
+        // (`FeatureSetExecutor.executeAROStatement`); this path bound only
+        // `_expression_`, so every action that reads `_with_` saw nothing once
+        // compiled — the socket server above bound its default 9000 and
+        // reported success (GitLab #887).
+        //
+        // An alias of the value already computed, not a second evaluation:
+        // re-serialising the expression here would run its side effects twice.
+        if statement.object.preposition == .with,
+           statement.object.noun.base == "_expression_" {
+            let expressionName = ctx.stringConstant("_expression_")
+            let withName = ctx.stringConstant("_with_")
+            let expressionValue = ctx.module.insertCall(
+                externals.variableResolve,
+                on: [ctx.currentContextVar!, expressionName],
+                at: ctx.insertionPoint
+            )
+            _ = ctx.module.insertCall(
+                externals.variableBindValue,
+                on: [ctx.currentContextVar!, withName, expressionValue],
+                at: ctx.insertionPoint
+            )
+            // `aro_variable_resolve` hands back a passRetained box; the inner
+            // value is now in the context under both names, so the wrapper goes.
+            _ = ctx.module.insertCall(
+                externals.valueFree, on: [expressionValue], at: ctx.insertionPoint)
+        }
+
         // Call action function
         let verb = statement.action.verb.lowercased()
         let actionResult: IRValue

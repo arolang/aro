@@ -181,6 +181,27 @@ public func aro_register_user_action(
                 context: context
             )
 
+            // The caller's statement modifiers are spent: `buildCompiledUserActionInput`
+            // above has just read the `with` clause, and that is the only thing
+            // entitled to it. Clear them before the callee runs, or it inherits
+            // them (GitLab #887).
+            //
+            // The interpreter cannot have this problem. There, framework
+            // variables live in a per-statement scope that the callee is never
+            // handed, so the caller's `_with_` is gone by construction. A
+            // compiled binary has no statement scopes — the generated code binds
+            // them straight onto the feature set's own context, which for
+            // `Application-Start` IS the application root. A callee marks itself
+            // a call-frame root and so jumps *to that root* on lookup, skipping
+            // the caller's locals exactly as intended — and landing on the one
+            // context where the modifiers are sitting.
+            //
+            // So `Application.IngestOrders the <bronze> with { }.` left an empty
+            // map in `_with_`, and the first `Store … into the <repo>.` inside
+            // the callee read it as an inline payload (#515) and stored that
+            // instead of the record. Six rows became one, with no error.
+            context.clearTransientFrameworkVariables()
+
             // Spawn a fresh runtime context for the callee, parented to
             // the caller so services and globals stay reachable.
             let childContext = RuntimeContext(
