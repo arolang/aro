@@ -72,6 +72,13 @@ aro mcp                  # Start the MCP server (Model Context Protocol)
 aro ask                  # Interactive AI coding assistant with tool calling
 aro ask "fix this"       # One-shot prompt; uses native MLX on macOS,
                          # llama-server on Linux (auto-downloaded)
+aro ask --export-training Train/seeds/ask_feedback
+                         # Opt-in: turn this project's .context.repairs.jsonl
+                         # into training seeds. Re-validates each pair against
+                         # this build, strips paths/usernames, labels it with
+                         # the diagnostic it repaired (GitLab #800). The writer
+                         # and the reader used different paths, so no real
+                         # repair had ever reached the pipeline.
 ```
 
 ## Architecture
