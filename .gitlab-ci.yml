@@ -728,7 +728,13 @@ integration:linux:
     # job-specific or a fallback for running against an image that predates
     # the addition — each check is a no-op once the image has the thing.
     - if [ -n "${GITHUB_TOKEN:-}" ]; then git config --global url."https://x-access-token:${GITHUB_TOKEN}@github.com/".insteadOf "https://github.com/"; fi
-    - pip3 install --quiet "git+https://github.com/arolang/aro-plugin-sdk-python.git@main"
+    # `--break-system-packages`, because the CI image is Ubuntu 24.04 (#897) and
+    # noble marks its system Python externally-managed: PEP 668 makes a plain
+    # `pip3 install` refuse outright, which is what broke the first pipeline to
+    # actually run on the new image. The `||` keeps it working on an older
+    # image, where pip predates the flag and does not need it.
+    - pip3 install --quiet --break-system-packages "git+https://github.com/arolang/aro-plugin-sdk-python.git@main"
+      || pip3 install --quiet "git+https://github.com/arolang/aro-plugin-sdk-python.git@main"
     - python3 -c "import aro_plugin_sdk; print('aro-plugin-sdk ready')"
     # NOT symlinked: /usr/bin/clang. On ubuntu:22.04 this job pointed it at
     # clang-20 safely, because the Swift tarball it downloaded brought its own
@@ -840,9 +846,20 @@ integration:linux:
       fi
       PLUGIN_CACHE="$CI_PROJECT_DIR/.plugin-dep-cache"
       mkdir -p "$PLUGIN_CACHE"
+      # ZipService's plugin depends on marmelroy/Zip, which does not compile
+      # against noble's glibc (#897): Swift imports `fopen`/`fwrite`'s FILE*
+      # as `UnsafeMutablePointer<FILE>?` there and the library passes it
+      # unwrapped. 2.1.1 and 2.1.2 both fail the same way, so there is no
+      # version to move to; the example is skipped on Linux instead and
+      # tracked, which is what this job's own comment prescribes — fix it or
+      # quarantine it, never blanket tolerance. Tracked as #901; still runs on macOS.
+      SKIP_PLUGINS="Examples/ZipService/Plugins/ZipPlugin"
       for pkg in Examples/*/plugins/*/Package.swift Examples/*/Plugins/*/Package.swift; do
         [ -f "$pkg" ] || continue
         dir="$(dirname "$pkg")"
+        case " $SKIP_PLUGINS " in
+          *" $dir "*) echo "=== Skipping plugin build: $dir (see #897)"; continue ;;
+        esac
         echo "=== Pre-warming plugin build: $dir"
         (cd "$dir" && PATH="$SWIFT_BIN:$PATH" swift build -c release $PREBUILTS --cache-path "$PLUGIN_CACHE") || { echo "ERROR: pre-warm build failed for $dir"; exit 1; }
       done
@@ -937,8 +954,20 @@ integration:jupyter:
     # importable, and the failure surfacing one line later as "No module
     # named 'aro_kernel'". An upgrade of an already-new pip is a no-op, and
     # the line is what stops the bug coming back with a base-image change.
-    - python3 -m pip install --quiet --upgrade pip
-    - pip3 install --quiet ./Editor/jupyter-aro nbconvert
+    # Only when pip is actually old. I kept this line through #897 calling an
+    # upgrade of an already-new pip "a no-op"; it is not. On noble, pip tries to
+    # uninstall the Debian-packaged pip 24.0 first and cannot — "RECORD file not
+    # found" — so the line fails outright, and the fallback then hits PEP 668.
+    - |
+      PIP_MAJOR=$(python3 -c 'import pip; print(pip.__version__.split(".")[0])')
+      if [ "$PIP_MAJOR" -lt 23 ]; then
+        python3 -m pip install --quiet --upgrade pip
+      else
+        echo "pip $(python3 -m pip --version | cut -d' ' -f2) is new enough; not upgrading"
+      fi
+    # PEP 668 again: noble's system Python is externally-managed (#897).
+    - pip3 install --quiet --break-system-packages ./Editor/jupyter-aro nbconvert
+      || pip3 install --quiet ./Editor/jupyter-aro nbconvert
     - python3 -m aro_kernel.install --sys-prefix
     - jupyter kernelspec list
     # Exercise the protocol before the notebooks do, and triage it.
@@ -1081,7 +1110,9 @@ train:catalogs:
     # The FIXTRAIN rules' corrected examples are run through `aro check` here
     # (GitLab #811). train:unit runs the same file on a slim image where those
     # cases skip for want of a binary; this is where they execute.
-    - python3 -m pip install --quiet pytest
+    # PEP 668: noble's system Python is externally-managed (#897).
+    - python3 -m pip install --quiet --break-system-packages pytest
+      || python3 -m pip install --quiet pytest
     - python3 -m pytest Train/script/tests/test_fixtrain_examples.py -q
 
 # =============================================================================
