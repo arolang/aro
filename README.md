@@ -22,12 +22,19 @@ sentence that asked for it.
 # macOS
 brew tap arolang/aro && brew install aro
 
-# Linux
+# Linux (Ubuntu 24.04 or newer)
 curl -L https://github.com/arolang/aro/releases/latest/download/aro-linux-amd64.tar.gz | tar xz
 sudo mv aro /usr/local/bin/ && sudo mv libARORuntime.a /usr/local/lib/
 
 aro --version
 ```
+
+The Linux build is produced on Ubuntu 24.04 and links that release's glibc
+(2.39) and `libgit2.so.1.7`. On 22.04 it does not start. It was built on 22.04
+until 0.13.x, which had the mirror-image problem — `libgit2.so.1.1` is not on
+24.04 either — and the move was made because libgit2 1.1 cannot read a shallow
+clone, so `Retrieve the <log> from the <git>` answered "no commits" on any
+`--depth` checkout (GitLab #897). Build from source for an older distribution.
 
 The tap is `arolang/aro` (the repository `github.com/arolang/homebrew-aro`, which the release
 pipeline updates). `brew install arolang/tap/aro` names a different tap that does not exist.

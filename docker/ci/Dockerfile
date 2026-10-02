@@ -17,9 +17,34 @@
 # Built and published by the `docker:ci` job. Jobs move onto it in a separate
 # change, once it exists in the registry — see the merge request for why the
 # two halves cannot land together.
+#
+# ## Why noble and not jammy (GitLab #897)
+#
+# Jammy ships libgit2 1.1, which has NO shallow-clone support. Every CI
+# checkout is shallow — GitLab fetches with `git depth 20` — and on 1.1
+# `git_revwalk_push_head` succeeds and then the FIRST `git_revwalk_next`
+# returns ENOTFOUND, because preparing the walk resolves a parent past the
+# graft. The caller gets an empty list rather than an error: `Retrieve the
+# <log> from the <git>` reported a repository with no commits while
+# `Retrieve the <status>` on the same repository worked (GitLab #810).
+#
+# Noble ships 1.7.2, which walks a shallow clone. The probe at the bottom of
+# this file proves it rather than trusting the version number.
+#
+# This is not only a CI decision. `build:linux` runs in this image and ITS
+# artifact is the released `aro-linux-amd64.tar.gz`, which ships the binary
+# and `libARORuntime.a` and no libgit2 — so the libgit2 in this image decides
+# what every user must have installed. The released binary linked
+# `libgit2.so.1.1` and therefore did not start on Ubuntu 24.04 at all; it
+# links `libgit2.so.1.7` now and does. The cost is the other direction:
+# glibc moves 2.35 → 2.39, so the download no longer runs on 22.04. That
+# trade was made deliberately — see the merge request for #897.
+#
+# Building a newer libgit2 from source here was the other candidate and is
+# worse: it would make the released binary need a SONAME no Ubuntu LTS ships.
 # =============================================================================
 
-FROM swift:6.3-jammy
+FROM swift:6.3-noble
 
 LABEL org.opencontainers.image.title="ARO CI"
 LABEL org.opencontainers.image.description="Toolchain for the ARO CI jobs: Swift 6.3, LLVM 20, and the system libraries the test and integration jobs link against"
@@ -60,7 +85,7 @@ RUN apt-get update -qq \
     && apt-get install -y -qq --no-install-recommends \
         build-essential \
         git ca-certificates wget curl gnupg \
-        libgit2-dev libzmq3-dev libcurl4 libzstd-dev \
+        libgit2-dev libzmq3-dev libcurl4t64 libzstd-dev \
         zlib1g-dev libsqlite3-dev libxml2 \
         python3 python3-pip \
         perl cpanminus libipc-run-perl libyaml-libyaml-perl libhttp-tiny-perl \
@@ -79,7 +104,7 @@ RUN ( for attempt in 1 2 3 4 5; do \
       echo "could not fetch https://apt.llvm.org/llvm-snapshot.gpg.key"; exit 1 ) \
     && gpg --dearmor -o /usr/share/keyrings/llvm-archive-keyring.gpg < /tmp/llvm.key \
     && rm -f /tmp/llvm.key \
-    && echo "deb [signed-by=/usr/share/keyrings/llvm-archive-keyring.gpg] http://apt.llvm.org/jammy/ llvm-toolchain-jammy-20 main" \
+    && echo "deb [signed-by=/usr/share/keyrings/llvm-archive-keyring.gpg] http://apt.llvm.org/noble/ llvm-toolchain-noble-20 main" \
       > /etc/apt/sources.list.d/llvm.list \
     && apt-get update -qq \
     && apt-get install -y -qq --no-install-recommends \
@@ -153,4 +178,28 @@ RUN swift --version \
     && rm -rf /tmp/probe.c /tmp/probe.o /tmp/probe-index \
     && perl -e 'print "perl ok\n"' && python3 --version \
     && make --version | head -1 && cc --version | head -1 \
-    && cargo --version && rustc --version
+    && cargo --version && rustc --version \
+    && pkg-config --modversion libgit2
+
+# Prove this image's libgit2 walks a SHALLOW repository (GitLab #897).
+#
+# The requirement, not the version number. A rebuild that quietly fell back to
+# a jammy base would still satisfy `pkg-config --modversion`-style checks on
+# the surface; this fails the build instead. The probe performs the same
+# sequence `GitService.log` does — open, push HEAD, walk — and on libgit2 1.1
+# it prints `push_head rc=0` followed by zero commits, succeeding at every
+# step and returning nothing.
+COPY docker/ci/shallow-probe.c /tmp/shallow-probe.c
+RUN cc /tmp/shallow-probe.c -o /tmp/shallow-probe $(pkg-config --cflags --libs libgit2) \
+    && git init -q /tmp/probe-origin \
+    && git -C /tmp/probe-origin config user.email ci@aro.dev \
+    && git -C /tmp/probe-origin config user.name CI \
+    && for i in 1 2 3 4 5; do \
+         echo "$i" > /tmp/probe-origin/file.txt; \
+         git -C /tmp/probe-origin add -A; \
+         git -C /tmp/probe-origin commit -q -m "commit $i"; \
+       done \
+    && git clone -q --depth 2 "file:///tmp/probe-origin" /tmp/probe-shallow \
+    && git -C /tmp/probe-shallow checkout -q --detach HEAD \
+    && /tmp/shallow-probe /tmp/probe-shallow \
+    && rm -rf /tmp/shallow-probe /tmp/shallow-probe.c /tmp/probe-origin /tmp/probe-shallow

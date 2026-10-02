@@ -748,9 +748,9 @@ integration:linux:
     - perl -MHTTP::CookieJar -e1 2>/dev/null || cpan -T HTTP::CookieJar 2>&1 || true
     - |
       if ! command -v swift >/dev/null; then
-        wget -q https://download.swift.org/swift-6.3.2-release/ubuntu2204/swift-6.3.2-RELEASE/swift-6.3.2-RELEASE-ubuntu22.04.tar.gz
-        tar xzf swift-6.3.2-RELEASE-ubuntu22.04.tar.gz
-        mv swift-6.3.2-RELEASE-ubuntu22.04 /usr/share/swift
+        wget -q https://download.swift.org/swift-6.3.2-release/ubuntu2404/swift-6.3.2-RELEASE/swift-6.3.2-RELEASE-ubuntu24.04.tar.gz
+        tar xzf swift-6.3.2-RELEASE-ubuntu24.04.tar.gz
+        mv swift-6.3.2-RELEASE-ubuntu24.04 /usr/share/swift
         export PATH="/usr/share/swift/usr/bin:$PATH"
       fi
     - swift --version
@@ -901,13 +901,16 @@ integration:repl:
 # both halves at once: a protocol change that breaks the Python shim, and an
 # example notebook whose ARO has rotted.
 #
-# Runs on ubuntu:22.04, the same image as build:linux, and not on a Python
-# image: the `aro` artifact links libgit2.so.1.1, which is what jammy ships.
-# python:3.12-slim is Debian trixie now and ships libgit2.so.1.9, so the
-# binary would not even start (job 123729: "error while loading shared
-# libraries: libgit2.so.1.1"). Python comes from apt instead — the kernel
-# shim is a thin subprocess wrapper and needs no particular interpreter
-# version (pyproject asks for >=3.9; jammy has 3.10).
+# Runs on the CI image, the same one as build:linux, and not on a Python
+# image: the `aro` artifact links the libgit2 that image provides, and a
+# different base ships a different SONAME. python:3.12-slim is Debian trixie
+# and ships libgit2.so.1.9, so the binary would not even start (job 123729:
+# "error while loading shared libraries: libgit2.so.1.1"). The SONAME has
+# since moved to 1.7 with the image's base (#897) and the reasoning is
+# unchanged — it is "whatever built it", not any particular number. Python
+# comes from apt instead: the kernel shim is a thin subprocess wrapper and
+# needs no particular interpreter version (pyproject asks for >=3.9; noble
+# has 3.12).
 integration:jupyter:
   stage: integration
   image: $CI_REGISTRY_IMAGE/aro-ci:latest
@@ -926,14 +929,14 @@ integration:jupyter:
   script:
     - export LD_LIBRARY_PATH="/usr/lib/llvm-20/lib:$LD_LIBRARY_PATH"
     - export ARO_KERNEL_ARO="$CI_PROJECT_DIR/aro-dist/aro"
-    # Ubuntu 22.04 ships pip 22.0.2, which does not chdir into a local
-    # source tree before invoking the PEP 517 backend. setuptools then
-    # reads pyproject.toml relative to the *current* directory, finds
-    # none, and cheerfully builds a package called UNKNOWN 0.0.0 —
-    # exit 0, nothing importable, and the failure surfaces one line
-    # later as "No module named 'aro_kernel'". Upgrading pip first is
-    # the fix; `cd`-ing into the package would also work and would
-    # hide why.
+    # Kept after the move to noble (#897), which ships pip 24.0 and does not
+    # have the bug this works around — jammy's pip 22.0.2 did not chdir into
+    # a local source tree before invoking the PEP 517 backend, so setuptools
+    # read pyproject.toml relative to the *current* directory, found none,
+    # and cheerfully built a package called UNKNOWN 0.0.0: exit 0, nothing
+    # importable, and the failure surfacing one line later as "No module
+    # named 'aro_kernel'". An upgrade of an already-new pip is a no-op, and
+    # the line is what stops the bug coming back with a base-image change.
     - python3 -m pip install --quiet --upgrade pip
     - pip3 install --quiet ./Editor/jupyter-aro nbconvert
     - python3 -m aro_kernel.install --sys-prefix
@@ -1454,6 +1457,7 @@ docker:ci:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
       changes:
         - docker/ci/Dockerfile
+        - docker/ci/shallow-probe.c
         - .gitlab-ci.yml
   variables:
     IMAGE_NAME: $CI_REGISTRY_IMAGE/aro-ci
