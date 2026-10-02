@@ -118,6 +118,20 @@ struct ToolchainTableTests {
         #expect(!spec.fallbackPaths.isEmpty)
     }
 
+    // `swift build` and `swiftc` have to be the same toolchain: the scratch
+    // directory a `swift build` leaves behind is only reusable by the compiler
+    // that produced it. Where a machine has two (Xcode's `/usr/bin/swift` plus a
+    // swiftly or setup-swift one on PATH), ranking them differently rebuilt
+    // every plugin package from scratch on every `aro build` (GitLab #902).
+    @Test("swift and swiftc rank PATH the same way")
+    func swiftAndSwiftcAgree() {
+        let swift = Toolchain.spec(for: "swift", environment: [:])
+        let swiftc = Toolchain.spec(for: "swiftc", environment: [:])
+        #expect(swift.preferredPaths.isEmpty, "swift must let PATH win, as swiftc does")
+        #expect(!swift.fallbackPaths.isEmpty)
+        #expect(swift.preferredPaths.isEmpty == swiftc.preferredPaths.isEmpty)
+    }
+
     @Test("The linker's clang is the toolchain's, not Homebrew LLVM's")
     func clangPrefersSystem() {
         let paths = Toolchain.spec(for: "clang", environment: [:]).preferredPaths

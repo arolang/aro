@@ -162,11 +162,25 @@ public enum Toolchain {
 
         // --- Swift ------------------------------------------------------
 
+        // `swift` keeps PATH ahead of the known locations for the same reason
+        // `swiftc` does below, and it is not optional: `swift build` writes its
+        // compiler identity into the package's scratch directory, so two
+        // different `swift` binaries building the same package invalidate each
+        // other's work completely.
+        //
+        // That is what `/usr/bin/swift` ahead of PATH caused. A macOS CI runner
+        // has two toolchains — Xcode's at `/usr/bin/swift` (6.1.2) and the one
+        // swiftly installed and exported on PATH (6.3.2). The plugin pre-warm
+        // and `PluginLoader` both used PATH; `aro build`'s own plugin stage took
+        // `/usr/bin/swift`. So every `aro build` of a Swift-plugin example
+        // rebuilt all ~370 modules of SwiftSyntax from scratch — over the
+        // integration harness's 300s build budget, which reported it as a
+        // missing binary (GitLab #902).
         case "swift":
             return ToolSpec(
                 name: "swift",
                 envOverrides: ["SWIFT"],
-                preferredPaths: swiftToolchainPaths(for: "swift")
+                fallbackPaths: swiftToolchainPaths(for: "swift")
             )
 
         // `swiftc` keeps PATH ahead of the known locations: `aro plugins
