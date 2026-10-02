@@ -105,10 +105,15 @@ struct InspectorPaneView: View {
                     .font(SolaroFont.caption)
                     .foregroundStyle(SolaroColor.stateError)
             }
+            // A parse error reconstructs the failing statement with
+            // its values, so the end of it is the half that says what
+            // went wrong. Four lines cut exactly that off; the
+            // inspector scrolls, so let it run (GitLab #895).
             Text(error)
                 .font(SolaroFont.monoCaption)
                 .foregroundStyle(SolaroColor.stateError.opacity(0.85))
-                .lineLimit(4)
+                .fixedSize(horizontal: false, vertical: true)
+                .textSelection(.enabled)
                 .padding(.top, 2)
         } else if let program = controller.currentProgram {
             HStack(spacing: SolaroSpace.xs) {

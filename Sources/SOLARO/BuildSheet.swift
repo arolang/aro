@@ -47,7 +47,7 @@ struct BuildSheet: View {
                 .font(SolaroFont.monoCaption)
                 .foregroundStyle(SolaroColor.textSecondary)
                 .textSelection(.enabled)
-                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
             HStack {
