@@ -68,16 +68,30 @@ def stages() -> list[tuple[str, str, str]]:
 
 
 def check_inventory(rows: list[tuple[str, str, str]]) -> list[str]:
-    """Stages without a notebook, and notebooks the pipeline never runs."""
+    """Stages with no file, and notebooks the pipeline never runs."""
     problems = []
     listed = {name for _num, name, _desc in rows}
 
     for num, name, _desc in rows:
-        if not (SCRIPT_DIR / f"{name}.ipynb").is_file():
-            problems.append(f"stage {num} runs {name}.ipynb, which does not exist")
-        if not name.startswith(num):
+        notebook = SCRIPT_DIR / f"{name}.ipynb"
+        script = SCRIPT_DIR / f"{name}.py"
+        if not notebook.is_file() and not script.is_file():
+            problems.append(f"stage {num} runs {name}, and neither "
+                            f"{name}.ipynb nor {name}.py exists")
+            continue
+        # The filename-carries-the-number rule is what catches renumber drift,
+        # and it holds for notebooks. A SCRIPT stage keeps the number it was
+        # written under — `32_notebook_pairs.py` is "32" everywhere it is
+        # referenced — while its position in the pipeline is a different fact:
+        # the pairs have to exist before 15 validates them, so it runs as 14b
+        # (GitLab #805). Two numbers, deliberately, so exempt the filename.
+        if notebook.is_file() and not name.startswith(num):
             problems.append(f"stage {num} runs {name}.ipynb, whose filename disagrees")
 
+    # Only notebooks are required to be listed. Most numbered scripts here
+    # (28, 30, 31, 33, 34, 35) are standalone on purpose and are documented as
+    # such; demanding they all join the pipeline would be a different decision
+    # than this one.
     for path in sorted(SCRIPT_DIR.glob("[0-9][0-9]_*.ipynb")):
         if path.stem != "00_META_PIPELINE" and path.stem not in listed:
             problems.append(f"{path.name} exists but the meta pipeline never runs it")
@@ -135,14 +149,16 @@ def render(rows: list[tuple[str, str, str]]) -> str:
         "<!-- Regenerate with: python3 Scripts/generate-train-stages.py -->",
         "",
         f"The {len(rows)} stages, in the order `00_META_PIPELINE.ipynb` runs them —",
-        "which is the `NOTEBOOKS` list, not the filename numbers. Each runs in its",
-        "own kernel.",
+        "which is the `NOTEBOOKS` list, not the filename numbers. A notebook stage",
+        "runs in its own kernel; a stage marked `.py` is a script run directly, and",
+        "keeps the number it was written under.",
         "",
-        "| # | Notebook | What it does |",
-        "|---|----------|--------------|",
+        "| # | Stage | What it does |",
+        "|---|-------|--------------|",
     ]
     for num, name, desc in rows:
-        lines.append(f"| {num} | `{name}` | {desc} |")
+        suffix = "" if (SCRIPT_DIR / f"{name}.ipynb").is_file() else ".py"
+        lines.append(f"| {num} | `{name}{suffix}` | {desc} |")
     lines += ["", END]
     return "\n".join(lines)
 
