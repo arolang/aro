@@ -852,7 +852,7 @@ integration:linux:
       # unwrapped. 2.1.1 and 2.1.2 both fail the same way, so there is no
       # version to move to; the example is skipped on Linux instead and
       # tracked, which is what this job's own comment prescribes — fix it or
-      # quarantine it, never blanket tolerance. It still runs on macOS.
+      # quarantine it, never blanket tolerance. Tracked as #901; still runs on macOS.
       SKIP_PLUGINS="Examples/ZipService/Plugins/ZipPlugin"
       for pkg in Examples/*/plugins/*/Package.swift Examples/*/Plugins/*/Package.swift; do
         [ -f "$pkg" ] || continue
