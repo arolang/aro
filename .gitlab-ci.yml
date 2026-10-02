@@ -846,9 +846,20 @@ integration:linux:
       fi
       PLUGIN_CACHE="$CI_PROJECT_DIR/.plugin-dep-cache"
       mkdir -p "$PLUGIN_CACHE"
+      # ZipService's plugin depends on marmelroy/Zip, which does not compile
+      # against noble's glibc (#897): Swift imports `fopen`/`fwrite`'s FILE*
+      # as `UnsafeMutablePointer<FILE>?` there and the library passes it
+      # unwrapped. 2.1.1 and 2.1.2 both fail the same way, so there is no
+      # version to move to; the example is skipped on Linux instead and
+      # tracked, which is what this job's own comment prescribes — fix it or
+      # quarantine it, never blanket tolerance. It still runs on macOS.
+      SKIP_PLUGINS="Examples/ZipService/Plugins/ZipPlugin"
       for pkg in Examples/*/plugins/*/Package.swift Examples/*/Plugins/*/Package.swift; do
         [ -f "$pkg" ] || continue
         dir="$(dirname "$pkg")"
+        case " $SKIP_PLUGINS " in
+          *" $dir "*) echo "=== Skipping plugin build: $dir (see #897)"; continue ;;
+        esac
         echo "=== Pre-warming plugin build: $dir"
         (cd "$dir" && PATH="$SWIFT_BIN:$PATH" swift build -c release $PREBUILTS --cache-path "$PLUGIN_CACHE") || { echo "ERROR: pre-warm build failed for $dir"; exit 1; }
       done

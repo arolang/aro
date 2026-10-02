@@ -2,6 +2,13 @@
 # Package plugin compilation requires Swift compiler at runtime
 # Zip library requires zlib.h which is not available on Windows CI
 timeout: 300
+# marmelroy/Zip does not compile against Ubuntu 24.04's glibc: Swift imports
+# `fopen`/`fwrite`'s FILE* as `UnsafeMutablePointer<FILE>?` there, and the
+# library passes it unwrapped. Both 2.1.1 (pinned) and 2.1.2 (latest) fail the
+# same way, so there is no version to move to — the dependency has to change or
+# be patched. Skipped on Linux rather than tolerated, and tracked (GitLab #897);
+# the example still runs on macOS, where the same code compiles.
+skip-on-linux: marmelroy/Zip does not compile against glibc 2.39 — see GitLab #897
 # Wipe any archive from a previous run so the test really verifies that THIS
 # run created it (not a stale artifact left in the source tree).
 pre-script: rm -f Examples/ZipService/content/archive.zip
