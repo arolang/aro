@@ -15,6 +15,21 @@ stages:
 variables:
   SWIFT_VERSION: '6.3.2'
 
+  # The image every integration job runs in, named once so a registry outage
+  # can be worked around without editing this file (GitLab #896).
+  #
+  # When the registry cannot serve it, the job fails in `prepare_executor` —
+  # before a single test runs — and the pipeline is red for a reason that has
+  # nothing to do with the commit. On 2026-10-02 a 502 from `/v2/` blocked the
+  # merge queue for an hour. Retries do not help: the pull policy is
+  # `if-not-present` and then `always`, and neither can reach a registry that
+  # is down.
+  #
+  # So re-run the pipeline with this variable pointing at a mirror, or at a tag
+  # the runner has already pulled, and every job below follows. `registry:probe`
+  # says whether that is the situation you are in.
+  ARO_CI_IMAGE: "$CI_REGISTRY_IMAGE/aro-ci:latest"
+
   # Speak HTTP/1.1 to git remotes, everywhere, including the runner's own
   # checkout.
   #
@@ -60,6 +75,45 @@ default:
   interruptible: true
   tags:
     - adt
+
+# =============================================================================
+# Is the registry up? (GitLab #896)
+# =============================================================================
+# An image that cannot be pulled fails its job in `prepare_executor`: sixteen
+# lines of trace, no test output, and from the pipeline list it looks exactly
+# like a failing test. Telling the two apart meant opening a job and reading
+# the 502, which is why the 2026-10-02 outage cost an hour of merge-queue time
+# before anyone knew what they were looking at.
+#
+# This runs first, on a public image from a different registry, and asks the
+# one question that separates the cases. `401` is the healthy unauthenticated
+# answer to `/v2/`; `200` is a registry that allows anonymous reads. Anything
+# else means no retry of anything below will help.
+#
+# It reports and does not gate — `allow_failure: true`. A registry that
+# recovers mid-pipeline should not leave the run red, and one that stays down
+# fails the jobs that need it anyway, now with a line above them saying why.
+registry:probe:
+  stage: .pre
+  image: curlimages/curl:8.11.1
+  allow_failure: true
+  script:
+    - |
+      code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 "https://$CI_REGISTRY/v2/" || echo 000)"
+      echo "GET https://$CI_REGISTRY/v2/ -> $code"
+      case "$code" in
+        200|401)
+          echo "Registry is healthy — an integration job that fails below is about the code."
+          exit 0 ;;
+      esac
+      echo ""
+      echo "The container registry is not serving manifests."
+      echo "Integration jobs run in $ARO_CI_IMAGE and will fail in"
+      echo "prepare_executor before running anything. That is not this commit."
+      echo ""
+      echo "Wait for the registry and retry, or re-run the pipeline with"
+      echo "ARO_CI_IMAGE set to a mirror or to a tag this runner already has."
+      exit 1
 
 # Resolve SwiftPM dependencies, retrying the fetch.
 #
@@ -384,7 +438,7 @@ train:unit:
 # DEFAULT_ROOTS once #836 has landed.
 doc-examples:
   stage: integration
-  image: $CI_REGISTRY_IMAGE/aro-ci:latest
+  image: $ARO_CI_IMAGE
   rules:
     - if: $CI_COMMIT_TAG
     - if: $CI_COMMIT_BRANCH == "main"
@@ -418,7 +472,7 @@ doc-examples:
 # point is that the pipeline consumes only green sources.
 sources:corpus:
   stage: integration
-  image: $CI_REGISTRY_IMAGE/aro-ci:latest
+  image: $ARO_CI_IMAGE
   rules:
     - if: $CI_COMMIT_TAG
     - if: $CI_COMMIT_BRANCH == "main"
@@ -443,7 +497,7 @@ sources:corpus:
 # =============================================================================
 test:
   stage: test
-  image: $CI_REGISTRY_IMAGE/aro-ci:latest
+  image: $ARO_CI_IMAGE
   rules:
     - if: $CI_COMMIT_TAG
     - if: $CI_COMMIT_BRANCH == "main"
@@ -513,7 +567,7 @@ test:
 # =============================================================================
 build:linux:
   stage: build
-  image: $CI_REGISTRY_IMAGE/aro-ci:latest
+  image: $ARO_CI_IMAGE
   rules:
     - if: $CI_COMMIT_TAG
     - if: $CI_COMMIT_BRANCH == "main"
@@ -657,7 +711,7 @@ build:linux:
 # =============================================================================
 integration:linux:
   stage: integration
-  image: $CI_REGISTRY_IMAGE/aro-ci:latest
+  image: $ARO_CI_IMAGE
   rules:
     - if: $CI_COMMIT_TAG
     - if: $CI_COMMIT_BRANCH == "main"
@@ -892,7 +946,7 @@ integration:repl:
   # last one adding the LLVM apt repository for itself: it installed perl,
   # libgit2, libzmq, libcurl and libllvm20 on a bare ubuntu:22.04, which the
   # image already carries (GitLab #596).
-  image: $CI_REGISTRY_IMAGE/aro-ci:latest
+  image: $ARO_CI_IMAGE
   rules:
     - if: $CI_COMMIT_TAG
     - if: $CI_COMMIT_BRANCH == "main"
@@ -930,7 +984,7 @@ integration:repl:
 # has 3.12).
 integration:jupyter:
   stage: integration
-  image: $CI_REGISTRY_IMAGE/aro-ci:latest
+  image: $ARO_CI_IMAGE
   rules:
     - if: $CI_COMMIT_TAG
     - if: $CI_COMMIT_BRANCH == "main"
@@ -1029,7 +1083,7 @@ integration:jupyter:
 # genuinely does not work on Linux yet.
 repl:smoke:
   stage: integration
-  image: $CI_REGISTRY_IMAGE/aro-ci:latest
+  image: $ARO_CI_IMAGE
   allow_failure: true
   rules:
     - if: $CI_COMMIT_TAG
@@ -1087,7 +1141,7 @@ repl:smoke:
 # no longer matches the binary that built alongside it.
 train:catalogs:
   stage: integration
-  image: $CI_REGISTRY_IMAGE/aro-ci:latest
+  image: $ARO_CI_IMAGE
   rules:
     - if: $CI_COMMIT_TAG
     - if: $CI_COMMIT_BRANCH == "main"
@@ -1128,7 +1182,7 @@ train:catalogs:
 # the training host.
 train:corpus:
   stage: integration
-  image: $CI_REGISTRY_IMAGE/aro-ci:latest
+  image: $ARO_CI_IMAGE
   rules:
     - if: $CI_COMMIT_TAG
     - if: $CI_COMMIT_BRANCH == "main"
