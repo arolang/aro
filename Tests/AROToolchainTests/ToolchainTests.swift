@@ -132,6 +132,23 @@ struct ToolchainTableTests {
         #expect(swift.preferredPaths.isEmpty == swiftc.preferredPaths.isEmpty)
     }
 
+    // An explicit SWIFTC names a toolchain, so the `swift` beside it is the
+    // driver that belongs to it — the one piece of `PluginLoader`'s own lookup
+    // that PATH cannot express, kept when the two were folded together.
+    @Test("An explicit swiftc also fixes which swift is used")
+    func swiftFollowsConfiguredSwiftc() {
+        for key in ["SWIFTC", "ARO_SWIFTC_PATH"] {
+            let spec = Toolchain.spec(for: "swift", environment: [key: "/opt/tc/usr/bin/swiftc"])
+            #expect(spec.preferredPaths.first == "/opt/tc/usr/bin/swift", "\(key) was not followed")
+        }
+    }
+
+    @Test("A swiftc override that is not named swiftc is left to the rest of the lookup")
+    func swiftIgnoresUnrelatedSwiftcOverride() {
+        let spec = Toolchain.spec(for: "swift", environment: ["SWIFTC": "/opt/tc/usr/bin/swift-driver"])
+        #expect(spec.preferredPaths.isEmpty)
+    }
+
     @Test("The linker's clang is the toolchain's, not Homebrew LLVM's")
     func clangPrefersSystem() {
         let paths = Toolchain.spec(for: "clang", environment: [:]).preferredPaths
