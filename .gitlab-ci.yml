@@ -943,8 +943,17 @@ integration:jupyter:
     # importable, and the failure surfacing one line later as "No module
     # named 'aro_kernel'". An upgrade of an already-new pip is a no-op, and
     # the line is what stops the bug coming back with a base-image change.
-    - python3 -m pip install --quiet --break-system-packages --upgrade pip
-      || python3 -m pip install --quiet --upgrade pip
+    # Only when pip is actually old. I kept this line through #897 calling an
+    # upgrade of an already-new pip "a no-op"; it is not. On noble, pip tries to
+    # uninstall the Debian-packaged pip 24.0 first and cannot — "RECORD file not
+    # found" — so the line fails outright, and the fallback then hits PEP 668.
+    - |
+      PIP_MAJOR=$(python3 -c 'import pip; print(pip.__version__.split(".")[0])')
+      if [ "$PIP_MAJOR" -lt 23 ]; then
+        python3 -m pip install --quiet --upgrade pip
+      else
+        echo "pip $(python3 -m pip --version | cut -d' ' -f2) is new enough; not upgrading"
+      fi
     # PEP 668 again: noble's system Python is externally-managed (#897).
     - pip3 install --quiet --break-system-packages ./Editor/jupyter-aro nbconvert
       || pip3 install --quiet ./Editor/jupyter-aro nbconvert
