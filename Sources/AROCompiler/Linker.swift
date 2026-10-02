@@ -4,6 +4,7 @@
 // ============================================================
 
 import Foundation
+import AROToolchain
 
 /// Emits LLVM IR to object files using llc command-line tool
 public final class LLVMEmitter {
@@ -95,61 +96,20 @@ public final class LLVMEmitter {
 
     // MARK: - Private Methods
 
+    /// Locate `llc`. The candidate list lives in `Toolchain` (GitLab #733) —
+    /// this used to carry its own, which never looked in Homebrew's `llvm@20`
+    /// prefix even though that is the formula the install instructions name.
     private func findLLC() throws -> String {
         #if os(Windows)
-        // On Windows, check common LLVM installation paths
-        let windowsPaths = [
-            "C:\\Program Files\\LLVM\\bin\\llc.exe",
-            "C:\\Program Files (x86)\\LLVM\\bin\\llc.exe"
-        ]
-
-        for path in windowsPaths {
-            if FileManager.default.fileExists(atPath: path) {
-                return path
-            }
-        }
-
-        // Fallback to PATH (may not work reliably on Windows)
-        return "llc"
+        // Windows has no `which` worth relying on, so a bare name the loader may
+        // still resolve is better than failing the build here.
+        return Toolchain.resolve("llc")
         #else
-        // Unix-like systems (macOS, Linux)
-        let paths = [
-            "/opt/homebrew/opt/llvm/bin/llc",
-            "/usr/local/opt/llvm/bin/llc",
-            "/usr/bin/llc",
-            "/usr/local/bin/llc",
-            "/usr/bin/llc-14"  // Ubuntu 24.04
-        ]
-
-        for path in paths {
-            if FileManager.default.fileExists(atPath: path) {
-                return path
-            }
-        }
-
-        // Try to find in PATH
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/which")
-        process.arguments = ["llc"]
-
-        let pipe = Pipe()
-        process.standardOutput = pipe
-        process.standardError = FileHandle.nullDevice
-
-        do {
-            try process.run()
-            process.waitUntilExit()
-            let data = pipe.fileHandleForReading.readDataToEndOfFile()
-            if let path = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
-               !path.isEmpty {
-                return path
-            }
-        } catch {}
-
+        if let llc = Toolchain.find("llc") { return llc }
         #if os(macOS)
-        throw LinkerError.compilationFailed("llc not found. Please install LLVM: brew install llvm")
+        throw LinkerError.compilationFailed("llc not found. Please install LLVM: brew install llvm@20")
         #else
-        throw LinkerError.compilationFailed("llc not found. Please install LLVM: apt-get install llvm-14")
+        throw LinkerError.compilationFailed("llc not found. Please install LLVM: apt-get install llvm-20")
         #endif
         #endif
     }
@@ -157,19 +117,7 @@ public final class LLVMEmitter {
     /// Find clang executable (used on Windows for LLVM IR compilation)
     private func findClang() throws -> String {
         #if os(Windows)
-        let windowsPaths = [
-            "C:\\Program Files\\LLVM\\bin\\clang.exe",
-            "C:\\Program Files (x86)\\LLVM\\bin\\clang.exe"
-        ]
-
-        for path in windowsPaths {
-            if FileManager.default.fileExists(atPath: path) {
-                return path
-            }
-        }
-
-        // Fallback to PATH
-        return "clang"
+        return Toolchain.resolve("clang")
         #else
         // On Unix, we use llc, not clang for IR compilation
         throw LinkerError.compilationFailed("clang lookup not implemented for this platform")
@@ -754,131 +702,35 @@ public final class CCompiler {
         return resolved
     }
 
+    /// The C compiler used to link.
+    ///
+    /// On Linux this is clang rather than swiftc: swiftc on GitHub Actions
+    /// runners hangs intermittently, while clang works consistently when the
+    /// Swift runtime libraries are named explicitly.
+    ///
+    /// The three per-platform candidate lists this used to carry are now one
+    /// entry in `Toolchain` (GitLab #733). gcc stays a separate, later lookup
+    /// because it is a different compiler rather than another place clang
+    /// lives — the macOS list had `/usr/bin/gcc` sitting in the middle of the
+    /// clang candidates.
     private func computeCompiler() -> String {
+        if let clang = Toolchain.find("clang") {
+            debugLog("[LINKER] Found clang at \(clang)")
+            return clang
+        }
+        if let gcc = Toolchain.find("gcc") {
+            debugLog("[LINKER] No clang; falling back to \(gcc)")
+            return gcc
+        }
+
+        // Nothing found. A bare name may still resolve against a PATH this
+        // process cannot see, so hand one over rather than failing here.
         #if os(Linux)
-        debugLog("[LINKER] findCompiler() called on Linux")
-
-        // On Linux, use clang for linking Swift static libraries
-        // swiftc on GitHub Actions runners is unreliable (hangs intermittently)
-        // clang works consistently when we explicitly specify Swift runtime libraries
-
-        // 1. Check for generic clang (may be symlinked to clang-20 in CI)
-        if FileManager.default.fileExists(atPath: "/usr/bin/clang") {
-            debugLog("[LINKER] Found clang at /usr/bin/clang")
-            return "/usr/bin/clang"
-        }
-
-        // 2. Check for clang-14 (Ubuntu fallback)
-        if FileManager.default.fileExists(atPath: "/usr/bin/clang-14") {
-            debugLog("[LINKER] Found clang-14 at /usr/bin/clang-14")
-            return "/usr/bin/clang-14"
-        }
-
-        // 3. Try to find clang in PATH
-        debugLog("[LINKER] Trying to find clang in PATH...")
-        do {
-            let whichProcess = Process()
-            whichProcess.executableURL = URL(fileURLWithPath: "/usr/bin/which")
-            whichProcess.arguments = ["clang"]
-
-            let whichPipe = Pipe()
-            whichProcess.standardOutput = whichPipe
-            whichProcess.standardError = FileHandle.nullDevice
-
-            try whichProcess.run()
-            whichProcess.waitUntilExit()
-
-            if whichProcess.terminationStatus == 0 {
-                let data = whichPipe.fileHandleForReading.readDataToEndOfFile()
-                if let path = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
-                   !path.isEmpty {
-                    debugLog("[LINKER] Found clang in PATH: \(path)")
-                    return path
-                }
-            }
-        } catch {
-            debugLog("[LINKER] Error searching for clang: \(error)")
-        }
-
-        // 4. Final fallback
         FileHandle.standardError.write(Data("[LINKER] WARNING: No compiler found, returning clang-14\n".utf8))
         return "clang-14"
-        #elseif os(Windows)
-        // Windows: Find clang.exe in standard LLVM installation paths
-        let windowsCompilers = [
-            "C:\\Program Files\\LLVM\\bin\\clang.exe",
-            "C:\\Program Files (x86)\\LLVM\\bin\\clang.exe"
-        ]
-
-        for compiler in windowsCompilers {
-            if FileManager.default.fileExists(atPath: compiler) {
-                return compiler
-            }
-        }
-
-        // Try to find clang in PATH using 'where' command
-        do {
-            let whereProcess = Process()
-            whereProcess.executableURL = URL(fileURLWithPath: "C:\\Windows\\System32\\where.exe")
-            whereProcess.arguments = ["clang"]
-
-            let wherePipe = Pipe()
-            whereProcess.standardOutput = wherePipe
-            whereProcess.standardError = FileHandle.nullDevice
-
-            try whereProcess.run()
-            whereProcess.waitUntilExit()
-
-            if whereProcess.terminationStatus == 0 {
-                let data = wherePipe.fileHandleForReading.readDataToEndOfFile()
-                if let output = String(data: data, encoding: .utf8) {
-                    // 'where' can return multiple lines, take the first one
-                    let paths = output.components(separatedBy: .newlines).filter { !$0.isEmpty }
-                    if let firstPath = paths.first {
-                        return firstPath.trimmingCharacters(in: .whitespaces)
-                    }
-                }
-            }
-        } catch {}
-
-        return "clang.exe" // Hope it's in PATH
         #else
-        // macOS fallback: Prefer clang, fall back to gcc
-        let compilers = [
-            "/usr/bin/clang",
-            "/usr/bin/clang-14",     // Ubuntu 22.04 LLVM package
-            "/opt/homebrew/bin/clang",
-            "/usr/bin/gcc",
-            "clang",
-            "gcc"
-        ]
-
-        for compiler in compilers {
-            if FileManager.default.fileExists(atPath: compiler) {
-                return compiler
-            }
-        }
-
-        // Try to find in PATH
-        do {
-            let whichProcess = Process()
-            whichProcess.executableURL = URL(fileURLWithPath: "/usr/bin/which")
-            whichProcess.arguments = ["clang"]
-
-            let whichPipe = Pipe()
-            whichProcess.standardOutput = whichPipe
-            whichProcess.standardError = FileHandle.nullDevice
-
-            try whichProcess.run()
-            whichProcess.waitUntilExit()
-            let data = whichPipe.fileHandleForReading.readDataToEndOfFile()
-            if let path = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
-               !path.isEmpty {
-                return path
-            }
-        } catch {}
-
-        return "clang" // Hope it's in PATH
+        FileHandle.standardError.write(Data("[LINKER] WARNING: No compiler found, returning clang\n".utf8))
+        return Toolchain.resolve("clang")
         #endif
     }
 
@@ -891,17 +743,7 @@ public final class CCompiler {
     /// Returns nil if libgit2 is on the default search path or cannot be found —
     /// callers still append `-lgit2` and let clang resolve it.
     private func findLibgit2Dir() -> String? {
-        let candidates = [
-            "/opt/homebrew/lib",       // Apple Silicon Homebrew
-            "/usr/local/lib",          // Intel Homebrew / manual install
-            "/opt/local/lib",          // MacPorts
-        ]
-        for dir in candidates {
-            if FileManager.default.fileExists(atPath: "\(dir)/libgit2.dylib") {
-                return dir
-            }
-        }
-        return nil
+        ToolResolver.firstDirectory(containing: "libgit2.dylib", in: Toolchain.libraryDirectories)
     }
 
     private func computeSwiftLibPath() -> String? {
@@ -1018,72 +860,45 @@ public final class CCompiler {
         FileHandle.standardError.write(Data("[LINKER-WIN] No Swift lib path found\n".utf8))
         return nil
         #else
-        // First, try to get the Swift library path from the Swift toolchain itself
-        let process = Process()
+        // The Swift library path is derived from the `swift` *on PATH*, and
+        // deliberately not from `Toolchain.find("swift")`: this has to be the
+        // toolchain the developer (or swift-actions/setup-swift) has activated,
+        // not whichever one happens to sit in /usr/bin. `searchPATH` is the same
+        // lookup the hand-rolled `which` subprocess here used to do (GitLab #733).
+        if let swiftPath = ToolResolver.searchPATH("swift") {
+            // Swift is at: /path/to/toolchain/usr/bin/swift (standard)
+            //          or: /path/to/toolchain/bin/swift (swiftly)
+            // Libraries at: /path/to/toolchain/usr/lib/swift/macosx
+            let swiftURL = URL(fileURLWithPath: swiftPath)
+            let baseDir = swiftURL
+                .deletingLastPathComponent()  // Remove 'swift' → /path/bin
+                .deletingLastPathComponent()  // Remove 'bin' → /path
 
-        #if os(macOS)
-        // macOS: use 'which' first to respect PATH (for swift-actions/setup-swift)
-        // Fall back to 'xcrun' for Xcode installations
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/which")
-        process.arguments = ["swift"]
-        #else
-        // Linux: use which to find swift
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/which")
-        process.arguments = ["swift"]
-        #endif
+            #if os(macOS)
+            let platformSuffix = "macosx"
+            #else
+            let platformSuffix = "linux"
+            #endif
 
-        let pipe = Pipe()
-        process.standardOutput = pipe
-        process.standardError = FileHandle.nullDevice
+            // Try two possible structures:
+            // 1. Standard toolchain: /path/usr/bin/swift → /path/usr/lib/swift/platform
+            //    (baseDir is already at /path/usr, just add lib/swift)
+            // 2. Swiftly: /path/bin/swift → /path/usr/lib/swift/platform
+            //    (baseDir is at /path, need to add usr/lib/swift)
+            let pathsToTry = [
+                baseDir.appendingPathComponent("lib/swift/\(platformSuffix)").path,
+                baseDir.appendingPathComponent("usr/lib/swift/\(platformSuffix)").path
+            ]
 
-        do {
-            try process.run()
-            process.waitUntilExit()
+            #if os(macOS)
+            debugLog("[LINKER-MAC] swift on PATH: \(swiftPath)")
+            debugLog("[LINKER-MAC] baseDir: \(baseDir.path)")
+            #endif
 
-            if process.terminationStatus == 0 {
-                let data = pipe.fileHandleForReading.readDataToEndOfFile()
-                if let swiftPath = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
-                   !swiftPath.isEmpty {
-                    // Swift is at: /path/to/toolchain/usr/bin/swift (standard)
-                    //          or: /path/to/toolchain/bin/swift (swiftly)
-                    // Libraries at: /path/to/toolchain/usr/lib/swift/macosx
-                    let swiftURL = URL(fileURLWithPath: swiftPath)
-                    let baseDir = swiftURL
-                        .deletingLastPathComponent()  // Remove 'swift' → /path/bin
-                        .deletingLastPathComponent()  // Remove 'bin' → /path
-
-                    #if os(macOS)
-                    let platformSuffix = "macosx"
-                    #else
-                    let platformSuffix = "linux"
-                    #endif
-
-                    // Try two possible structures:
-                    // 1. Standard toolchain: /path/usr/bin/swift → /path/usr/lib/swift/platform
-                    //    (baseDir is already at /path/usr, just add lib/swift)
-                    // 2. Swiftly: /path/bin/swift → /path/usr/lib/swift/platform
-                    //    (baseDir is at /path, need to add usr/lib/swift)
-                    let pathsToTry = [
-                        baseDir.appendingPathComponent("lib/swift/\(platformSuffix)").path,
-                        baseDir.appendingPathComponent("usr/lib/swift/\(platformSuffix)").path
-                    ]
-
-                    #if os(macOS)
-                    debugLog("[LINKER-MAC] which swift: \(swiftPath)")
-                    debugLog("[LINKER-MAC] baseDir: \(baseDir.path)")
-                    for path in pathsToTry {
-                        debugLog("[LINKER-MAC] Trying: \(path) exists=\(FileManager.default.fileExists(atPath: path))")
-                    }
-                    #endif
-
-                    for path in pathsToTry {
-                        if FileManager.default.fileExists(atPath: path) {
-                            return path
-                        }
-                    }
-                }
+            if let found = ToolResolver.firstExistingPath(pathsToTry) {
+                return found
             }
-        } catch {}
+        }
         #endif
 
         // Fallback to standard paths
@@ -1814,78 +1629,18 @@ public final class PluginSymbolRenamer {
     }
 
     private func findArchiver() -> String {
-        let candidates = [
-            "/opt/homebrew/opt/llvm@20/bin/llvm-ar",
-            "/opt/homebrew/opt/llvm/bin/llvm-ar",
-            "/usr/local/opt/llvm/bin/llvm-ar",
-            "/usr/bin/llvm-ar-20",
-            "/usr/bin/llvm-ar",
-            "/usr/local/bin/llvm-ar",
-        ]
-        for path in candidates where FileManager.default.isExecutableFile(atPath: path) {
-            return path
-        }
-        // PATH lookup
-        let which = Process()
-        which.executableURL = URL(fileURLWithPath: "/usr/bin/which")
-        which.arguments = ["llvm-ar"]
-        let pipe = Pipe()
-        which.standardOutput = pipe
-        which.standardError = FileHandle.nullDevice
-        if (try? which.run()) != nil {
-            which.waitUntilExit()
-            let out = String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)?
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-            if let out, !out.isEmpty, FileManager.default.isExecutableFile(atPath: out) {
-                return out
-            }
-        }
         // Fall back to BSD ar — fine for archives without GNU extended filenames.
-        return "/usr/bin/ar"
+        Toolchain.find("llvm-ar") ?? Toolchain.resolve("ar")
     }
 
     // MARK: - Private
 
     private func findLLVMObjcopy() throws -> String {
-        let paths = [
-            "/opt/homebrew/opt/llvm/bin/llvm-objcopy",
-            "/opt/homebrew/opt/llvm@20/bin/llvm-objcopy",  // Homebrew versioned
-            "/usr/local/opt/llvm/bin/llvm-objcopy",
-            "/usr/bin/llvm-objcopy",
-            "/usr/local/bin/llvm-objcopy",
-            "/usr/bin/llvm-objcopy-20",  // Docker CI (LLVM 20)
-            "/usr/bin/llvm-objcopy-14",  // Ubuntu 24.04
-        ]
-
-        for path in paths {
-            if FileManager.default.fileExists(atPath: path) {
-                return path
-            }
-        }
-
-        // Try PATH
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/which")
-        process.arguments = ["llvm-objcopy"]
-
-        let pipe = Pipe()
-        process.standardOutput = pipe
-        process.standardError = FileHandle.nullDevice
-
-        do {
-            try process.run()
-            process.waitUntilExit()
-            let data = pipe.fileHandleForReading.readDataToEndOfFile()
-            if let path = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
-               !path.isEmpty {
-                return path
-            }
-        } catch {}
-
+        if let objcopy = Toolchain.find("llvm-objcopy") { return objcopy }
         #if os(macOS)
-        throw LinkerError.compilationFailed("llvm-objcopy not found. Please install LLVM: brew install llvm")
+        throw LinkerError.compilationFailed("llvm-objcopy not found. Please install LLVM: brew install llvm@20")
         #else
-        throw LinkerError.compilationFailed("llvm-objcopy not found. Please install LLVM: apt-get install llvm-14")
+        throw LinkerError.compilationFailed("llvm-objcopy not found. Please install LLVM: apt-get install llvm-20")
         #endif
     }
 
@@ -2026,25 +1781,13 @@ public final class PythonLibraryFinder {
 
     // MARK: - Private
 
+    /// The interpreter to link against, from `Toolchain`'s table (GitLab #733).
+    ///
+    /// The system interpreters there outrank `PATH` deliberately: a `python3` on
+    /// `PATH` is frequently a virtualenv's, and a binary linked against a venv's
+    /// `libpython` depends on a directory that will be deleted.
     private func findPython3() -> String? {
-        let candidates = [
-            "/opt/homebrew/bin/python3",
-            "/usr/local/bin/python3",
-            "/usr/bin/python3",
-        ]
-
-        for path in candidates {
-            if FileManager.default.isExecutableFile(atPath: path) {
-                return path
-            }
-        }
-
-        // Try PATH
-        if let path = runCommand("/usr/bin/which", args: ["python3"]) {
-            return path
-        }
-
-        return nil
+        Toolchain.find("python3")
     }
 
     private func runPython(_ python: String, code: String) -> String? {

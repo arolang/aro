@@ -217,3 +217,11 @@ Of the two in-bounds sites, neither can be converted without changing behaviour:
 
 There is no in-bounds duplication left to remove: the two PluginCompiler lists are
 for different tools. #733 should be done in one go once Linker.swift is free.
+
+**Done later, on `refactor/733-one-tool-table`**, in the one go this recommended.
+Both blockers named above were real and both were fixed rather than worked around:
+`ToolResolver.findTool` grew a `preferredPaths` list searched *before* `PATH`, so a
+site that deliberately outranked `PATH` keeps doing so; and the candidate table moved
+into a new leaf target `AROToolchain`, which `AROPackageManager` can depend on without
+taking `ARORuntime` with it. `Linker.computeSwiftLibPath` is still not table-driven —
+see that MR for why.

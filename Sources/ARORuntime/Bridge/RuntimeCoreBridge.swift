@@ -18,6 +18,7 @@
 
 import Foundation
 import AROParser
+import AROToolchain
 
 #if canImport(Darwin)
 import CoreFoundation

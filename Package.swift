@@ -302,11 +302,21 @@ let package = Package(
                 name: "AROParser",
                 path: "Sources/AROParser"
             ),
+            // Toolchain discovery (GitLab #733): the one table of build-tool
+            // locations plus `ToolResolver`. A leaf target with no dependencies
+            // precisely so the runtime, the compiler, the CLI and the package
+            // manager can all reach it — the package manager deliberately does
+            // not depend on ARORuntime, which is why this used to be duplicated.
+            .target(
+                name: "AROToolchain",
+                path: "Sources/AROToolchain"
+            ),
             // Runtime library
             .target(
                 name: "ARORuntime",
                 dependencies: [
                     "AROParser",
+                    "AROToolchain",
                     "AROVersion",
                     "Clibgit2",
                     .product(name: "Yams", package: "Yams"),
@@ -330,6 +340,7 @@ let package = Package(
                 name: "AROCompiler",
                 dependencies: [
                     "AROParser",
+                    "AROToolchain",
                     "AROCDebugInfo",
                     .product(name: "Logging", package: "swift-log"),
                 ] + compilerLLVMDependency,
@@ -363,6 +374,7 @@ let package = Package(
                 name: "AROPackageManager",
                 dependencies: [
                     "Clibgit2",
+                    "AROToolchain",
                     "AROVersion",
                     .product(name: "Yams", package: "Yams"),
                 ],
@@ -382,6 +394,7 @@ let package = Package(
                 dependencies: [
                     "AROVersion",
                     "AROParser",
+                    "AROToolchain",
                     "ARORuntime",
                     "AROCompiler",
                     "AROPackageManager",
@@ -400,10 +413,16 @@ let package = Package(
                 dependencies: ["AROParser"],
                 path: "Tests/AROParserTests"
             ),
+            // Toolchain discovery tests
+            .testTarget(
+                name: "AROToolchainTests",
+                dependencies: ["AROToolchain"],
+                path: "Tests/AROToolchainTests"
+            ),
             // Runtime tests
             .testTarget(
                 name: "AROuntimeTests",
-                dependencies: ["ARORuntime"],
+                dependencies: ["ARORuntime", "AROToolchain"],
                 path: "Tests/AROuntimeTests"
             ),
             // Compiler tests

@@ -521,7 +521,7 @@ All built-in actions are exposed as C-callable functions:
 
 | Dependency | Purpose | Installation |
 |------------|---------|--------------|
-| LLVM | Compile IR to object code | `brew install llvm` (macOS) |
+| LLVM | Compile IR to object code | `brew install llvm@20` (macOS), `apt-get install llvm-20` (Linux) |
 | Clang | Link object files | Included with Xcode / LLVM |
 | Swift | Build ARORuntime | Swift 6.3+ toolchain |
 
