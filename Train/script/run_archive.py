@@ -50,6 +50,21 @@ def artifact_plan(cfg=config):
         (cfg.RELEASE_DIR / 'promotion_gate.json',     'promotion_gate.json',   False),
         (cfg.RELEASE_DIR / 'model_manifest.json',     'model_manifest.json',   False),
         (cfg.RELEASE_DIR / 'version_history.json',    'version_history.json',  False),
+        # The two-model documentation sweep (29_multimodel_doc_qa.py) counts,
+        # per document section, how many surviving pairs came from which model
+        # and names the sections that produced none. That report is the whole
+        # evidence for "the corpus covers every aspect that is written down",
+        # and it was being left in gitignored `data/` where a finished run
+        # could not be checked against it (GitLab #805).
+        #
+        # Optional, like the gate and the manifests: a run that did not sweep
+        # records the report as missing rather than failing.
+        (data / '29_doc_qa' / 'coverage.json',        'doc_qa_coverage.json',  False),
+        # Same for the Learning-notebook sweep: per notebook, how many code
+        # cells ran, how many produced output both runs agreed on, and how many
+        # pairs survived. That stage was not in the pipeline at all until #805,
+        # so no run had ever left this behind either.
+        (data / '32_notebooks' / 'coverage.json',     'notebook_coverage.json', False),
     ]
 
 

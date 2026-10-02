@@ -138,6 +138,75 @@ class TestStallWatchdog(StageRunnerCase):
         self.assertIn('kernel', result['error'])
 
 
+class TestScriptStages(StageRunnerCase):
+    """A stage may be a plain `.py` file (GitLab #805).
+
+    `29_multimodel_doc_qa.py` and `32_notebook_pairs.py` were written as
+    scripts, so the meta pipeline — which only knew how to run `<name>.ipynb`
+    — could not list them. A stage the pipeline cannot name is a stage nobody
+    runs, which is how `data/29_doc_qa` ended up empty while the README
+    described its contents.
+    """
+
+    def _run_named(self, name, proc, kernel='python3', **kw):
+        self.commands = []
+
+        def popen(cmd, **_kw):
+            self.commands.append(cmd)
+            return proc
+
+        return sr.run_notebook(name, self.scripts, self.out, kernel,
+                               poll_interval=60, _clock=self._clock,
+                               _sleep=self._sleep, _popen=popen, **kw)
+
+    def test_a_script_stage_runs_directly(self):
+        (self.scripts / 'sweep.py').write_text('print("hi")\n')
+        result = self._run_named('sweep', FakeProc(alive_polls=1))
+
+        self.assertEqual(result['status'], 'done')
+        cmd = self.commands[0]
+        self.assertEqual(cmd[-1], str(self.scripts / 'sweep.py'))
+        self.assertIn('-u', cmd, 'an unbuffered script is what keeps the log growing')
+        self.assertNotIn(str(sr.NB_EXEC), cmd, 'a script needs no notebook executor')
+
+    def test_a_script_stage_needs_no_kernel(self):
+        # The kernel check belongs to the notebook path. Requiring one here
+        # would make every script stage fail on a machine with no Jupyter.
+        (self.scripts / 'sweep.py').write_text('print("hi")\n')
+        result = self._run_named('sweep', FakeProc(alive_polls=1), kernel=None)
+        self.assertEqual(result['status'], 'done')
+
+    def test_a_notebook_wins_when_both_exist(self):
+        # Ambiguity resolved one way, deliberately: every existing stage is a
+        # notebook, so a stray same-named script must not quietly take over.
+        (self.scripts / 'demo.py').write_text('print("hi")\n')
+        result = self._run_named('demo', FakeProc(alive_polls=1))
+
+        self.assertEqual(result['status'], 'done')
+        self.assertIn(str(sr.NB_EXEC), self.commands[0])
+
+    def test_a_script_stage_is_watched_the_same_way(self):
+        # The stall watchdog is the reason stages run through here at all; it
+        # must not be notebook-only.
+        result = self._run_named('sweep', FakeProc(alive_polls=10_000),
+                                 stall_timeout=300)
+        # No file at all yet -> missing, named for both shapes.
+        self.assertEqual(result['status'], 'missing')
+        self.assertIn('sweep.ipynb', result['error'])
+        self.assertIn('sweep.py', result['error'])
+
+        (self.scripts / 'sweep.py').write_text('print("hi")\n')
+        proc = FakeProc(alive_polls=10_000)
+        result = self._run_named('sweep', proc, stall_timeout=300)
+        self.assertEqual(result['status'], 'stalled')
+        self.assertTrue(proc.terminated)
+
+    def test_a_failing_script_reports_failed(self):
+        (self.scripts / 'sweep.py').write_text('raise SystemExit(1)\n')
+        result = self._run_named('sweep', FakeProc(alive_polls=1, returncode=1))
+        self.assertEqual(result['status'], 'failed')
+
+
 class TestTheStageStreams(StageRunnerCase):
     """The watchdog can only work if the stage narrates itself.
 

@@ -11,10 +11,12 @@ the same documentation with two models from different families and merges
 what survives validation, with per-section coverage accounting so "every
 aspect that is written down" is a measurable claim instead of a hope.
 
-Models (both already on disk, chosen for family diversity):
+Models (Hugging Face ids, chosen for family diversity):
     A: lmstudio-community/Mistral-Small-3.2-24B-Instruct-2506-MLX-8bit
-    B: lmstudio-community/Qwen3.6-27B-MLX-8bit  (local LM Studio path)
-Override with --models. Loaded one at a time; ~30 GB peak each.
+    B: lmstudio-community/Qwen3.6-27B-MLX-8bit
+An id already downloaded under ~/.lmstudio/models is loaded from there; one
+that is not is fetched from the Hub. Override with --models, which takes ids
+or paths. Loaded one at a time; ~30 GB peak each.
 
 Inputs:
     Book/*/*.md                 (12 books, versioned in this repo)
@@ -82,10 +84,35 @@ OUT_DIR = DATA_ROOT / '29_doc_qa'
 REPO = Path(__file__).resolve().parents[2]
 WIKI_REMOTE = 'https://github.com/arolang/aro.wiki.git'
 
+# Hugging Face ids, not paths. The second model used to be spelled as
+# `~/.lmstudio/models/...`, which names a directory on one laptop: the sweep
+# could not be reproduced anywhere else, and the coverage report it produces
+# could not be checked against a rerun (GitLab #805).
+#
+# `resolve_model` below still prefers a local LM Studio copy when there is
+# one, so nobody re-downloads 30 GB they already have — but the identifier
+# that gets recorded, compared and published is the id.
 DEFAULT_MODELS = [
     'lmstudio-community/Mistral-Small-3.2-24B-Instruct-2506-MLX-8bit',
-    str(Path.home() / '.lmstudio/models/lmstudio-community/Qwen3.6-27B-MLX-8bit'),
+    'lmstudio-community/Qwen3.6-27B-MLX-8bit',
 ]
+
+# Where LM Studio keeps its downloads. A model identified by HF id is loaded
+# from here when the directory exists, and fetched from the Hub when it does
+# not — the same run on two machines, one of which happens to have it already.
+LMSTUDIO_MODELS = Path.home() / '.lmstudio' / 'models'
+
+
+def resolve_model(model_id: str) -> str:
+    """A local copy of `model_id` if one is on this machine, else the id itself.
+
+    Only `org/name` ids are redirected. A caller who passes an explicit path
+    through `--models` means that path and gets it unchanged.
+    """
+    if '/' not in model_id or model_id.startswith(('.', '/', '~')):
+        return model_id
+    local = LMSTUDIO_MODELS / model_id
+    return str(local) if local.is_dir() else model_id
 
 GEN_PROMPT = """You are building training data for a coding assistant for the ARO \
 programming language. Below is one section of ARO's official documentation.
@@ -154,12 +181,16 @@ def split_sections(text: str) -> list[tuple[str, str]]:
 
 def load_model(model_id: str):
     from mlx_lm import load
-    print(f'loading {model_id} ...')
+    source = resolve_model(model_id)
+    if source != model_id:
+        print(f'loading {model_id} (local copy: {source}) ...')
+    else:
+        print(f'loading {model_id} ...')
     # Mistral tokenizers ship a broken pre-tokenizer regex; transformers
     # warns that tokenization is incorrect unless this flag is set. Wrong
     # tokenization would quietly degrade every pair the model generates.
     config = {'fix_mistral_regex': True} if 'mistral' in model_id.lower() else None
-    return load(model_id, tokenizer_config=config)
+    return load(source, tokenizer_config=config)
 
 
 def generate_pairs(model, tokenizer, title: str, body: str) -> list[dict]:

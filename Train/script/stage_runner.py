@@ -132,7 +132,12 @@ def run_notebook(name, script_dir, output_dir, kernel_name,
                  stall_timeout=DEFAULT_STALL_TIMEOUT, max_runtime=0,
                  python=None, poll_interval=POLL_INTERVAL, _clock=time.time,
                  _sleep=time.sleep, _popen=subprocess.Popen):
-    """Execute `<name>.ipynb` via nb_exec, killing it only when it goes quiet.
+    """Execute stage `<name>`, killing it only when it goes quiet.
+
+    A stage is `<name>.ipynb` run through nb_exec, or `<name>.py` run
+    directly — some stages were only ever written as scripts, and a stage the
+    meta pipeline cannot name is a stage nobody runs (GitLab #805). The
+    notebook form wins when both exist.
 
     Returns a dict: {'status': 'done'|'failed'|'stalled'|'timeout'|'missing',
                      'error': str|None, 'duration': float, 'log': str}.
@@ -141,25 +146,35 @@ def run_notebook(name, script_dir, output_dir, kernel_name,
     cap in seconds, 0 for none — the default, because the stages that run for
     hours are doing their job.
     """
-    src = Path(script_dir) / f'{name}.ipynb'
-    dest = Path(output_dir) / f'{name}.ipynb'
+    notebook_src = Path(script_dir) / f'{name}.ipynb'
+    script_src = Path(script_dir) / f'{name}.py'
     log_file = Path(output_dir) / f'{name}.log'
+    interpreter = python or sys.executable
 
-    if not src.is_file():
-        return {'status': 'missing', 'error': f'file not found: {src.name}',
+    if notebook_src.is_file():
+        src = notebook_src
+        if kernel_name is None:
+            return {'status': 'failed',
+                    'error': 'no Python kernel available — run the setup cell first',
+                    'duration': 0.0, 'log': str(log_file)}
+        # `-u` plus nb_exec's own flushing is what makes the log grow while the
+        # stage runs. Under `jupyter nbconvert --execute` it did not: cell output
+        # went into the output notebook and nbconvert's own stdout was three lines,
+        # so the watchdog below saw a frozen log for every healthy long stage and
+        # killed it at the stall timeout. See nb_exec.py.
+        dest = Path(output_dir) / f'{name}.ipynb'
+        cmd = [interpreter, '-u', str(NB_EXEC),
+               str(src), '--output', str(dest), '--kernel', kernel_name]
+    elif script_src.is_file():
+        # A script needs no kernel and leaves no executed copy — its log IS the
+        # record. `-u` for the same reason as above: the watchdog reads the log,
+        # so a buffered stage looks wedged.
+        src = script_src
+        cmd = [interpreter, '-u', str(src)]
+    else:
+        return {'status': 'missing',
+                'error': f'file not found: {name}.ipynb or {name}.py',
                 'duration': 0.0, 'log': str(log_file)}
-    if kernel_name is None:
-        return {'status': 'failed',
-                'error': 'no Python kernel available — run the setup cell first',
-                'duration': 0.0, 'log': str(log_file)}
-
-    # `-u` plus nb_exec's own flushing is what makes the log grow while the
-    # stage runs. Under `jupyter nbconvert --execute` it did not: cell output
-    # went into the output notebook and nbconvert's own stdout was three lines,
-    # so the watchdog below saw a frozen log for every healthy long stage and
-    # killed it at the stall timeout. See nb_exec.py.
-    cmd = [python or sys.executable, '-u', str(NB_EXEC),
-           str(src), '--output', str(dest), '--kernel', kernel_name]
 
     started = _clock()
     Path(output_dir).mkdir(parents=True, exist_ok=True)
