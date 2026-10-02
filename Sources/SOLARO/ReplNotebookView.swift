@@ -83,44 +83,30 @@ struct ReplNotebookView: View {
     ///
     /// A path that resolves to nothing is handed back to the system rather than
     /// swallowed: a broken link should fail visibly, the way it does elsewhere.
+    /// The decision lives in `NotebookLinkRouter`, which is a pure function
+    /// over the URL and two directories and is tested as one (GitLab #899).
+    /// What is left here is the three side effects it names — and those are
+    /// the half that genuinely needs a running app to verify.
     private func followLink(_ url: URL) -> OpenURLAction.Result {
-        if let scheme = url.scheme?.lowercased(), scheme != "file" {
+        let destination = NotebookLinkRouter.destination(
+            for: url,
+            notebookDirectory: notebook.url.deletingLastPathComponent(),
+            projectRoot: notebook.project.rootPath)
+
+        switch destination {
+        case .systemAction:
             return .systemAction
-        }
 
-        guard let target = resolvedFile(for: url) else { return .systemAction }
-
-        // Inside the project: hand it to the workspace, which is the same
-        // route a double-clicked file in Finder takes. The workspace checks
-        // the project prefix itself, so this checks it too rather than
-        // posting a notification that would be silently dropped.
-        if target.path.hasPrefix(notebook.project.rootPath.standardizedFileURL.path) {
+        case .openInWorkspace(let target):
+            // The same route a double-clicked file in Finder takes.
             NotificationCenter.default.post(
                 name: .solaroFocusFile, object: nil, userInfo: ["url": target])
             return .handled
+
+        case .openExternally(let target):
+            NSWorkspace.shared.open(target)
+            return .handled
         }
-
-        NSWorkspace.shared.open(target)
-        return .handled
-    }
-
-    /// A link's target as an existing file, or nil.
-    ///
-    /// A path in a notebook is relative to the notebook, not to the process's
-    /// working directory — `04-immutability.repl` means the lesson beside this
-    /// one. Markdown percent-encodes a path with spaces in it, so the encoding
-    /// is undone before the filesystem sees it.
-    private func resolvedFile(for url: URL) -> URL? {
-        let base = notebook.url.deletingLastPathComponent()
-        let raw = url.isFileURL ? url.path : url.relativePath
-        let path = raw.removingPercentEncoding ?? raw
-        guard !path.isEmpty else { return nil }
-
-        let candidate = url.isFileURL
-            ? URL(fileURLWithPath: path)
-            : URL(fileURLWithPath: path, relativeTo: base)
-        let resolved = candidate.standardizedFileURL
-        return FileManager.default.fileExists(atPath: resolved.path) ? resolved : nil
     }
 
     private func loadErrorView(_ message: String) -> some View {
