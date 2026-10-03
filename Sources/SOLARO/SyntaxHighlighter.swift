@@ -83,13 +83,13 @@ enum AROSyntaxHighlighter {
         switch token.kind {
 
         case .stringLiteral, .stringSegment:
-            return NSColor(Color(red: 0.48, green: 0.83, blue: 0.45))   // green
+            return NSColor(SolaroColor.syntaxString)
 
         case .intLiteral, .floatLiteral:
-            return NSColor(Color(red: 0.96, green: 0.78, blue: 0.32))   // amber
+            return NSColor(SolaroColor.syntaxNumber)
 
         case .true, .false, .nil:
-            return NSColor(Color(red: 0.96, green: 0.78, blue: 0.32))
+            return NSColor(SolaroColor.syntaxLiteral)
 
         case .preposition:
             return NSColor(SolaroColor.wireColor(forPreposition: token.lexeme))
@@ -153,16 +153,16 @@ enum YAMLSyntaxHighlighter {
               options: [.anchorsMatchLines])
         paint(pattern: "\"[^\"\\n]*\"",
               in: attributed, source: source,
-              color: NSColor(Color(red: 0.48, green: 0.83, blue: 0.45)))
+              color: NSColor(SolaroColor.syntaxString))
         paint(pattern: "'[^'\\n]*'",
               in: attributed, source: source,
-              color: NSColor(Color(red: 0.48, green: 0.83, blue: 0.45)))
+              color: NSColor(SolaroColor.syntaxString))
         paint(pattern: "\\b\\d+(\\.\\d+)?\\b",
               in: attributed, source: source,
-              color: NSColor(Color(red: 0.96, green: 0.78, blue: 0.32)))
+              color: NSColor(SolaroColor.syntaxNumber))
         paint(pattern: "\\b(true|false|null|~)\\b",
               in: attributed, source: source,
-              color: NSColor(Color(red: 0.73, green: 0.47, blue: 0.95)))
+              color: NSColor(SolaroColor.roleOwn))
     }
 
     private static func paint(

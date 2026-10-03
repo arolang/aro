@@ -72,6 +72,18 @@ final class SolaroDiagnostics {
         }
     }
 
+    /// Report something the app could not *read* or make sense of, as
+    /// opposed to something it could not save.
+    ///
+    /// `warn` prefixes "Could not save", which would be a lie about a
+    /// theme file that would not parse (GitLab #269) — and the message
+    /// a user needs there is the parser's, not an `NSError`'s.
+    nonisolated static func note(_ message: String) {
+        Task { @MainActor in
+            shared.record(message)
+        }
+    }
+
     fileprivate func record(_ message: String) {
         latest = Warning(message: message, at: Date())
         if logged.insert(message).inserted {

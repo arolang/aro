@@ -505,7 +505,15 @@ struct RootView: View {
         ContentView(workspace: $workspace, runtimeVersion: runtimeVersion)
             .onOpenURL(perform: openURL)
             .preferredColorScheme(theme.colorScheme)
-            .onAppear { SolaroTheme.apply(theme) }
+            .onAppear {
+                SolaroTheme.apply(theme)
+                // Touching the store is what loads the selected
+                // palette and arms the Themes-folder watcher
+                // (GitLab #269). Done here rather than from Settings
+                // because the user's theme has to be in force at
+                // launch, whether or not they ever open ⌘,.
+                _ = SolaroThemeStore.shared
+            }
             .onChange(of: themeRaw) { _, new in
                 if let resolved = SolaroTheme(rawValue: new) {
                     SolaroTheme.apply(resolved)
