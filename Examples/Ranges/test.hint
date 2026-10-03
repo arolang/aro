@@ -1,0 +1,15 @@
+# Test hints for Ranges
+#
+# Runs in both modes deliberately: the point of ARO-0089's implementation is
+# that `aro run` and a binary from `aro build` iterate and measure a range
+# identically, including the 300 000-element loop, whose collection is bound
+# as a span in both (GitLab #546).
+type: console
+mode: both
+
+# 120s, not the default 60. The last loop walks 300 000 elements, which is
+# about a second on an idle laptop in either mode and several times that on a
+# shared CI runner with other pipelines competing for it. The span is the
+# example's point — a range that costs no more memory than `1..10` — so the
+# budget moves rather than the example.
+timeout: 120

@@ -153,6 +153,7 @@ ten the compiler has to switch over.
 | `VariableRefExpression` | Variable access `<name>` |
 | `BinaryExpression` | Operators: `+`, `-`, `*`, `/`, `and`, `or`, etc. |
 | `UnaryExpression` | Negation: `-`, `not` |
+| `RangeExpression` | A span of integers: `1..10`, `1..<10` |
 | `MemberAccessExpression` | `.property` access |
 | `SubscriptExpression` | `[index]` access |
 | `InterpolatedStringExpression` | `"Hello ${<name>}!"` |

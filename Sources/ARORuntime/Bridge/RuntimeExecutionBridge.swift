@@ -843,6 +843,39 @@ func evaluateExpressionJSON(_ expr: [String: Any], context: RuntimeContext) -> a
         return negated ? !empty : empty
     }
 
+    // Range: {"$range":{"lower":{…},"upper":{…},"inclusive":true,"lazy":false}}
+    //
+    // ARO-0089, GitLab #546. The span itself is only bound where the compiler
+    // asked for it (`lazy`, the for-each collection slot); everywhere else the
+    // range answers its elements, so every action that reads a collection sees
+    // the list it already understands — and `aro run` and `aro build` answer
+    // the same question, which is the whole point of deciding this in the
+    // compiler rather than per action.
+    //
+    // `AROIntRange` does the counting for both modes.
+    if let range = expr["$range"] as? [String: Any],
+       let lowerExpr = range["lower"] as? [String: Any],
+       let upperExpr = range["upper"] as? [String: Any] {
+        let lower = evaluateExpressionJSON(lowerExpr, context: context)
+        let upper = evaluateExpressionJSON(upperExpr, context: context)
+        let inclusive = (range["inclusive"] as? Bool) ?? true
+
+        guard let lo = rangeEndpointInt(lower), let hi = rangeEndpointInt(upper) else {
+            // No error channel exists on this path — expression failures here
+            // are warnings, unlike the interpreter's throw. An empty range is
+            // the least surprising stand-in: the loop does not run, and the
+            // warning names the statement's own values.
+            FileHandle.standardError.write(Data((
+                "[RuntimeBridge] Warning: a range endpoint must be an Int — got "
+                + "\(type(of: lower)) and \(type(of: upper)); the range is empty\n").utf8))
+            return [any Sendable]()
+        }
+
+        let span = AROIntRange(lower: lo, upper: hi, isInclusive: inclusive)
+        if (range["lazy"] as? Bool) == true { return span }
+        return span.sendableElements
+    }
+
     // Unary expression: {"$unary":{"op":"not","operand":{…}}}
     //
     // The compiler has always serialized these; this decoder never knew
@@ -1440,6 +1473,20 @@ func evaluateBinaryOp(op: String, left: any Sendable, right: any Sendable) -> an
     }
 }
 
+/// A range endpoint as an Int, or nil when the value is not one.
+///
+/// Mirrors `ExpressionEvaluator.rangeEndpoint` — whole Doubles and numeric
+/// strings in, fractions and everything else out (ARO-0089 §3.1,
+/// GitLab #546). Two answers to "is this a valid endpoint" is how the modes
+/// drift apart, so the rule is the same on both sides and both are tested
+/// against each other.
+private func rangeEndpointInt(_ value: any Sendable) -> Int? {
+    if let i = value as? Int { return i }
+    if let d = value as? Double, d == d.rounded(), d.magnitude < 9e18 { return Int(d) }
+    if let s = value as? String, let i = Int(s) { return i }
+    return nil
+}
+
 /// Convert value to Double for arithmetic
 private func asDouble(_ value: any Sendable) -> Double? {
     switch value {
@@ -1999,6 +2046,17 @@ public func aro_array_get_next(
 ) -> UnsafeMutableRawPointer? {
     guard let ptr = valuePtr, let statePtr = statePtr else { return nil }
     let boxed = Unmanaged<AROCValue>.fromOpaque(ptr).takeUnretainedValue()
+
+    // A range in the for-each collection slot (ARO-0089 §3.3, GitLab #546).
+    // `statePtr` is the 0-based index, exactly as for an array, so a compiled
+    // loop walks `1..10_000_000` without ever holding it — the same O(1) the
+    // interpreter's `executeForEachRange` gives.
+    if let range = boxed.value as? AROIntRange {
+        guard let element = range.element(at: Int(statePtr.pointee)) else { return nil }
+        statePtr.pointee &+= 1
+        let boxedElement = AROCValue(value: element as any Sendable)
+        return UnsafeMutableRawPointer(Unmanaged.passRetained(boxedElement).toOpaque())
+    }
 
     if let lazyList = boxed.value as? LazyDirectoryList {
         guard let entry = lazyList.next() else { return nil }

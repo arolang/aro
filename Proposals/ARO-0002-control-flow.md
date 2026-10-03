@@ -453,13 +453,20 @@ specifiers, and only a name reaches the lazy-stream iteration path
 memory. An expression that *evaluates* to a stream streams as well; a list
 literal is a value and is iterated as one.
 
-There is no range literal *yet*. `for each <n> in [1..10]` is not ARO — count
-with the range loop, `for <n> from 1 to 10 { … }`, whose upper bound is
-exclusive (it binds 1…9). A `..` / `..<` range syntax is not part of this
-proposal; it is specified separately in
-[ARO-0089](ARO-0089-ranges.md), which also explains why `[1..10]` stays an
-error once ranges exist and how the two counting forms differ at their upper
-bound.
+A **range** is an expression, so it goes in the collection slot too:
+
+<!-- aro-check: skip — loop headers with elided bodies, not programs -->
+```aro
+for each <n> in 1..10 { … }        (* 1 … 10 — both ends *)
+for each <n> in 1..<10 { … }       (* 1 … 9  — upper end excluded *)
+for each <n> in <lo>..<hi> { … }   (* endpoints are expressions *)
+```
+
+The collection slot is the one place a range is not materialised, so
+`for each <n> in 1..10_000_000` costs two integers of memory rather than ten
+million. `[1..10]` is a list holding one range and is rejected at check time
+with a diagnostic pointing at `1..10`. Ranges are specified in
+[ARO-0089](ARO-0089-ranges.md).
 
 #### Basic Iteration
 
@@ -602,7 +609,57 @@ before any iteration starts.
 - Concurrency limit controls maximum parallel operations
 - Loop variable is scoped to the loop body and immutable
 
-### 4.3 Collection Actions
+### 4.3 Range Loop
+
+A counting loop whose bounds are expressions rather than a collection. It is
+a statement, not a value — see [ARO-0089](ARO-0089-ranges.md) for the value
+form.
+
+#### Syntax
+
+```ebnf
+range_loop = "for" , "<" , variable_name , ">" ,
+             "from" , expression , "to" , expression ,
+             block ;
+
+variable_name = compound_identifier ;
+```
+
+**Format:**
+<!-- aro-check: skip — the format shape, with the body named rather than written -->
+```aro
+for <n> from 1 to 10 {
+    <statements using n>
+}
+```
+
+#### The upper bound is exclusive
+
+```aro
+for <n> from 1 to 3 {
+    Log <n> to the <console>.
+}
+(* 1
+   2   — 3 is not reached *)
+```
+
+This surprises most readers, and it is the behaviour of the implementation in
+both execution modes, so it is documented rather than changed: a loop that
+silently binds something different from what it binds today is the worst
+outcome available. [ARO-0089 §7](ARO-0089-ranges.md) sets out the resulting
+split between the two counting forms and why both are kept.
+
+#### Semantics
+
+- Bounds are expressions, evaluated **once**, before the first iteration.
+- Both must be integers; a non-integer bound fails the statement.
+- The loop counts **up**. `for <n> from 10 to 1` is an error naming both
+  bounds, not an empty loop and not a reversed one — unlike a descending
+  range value, which is empty (ARO-0089 §3.2).
+- The loop variable is scoped to the body and immutable within an iteration.
+- `Break.` leaves the loop; a `Return` inside the body ends the feature set.
+
+### 4.4 Collection Actions
 
 Declarative actions for functional-style collection processing:
 
@@ -915,7 +972,8 @@ statement = aro_statement
           | publish_statement
           | match_expression
           | foreach_loop
-          | parallel_foreach ;
+          | parallel_foreach
+          | range_loop ;
 
 (* Guarded Statement *)
 guarded_statement = action_clause , result_clause , object_clause ,
@@ -941,9 +999,13 @@ regex_pattern     = "/" , regex_body , "/" , [ regex_flags ] ;
 (* For-Each Loop *)
 foreach_loop = "for" , "each" , variable_reference ,
                [ "at" , variable_reference ] ,
-               "in" , variable_reference ,
+               "in" , collection ,
                [ "where" , condition ] ,
                block ;
+
+(* A noun carries specifiers and reaches the lazy-stream path; an expression
+   covers list literals, field access and ranges (ARO-0089). *)
+collection   = variable_reference | expression ;
 
 (* Parallel For-Each *)
 parallel_foreach = "parallel" , "for" , "each" , variable_reference ,
@@ -951,6 +1013,11 @@ parallel_foreach = "parallel" , "for" , "each" , variable_reference ,
                    [ "with" , "<" , "concurrency" , ":" , integer , ">" ] ,
                    [ "where" , condition ] ,
                    block ;
+
+(* Range Loop — §4.3. Counts up; the upper bound is EXCLUSIVE. *)
+range_loop = "for" , variable_reference ,
+             "from" , expression , "to" , expression ,
+             block ;
 
 (* Conditions *)
 condition         = condition_or ;

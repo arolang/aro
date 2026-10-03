@@ -50,6 +50,11 @@ public struct CodeQualityValidator {
         // reach for, and `or` is boolean, so it binds `true`.
         validateLogicalLiterals(in: statements)
 
+        // ARO-0089 §3.1 and §2.2: a range counts integers, and it is not a
+        // comparison operand. Both are decidable from the AST, so `aro check`
+        // reports them without the runtime (GitLab #546).
+        validateRanges(in: statements)
+
         // Check for empty feature set
         if statements.isEmpty {
             diagnostics.warning(
@@ -465,6 +470,117 @@ public struct CodeQualityValidator {
     /// checked here.
     private func collectAROStatements(_ statements: [Statement]) -> [AROStatement] {
         AROStatementWalk.flatten(statements)
+    }
+
+    // MARK: - Ranges (ARO-0089, GitLab #546)
+
+    /// Every expression a range can be written in, including the slots
+    /// `expressionSlots(of:)` leaves out — the `with` / `to` / `against`
+    /// clauses and a loop's own header. A check that only looked at the value
+    /// source would miss `Application.Histogram the <h> with 0..<24.`
+    private func rangeBearingExpressions(in statements: [Statement]) -> [any Expression] {
+        var slots: [any Expression] = []
+        for statement in AROStatementWalk.flattenAll(statements) {
+            if let aro = statement as? AROStatement {
+                slots.append(contentsOf: expressionSlots(of: aro))
+                if let with = aro.withClause { slots.append(with) }
+                if let to = aro.toClause { slots.append(to) }
+                if let against = aro.rangeModifiers.againstClause { slots.append(against) }
+                if let def = aro.queryModifiers.defaultValue { slots.append(def) }
+            } else if let loop = statement as? ForEachLoop {
+                if let collection = loop.collectionExpression { slots.append(collection) }
+                if let filter = loop.filter { slots.append(filter) }
+            } else if let loop = statement as? RangeLoop {
+                slots.append(loop.from)
+                slots.append(loop.to)
+            } else if let loop = statement as? WhileLoop {
+                slots.append(loop.condition)
+            } else if let when = statement as? WhenStatement {
+                slots.append(when.condition)
+            }
+        }
+        return slots
+    }
+
+    private func validateRanges(in statements: [Statement]) {
+        for expression in rangeBearingExpressions(in: statements) {
+            walkForRangeChecks(expression)
+        }
+    }
+
+    private func walkForRangeChecks(_ expression: any Expression) {
+        switch expression {
+        case let range as RangeExpression:
+            checkRangeEndpoint(range.lower, side: "lower", of: range)
+            checkRangeEndpoint(range.upper, side: "upper", of: range)
+            walkForRangeChecks(range.lower)
+            walkForRangeChecks(range.upper)
+
+        case let binary as BinaryExpression:
+            // §2.2: a range answers "which integers", not "is this true", so
+            // it is not an operand of a comparison or of arithmetic. Parsing
+            // it silently is the surprise this check exists to prevent.
+            for operand in [binary.left, binary.right] where operand is RangeExpression {
+                diagnostics.error(
+                    "A range cannot be an operand of `\(binary.op.rawValue)` — "
+                    + "`\(operand.description)` is a sequence of integers, not a value to compare",
+                    at: operand.span.start,
+                    hints: [
+                        "To test membership, compare the endpoints: "
+                        + "`<n> >= \((operand as? RangeExpression)?.lower.description ?? "lo") and "
+                        + "<n> <= \((operand as? RangeExpression)?.upper.description ?? "hi")`",
+                        "`where <n> in 1..10` is deliberately not part of ARO-0089 (§6)."
+                    ]
+                )
+            }
+            walkForRangeChecks(binary.left)
+            walkForRangeChecks(binary.right)
+
+        case let grouped as GroupedExpression:
+            walkForRangeChecks(grouped.expression)
+        case let unary as UnaryExpression:
+            walkForRangeChecks(unary.operand)
+        case let array as ArrayLiteralExpression:
+            // `[1..10]` itself is reported by the parser, which has the
+            // brackets' span; this descends for a range nested deeper.
+            for element in array.elements where !(element is RangeExpression) {
+                walkForRangeChecks(element)
+            }
+        case let map as MapLiteralExpression:
+            for entry in map.entries { walkForRangeChecks(entry.value) }
+        default:
+            break
+        }
+    }
+
+    /// §3.1: integer endpoints only. A literal of another type is wrong on
+    /// sight; a variable is not decidable here and is left to the runtime.
+    private func checkRangeEndpoint(_ endpoint: any Expression, side: String, of range: RangeExpression) {
+        guard let literal = Self.literalOperand(endpoint) else { return }
+        let offending: String
+        switch literal {
+        case .integer: return
+        case .float(let f):
+            diagnostics.error(
+                "A range endpoint must be an Int, but the \(side) endpoint of "
+                + "`\(range.description)` is a Float",
+                at: endpoint.span.start,
+                hints: ["Round it first — `Compute the <\(side)-bound: fixed> from \(f).`"]
+            )
+            return
+        case .string(let s): offending = "a String (\"\(s)\")"
+        case .boolean(let b): offending = "a Boolean (\(b))"
+        case .null: offending = "nil"
+        case .array: offending = "a List"
+        case .object: offending = "an Object"
+        case .regex: offending = "a regex"
+        }
+        diagnostics.error(
+            "A range endpoint must be an Int, but the \(side) endpoint of "
+            + "`\(range.description)` is \(offending)",
+            at: endpoint.span.start,
+            hints: ["A range counts integers (ARO-0089 §3.1); dates are ARO-0041's `date-range`."]
+        )
     }
 
 }

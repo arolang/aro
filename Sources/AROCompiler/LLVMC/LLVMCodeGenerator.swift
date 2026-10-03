@@ -857,7 +857,15 @@ public final class LLVMCodeGenerator {
         let temp = "_foreach\(index)_collection_"
         if let expression = loop.collectionExpression {
             let tempName = ctx.stringConstant(temp)
-            let exprJSON = ctx.stringConstant(serializer.serializeExpression(expression))
+            // A range in the collection slot is bound as the span rather than
+            // as its elements, so the loop walks `1..10_000_000` in O(1)
+            // memory here exactly as the interpreter does (ARO-0089 §3.3,
+            // GitLab #546). Everywhere else a range serialises to its
+            // elements, which is why this is the only call site that asks for
+            // the lazy form.
+            let serialized = (expression as? RangeExpression).map(serializer.serializeLazyRange)
+                ?? serializer.serializeExpression(expression)
+            let exprJSON = ctx.stringConstant(serialized)
             _ = ctx.module.insertCall(
                 externals.evaluateAndBind,
                 on: [ctx.currentContextVar!, tempName, exprJSON],

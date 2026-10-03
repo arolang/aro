@@ -214,7 +214,84 @@ public final class Lexer {
                 addToken(.slash, start: startLocation)
             }
         case "%": addToken(.percent, start: startLocation)
-        case ".": addToken(.dot, start: startLocation)
+        case ".":
+            // ARO-0089 §4: `..` and `..<` live next to the two things ARO
+            // already spends a dot on — the statement terminator and a
+            // relative path — so the whole operator is decided here
+            // (GitLab #546).
+            //
+            // A run of dots is a range only when something that can *start an
+            // endpoint* follows it on the same line. That keeps two existing
+            // behaviours exactly as they were: a double-tapped terminator is
+            // still one terminator (GitLab #372 — `<console>..` is followed by
+            // a newline), and `import ../ModuleA` still reads a parent
+            // directory (followed by `/`). Both would otherwise have become
+            // parse errors in programs that compile today.
+            //
+            // The numeric scanner needs no change: it already requires a digit
+            // *after* the `.` to start a fraction, so `1..10` was never read as
+            // `1.0` followed by `.10` — see `scanNumber`, where that
+            // one-character lookahead is now also the §4.1 rule.
+            if peek() == "." {
+                let run = dotRunLookahead()
+                if Self.startsRangeEndpoint(adjacent: run.adjacent, next: run.next) {
+                    // Consume the rest of the run: `self` is positioned on the
+                    // second dot, and `run.dots` counts the one already taken.
+                    for _ in 1..<run.dots { _ = advance() }
+
+                    if run.dots > 2 {
+                        // `1...10`. Report once and stand in for the operator
+                        // the author probably meant, rather than cascading.
+                        let spelling = String(repeating: ".", count: run.dots)
+                        if let diagnostics {
+                            diagnostics.error(
+                                LexerError.unknownRangeOperator(spelling, at: startLocation).message,
+                                at: startLocation,
+                                hints: ["`1..10` includes both ends; `1..<10` excludes the upper one."]
+                            )
+                            addToken(.rangeInclusive, start: startLocation)
+                        } else {
+                            throw LexerError.unknownRangeOperator(spelling, at: startLocation)
+                        }
+                    } else if peek() == "<" {
+                        if peekNext() == "<" {
+                            // `0..<<count>` (§4.2). Deciding it silently either
+                            // way gives the program a meaning that depends on a
+                            // lexer subtlety nobody can see.
+                            _ = advance()   // the '<' of the operator
+                            if let diagnostics {
+                                diagnostics.error(
+                                    LexerError.rangeOperatorNeedsSpace(at: startLocation).message,
+                                    at: startLocation,
+                                    hints: ["A space after `..<` separates the operator from the reference: `0..< <count>`."]
+                                )
+                                addToken(.rangeExclusive, start: startLocation)
+                            } else {
+                                throw LexerError.rangeOperatorNeedsSpace(at: startLocation)
+                            }
+                        } else if peekNext().isLetter || peekNext() == "_" {
+                            // `<lo>..<hi>` — the `<` opens a variable
+                            // reference, so the operator is the inclusive one.
+                            // This is the reason `..<` with a reference on its
+                            // right needs the space: the two spellings are
+                            // otherwise the same characters.
+                            addToken(.rangeInclusive, start: startLocation)
+                        } else {
+                            _ = advance()   // '<'
+                            addToken(.rangeExclusive, start: startLocation)
+                        }
+                    } else {
+                        addToken(.rangeInclusive, start: startLocation)
+                    }
+                } else {
+                    // Not a range: one dot, and the next pass through this case
+                    // emits the next one. A run of terminators therefore
+                    // arrives at the parser exactly as it always did.
+                    addToken(.dot, start: startLocation)
+                }
+            } else {
+                addToken(.dot, start: startLocation)
+            }
 
         case "|":
             // ARO-0067: Pipeline operator |>
@@ -715,7 +792,13 @@ public final class Lexer {
             }
         }
 
-        // Check for decimal point
+        // Check for decimal point.
+        //
+        // The `peekNext().isNumber` guard is ARO-0089 §4.1's maximal-munch
+        // rule: a `.` starts a fraction only when a digit follows it, so
+        // `1.5` is a Float while `1..10` is `Int(1)`, `..`, `Int(10)` and
+        // `1.` is `Int(1)` followed by the statement-ending dot. The range
+        // operators therefore cost the number scanner nothing (GitLab #546).
         var isFloat = false
         if !isAtEnd && peek() == "." && peekNext().isNumber {
             isFloat = true
@@ -970,6 +1053,50 @@ public final class Lexer {
     /// O(1) lookahead — uses the cached `nextPos` (GitLab #115, supersedes ARO-0057).
     private func peekNext() -> Character {
         decodeChar(at: nextPos)
+    }
+
+    /// The run of `.` at the cursor, the character immediately after it, and
+    /// the first character after it that is not a space or a tab — never
+    /// looking past a newline (ARO-0089 §4.1a).
+    ///
+    /// Called with the first dot already consumed, so `dots` counts it. The
+    /// newline matters: a statement whose terminator was double-tapped is
+    /// followed by one, and that is what tells a terminator run from a range.
+    private func dotRunLookahead() -> (dots: Int, adjacent: Character, next: Character) {
+        var dots = 1
+        var probe = pos
+        while probe < utf8.count, decodeChar(at: probe) == "." {
+            dots += 1
+            probe = Self.advanceBytePos(probe, in: utf8)
+        }
+        let adjacent = decodeChar(at: probe)
+        var next = adjacent
+        while next == " " || next == "\t" {
+            probe = Self.advanceBytePos(probe, in: utf8)
+            next = decodeChar(at: probe)
+        }
+        return (dots, adjacent, next)
+    }
+
+    /// Whether a run of dots followed by these two characters is a range
+    /// operator rather than a statement terminator.
+    ///
+    /// Deliberately narrow. A bare identifier is not an expression in ARO (a
+    /// variable is `<name>`), so a letter after a run of dots means a new
+    /// statement — which is what makes `Log "a" to the <console>.. Log "b" …`
+    /// two statements rather than a range. A quote counts, so `1.."ten"`
+    /// reaches the endpoint-type error (§3.1) instead of being read as a
+    /// terminator.
+    ///
+    /// `<` counts only when it is **adjacent** to the dots. A statement may
+    /// begin with its verb in brackets (`<Resize> the <thumbnail> …`), so a
+    /// space before the `<` is the one case where a reference-looking token
+    /// after a terminator run is plausible — and `1.. <hi>` is not a spelling
+    /// anybody needs, since `1..<hi>` and `1..< <hi>` both say it.
+    private static func startsRangeEndpoint(adjacent: Character, next: Character) -> Bool {
+        if adjacent == "<" { return true }
+        return next.isNumber || next == "(" || next == "-" || next == "+"
+            || next == "\"" || next == "'"
     }
 
     @discardableResult
