@@ -1,0 +1,56 @@
+{
+ "_doc": "Freeze record for the held-out benchmark (GitLab #785). The digest is what makes \"frozen\" mechanical: held_out_benchmark.verify_frozen() compares it, and a test fails when the prompts file changes without a version bump \u2014 so the ruler cannot move mid-measurement, which is how 75.5 % and 67 % came to be quoted side by side.",
+ "version": "1.0.0",
+ "frozen_at": "2026-10-03",
+ "built_with_aro": "dev",
+ "prompts_file": "prompts.benchmark.json",
+ "prompts_sha256": "ad2807965db6efd7df30bb58048a6c4de619ea8c4b421dafc4ef596c30be0957",
+ "n_prompts": 301,
+ "strata": {
+  "explain": 55,
+  "nl_application": 55,
+  "plugin": 35,
+  "repair": 55,
+  "repl": 56,
+  "tests": 45
+ },
+ "grades": {
+  "aro_check": 65,
+  "aro_test": 45,
+  "doc_qa": 70,
+  "execution_output": 121
+ },
+ "domains": {
+  "actions": 18,
+  "architecture": 6,
+  "batch": 12,
+  "collections": 15,
+  "conditionals": 28,
+  "configuration": 13,
+  "events": 4,
+  "execution": 3,
+  "files": 6,
+  "immutability": 3,
+  "iteration": 7,
+  "numbers": 6,
+  "paths": 5,
+  "plugin": 41,
+  "publish": 9,
+  "repositories": 13,
+  "rest": 46,
+  "syntax": 8,
+  "tests": 37,
+  "text": 15,
+  "throw": 6
+ },
+ "leakage": {
+  "measure": "character 3-gram Jaccard over normalised prompt text",
+  "threshold": 0.85,
+  "corpus_files": 424,
+  "corpus_instructions": 23931,
+  "exhaustive": true,
+  "exact_collisions": 0,
+  "near_duplicates": 0,
+  "max_similarity": 0.5923
+ }
+}
