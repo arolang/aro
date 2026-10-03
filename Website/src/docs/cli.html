@@ -218,7 +218,7 @@
                 <tr><td><code>aro compile &lt;path&gt;</code></td><td>Compile and report diagnostics, without linking</td></tr>
                 <tr><td><code>aro check &lt;path&gt;</code></td><td>Check sources for errors and warnings</td></tr>
                 <tr><td><code>aro diff &lt;range&gt;</code></td><td>Compare feature-set graphs between two revisions</td></tr>
-                <tr><td><code>aro test &lt;path&gt;</code></td><td>Run the colocated tests</td></tr>
+                <tr><td><code>aro test &lt;path&gt;</code></td><td>Run the colocated tests — add <code>--compiled</code> to run them through a native binary</td></tr>
                 <tr><td><code>aro repl</code></td><td>Interactive read-eval-print loop</td></tr>
                 <tr><td><code>aro kernel</code></td><td>The native Jupyter kernel, and its installer</td></tr>
                 <tr><td><code>aro new plugin</code></td><td>Scaffold a plugin in Swift, Rust, C, C++, Python or ARO</td></tr>
@@ -242,7 +242,8 @@
 aro run ./MyApp -- --port 8080      # arguments after -- reach the application
 aro check ./MyApp                   # errors, warnings, and per-route body analysis
 aro check ./MyApp --no-warnings     # errors only
-aro test ./MyApp --filter pricing   # run the tests whose name matches</code></pre>
+aro test ./MyApp --filter pricing   # run the tests whose name matches
+aro test ./MyApp --compiled         # run the same tests through a native binary</code></pre>
 
         <h3>Arguments the application reads</h3>
         <p>

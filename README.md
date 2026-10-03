@@ -168,6 +168,7 @@ all 34.
 aro run ./MyApp              # interpret
 aro check ./MyApp            # errors, warnings, per-route body analysis
 aro test ./MyApp             # run the Given/When/Then feature sets
+aro test --compiled ./MyApp  # run the same tests through a native binary
 aro build ./MyApp            # compile to a native binary via LLVM
 aro repl                     # interactive
 aro kernel install           # register the Jupyter kernel
@@ -190,6 +191,7 @@ Most of ARO works everywhere. This table is the contract; please keep it current
 | `aro run`, `check`, `compile`, `test` | ✅ | ✅ | ✅ |
 | `aro repl`, `repl --json` | ✅ | ✅ | ✅ ⁹ |
 | `aro build` | ✅ | ✅ | ❌ ¹ |
+| `aro test --compiled`, `aro build --tests` | ✅ | ✅ | ❌ ¹ |
 | `aro build` with a Python plugin | ⚠️ ¹¹ | ⚠️ ¹¹ | ❌ ¹ |
 | **Services** ||||
 | HTTP server | ✅ | ✅ | ✅ ² |

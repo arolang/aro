@@ -287,8 +287,42 @@ All tests passed!</code></pre>
                 <tr><td><code>--verbose</code></td><td>Show each assertion, not just the verdict</td></tr>
                 <tr><td><code>--no-color</code></td><td>Plain output, for CI logs</td></tr>
                 <tr><td><code>--record &lt;file.jsonl&gt;</code></td><td>Record statement events — this is what drives Solaro's live canvas during a run</td></tr>
+                <tr><td><code>--compiled</code></td><td>Build a native test-harness binary and run the same tests through it, instead of the interpreter</td></tr>
             </tbody>
         </table>
+
+        <h2>Testing the binary you ship</h2>
+        <p>
+            By default <code>aro test</code> runs the interpreter. That is the fast loop, but
+            it only tells you how <code>aro run</code> behaves. ARO promises that a compiled
+            binary answers a program the same way — and <code>--compiled</code> is how you
+            check:
+        </p>
+<pre><code>$ aro test --compiled ./Examples/Calculator
+
+=== ARO Test Results ===
+
+  PASS  addition-test (2ms)
+  FAIL  subtraction-test
+        Expected difference to be 15, but was
+  ...</code></pre>
+        <p>
+            Same tests, same report format, different engine — so a divergence shows up as a
+            difference in the results rather than in the layout. The run above is real: a
+            <code>Compute</code> whose result is <em>named</em> <code>difference</code> is
+            read as a set operation by the compiled path. That is the class of bug the mode
+            exists to find.
+        </p>
+        <p>
+            It works by building a <strong>test-harness binary</strong>: the same compiled
+            code as a shipped binary, except the test feature sets are kept instead of
+            stripped and <code>main</code> drives them instead of calling
+            <code>Application-Start</code> — a test run must not bind ports or start
+            watchers. <code>aro build --tests ./MyApp -o myapp-test</code> produces that
+            binary directly; it exits non-zero when a test fails, which makes it something
+            CI can keep. <code>--compiled</code> needs <code>aro build</code>, so it is
+            unavailable on Windows, and <code>--record</code> stays interpreter-only.
+        </p>
 
         <div class="highlight-box">
             <h4>Naming</h4>

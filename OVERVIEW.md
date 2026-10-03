@@ -28,7 +28,7 @@ see the [Wiki](https://github.com/arolang/aro/wiki) and the
 - **Plugin System**: Load Swift, Rust, C/C++, and Python plugins from a `Plugins/` directory. Plugins can register actions and value qualifiers.
 - **Native Compilation**: `aro build` lowers to LLVM IR, links against `AROCRuntime`, and produces standalone binaries that bundle plugins.
 - **Store Files** (ARO-0073): YAML-seeded, file-backed repositories whose writability is controlled by filesystem permissions.
-- **Testing Framework**: BDD-style feature sets with `Given` / `When` / `Then` (`aro test`).
+- **Testing Framework**: BDD-style feature sets with `Given` / `When` / `Then` (`aro test`), runnable against the interpreter or a native binary (`aro test --compiled`).
 - **LSP Server** (ARO-0034): Diagnostics and navigation for editor integration.
 - **Package Manager** (ARO-0045): `aro add` / `aro remove` for plugin packages described in `plugin.yaml`.
 
@@ -245,7 +245,8 @@ aro build ./MyApp         # Compile to native binary (LLVM IR + link)
 aro compile ./MyApp       # Compile and report diagnostics
 aro check ./MyApp         # Errors, warnings, per-route request-body analysis
 aro diff --graph a..b     # Compare feature-set graphs between two revisions
-aro test ./MyApp          # Run colocated test feature sets
+aro test ./MyApp          # Run colocated test feature sets (interpreter)
+aro test --compiled ./MyApp   # Run the same tests through a native binary (ARO-0015 §3.4)
 aro repl                  # Interactive REPL (--json for a machine-readable one)
 aro kernel install        # Register the native Jupyter kernel (ZMQ, no Python)
 aro new plugin <name> --lang swift   # Scaffold a plugin
@@ -313,7 +314,7 @@ Tests are feature sets whose business activity ends in `Test`:
 }
 ```
 
-Run tests with `aro test ./Examples/Calculator`.
+Run tests with `aro test ./Examples/Calculator`, or `aro test --compiled ./Examples/Calculator` to assert the same behaviour in a native binary.
 
 ### As a Library
 

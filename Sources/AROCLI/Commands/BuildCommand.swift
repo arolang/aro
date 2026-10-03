@@ -51,6 +51,9 @@ struct BuildCommand: AsyncParsableCommand {
     @Flag(name: .long, help: "Emit LLVM IR text instead of binary")
     var emitLLVM: Bool = false
 
+    @Flag(name: .long, help: "Build a test-harness binary: keep the application's test feature sets and run them instead of Application-Start. This is what `aro test --compiled` builds.")
+    var tests: Bool = false
+
     #if os(macOS)
     @Option(name: .long, help: "Code signing identity (e.g. 'Apple Development: Name (TEAMID)' or '-' for ad-hoc)")
     var sign: String?
@@ -341,7 +344,8 @@ struct BuildCommand: AsyncParsableCommand {
             linkMode: effectiveLinkMode,
             verbose: verbose,
             keepIntermediate: keepIntermediate,
-            emitLLVM: emitLLVM
+            emitLLVM: emitLLVM,
+            testHarness: tests
         )
         #if os(macOS)
         request.sign = sign
@@ -480,22 +484,37 @@ struct BuildCommand: AsyncParsableCommand {
             userActions = userActions.merging(program.userActions)
         }
 
-        // Filter out test feature sets (ARO-0015: Tests run only in interpreter mode)
-        // Test feature sets have business activity ending in "Test" or "Tests"
-        // Never strip Application-Start or Application-End feature sets
-        let productionFeatureSets = allFeatureSets.filter { fs in
+        // Strip test feature sets from a shipped binary (ARO-0015 §5.3).
+        //
+        // `--tests` is the exception, and the reason the flag exists: a test
+        // harness has to keep them, because they are what it runs (GitLab #694).
+        // Before it, a compiled binary could not contain a test at all, so
+        // nothing ever evaluated a `Given`/`When`/`Then` through the code
+        // generator and every compiled-mode divergence tracked by GitLab #838
+        // was invisible to `aro test`.
+        //
+        // Application-Start and Application-End are never stripped. A harness
+        // does not call Application-Start, but it is still compiled: a test may
+        // reach the same production feature sets, and leaving the entry point
+        // out would change which code the harness exercises.
+        let productionFeatureSets = tests ? allFeatureSets : allFeatureSets.filter { fs in
             let name = fs.featureSet.name
-            let activity = fs.featureSet.businessActivity
-            // Always keep Application-Start and Application-End
             if name == "Application-Start" || name.hasPrefix("Application-End") {
                 return true
             }
-            return !activity.hasSuffix("Test") && !activity.hasSuffix("Tests")
+            return !TestFeatureSetNaming.isTest(activity: fs.featureSet.businessActivity)
         }
 
         if verbose && productionFeatureSets.count < allFeatureSets.count {
             let testCount = allFeatureSets.count - productionFeatureSets.count
             print("  Stripped \(testCount) test feature set(s) from binary")
+        }
+
+        if verbose && tests {
+            let testCount = allFeatureSets.filter {
+                TestFeatureSetNaming.isTest(activity: $0.featureSet.businessActivity)
+            }.count
+            print("  Test harness: kept \(testCount) test feature set(s) in binary")
         }
 
         let mergedASTFeatureSets = productionFeatureSets.map { $0.featureSet }

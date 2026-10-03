@@ -60,7 +60,12 @@ aro repl --json          # REPL over line-delimited JSON on stdio (ARO-0091);
                          # the Python shim kernel in Editor/jupyter-aro speaks this
 aro kernel install       # Register the native Jupyter kernel (ZMQ, no Python);
                          # Jupyter then launches `aro kernel --connection-file …`
-aro test ./MyApp         # Run colocated tests (ARO-0015)
+aro test ./MyApp         # Run colocated tests through the interpreter (ARO-0015)
+aro test --compiled ./MyApp   # Build a test-harness binary and run the SAME tests
+                         # through compiled code (ARO-0015 §3.4, GitLab #694). The
+                         # interpreter stays the default; this is the only way the
+                         # test suite can see a compiled/interpreted divergence.
+aro build --tests ./MyApp     # Just the harness binary; exits 1 when a test fails
 aro new plugin foo --lang swift   # Scaffold a plugin (--lang is required:
                                   # swift, rust, c, cpp, python, aro)
 aro add github:org/repo  # Install a plugin from Git

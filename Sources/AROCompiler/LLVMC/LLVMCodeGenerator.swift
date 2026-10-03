@@ -102,6 +102,14 @@ public final class LLVMCodeGenerator {
     // MARK: - State
 
     private var globalRuntime: GlobalVariable?
+
+    /// Emit a test-harness `main` instead of the application's (GitLab #694).
+    ///
+    /// Set by `aro build --tests`, which is how `aro test --compiled` gets a
+    /// binary that runs the program's colocated tests. The feature-set bodies
+    /// are generated identically in both modes — that is the point: a test has
+    /// to exercise the same code the shipped binary runs. Only `main` differs.
+    private var testHarness = false
     /// Stack of break target blocks for nested loops (top = innermost loop)
     private var breakBlockStack: [BasicBlock] = []
 
@@ -146,8 +154,11 @@ public final class LLVMCodeGenerator {
         linkMode: String? = nil,
         sourceFilename: String? = nil,
         sourceDirectory: String? = nil,
-        sourceFileMap: [String: String]? = nil
+        sourceFileMap: [String: String]? = nil,
+        testHarness: Bool = false
     ) throws -> LLVMCodeGenerationResult {
+        self.testHarness = testHarness
+
         // Issue #231 — capture source-file provenance for DWARF emission.
         self.sourceDirectory = sourceDirectory ?? ""
         self.sourceFileMap = sourceFileMap ?? [:]
@@ -253,6 +264,21 @@ public final class LLVMCodeGenerator {
     // MARK: - Validation
 
     private func validateEntryPoint(_ program: AnalyzedProgram) throws {
+        // A test-harness binary's entry point is the test list, not
+        // `Application-Start` — which it never calls, because a test run must
+        // not start the application's servers and watchers (GitLab #694). So a
+        // directory holding only test feature sets builds as a harness, and the
+        // test feature sets are what must not be empty.
+        if testHarness {
+            let tests = program.featureSets.filter {
+                TestFeatureSetNaming.isTest(activity: $0.featureSet.businessActivity)
+            }
+            if tests.isEmpty {
+                throw LLVMCodeGenError.noEntryPoint
+            }
+            return
+        }
+
         let entryPoints = program.featureSets.filter {
             $0.featureSet.name == "Application-Start"
         }
@@ -1762,6 +1788,16 @@ public final class LLVMCodeGenerator {
         // user-defined actions.
         emitHandlerRegistration(program: program, runtime: runtime, at: ip)
 
+        // A test harness stops here and runs the tests instead of the
+        // application (GitLab #694). Phases 0-3 still ran, so a test sees the
+        // same contract, plugins, event handlers and user-defined actions the
+        // application would — and `Application-Start` is deliberately not
+        // called, because a test run must not bind ports or start watchers.
+        if testHarness {
+            emitTestHarness(program: program, runtime: runtime, at: ip)
+            return
+        }
+
         // Phase 4: invoke all Application-Start feature sets; the last one's
         // context is retained for response printing and teardown.
         let mainCtx = emitApplicationStart(program: program, runtime: runtime, at: ip)
@@ -1771,6 +1807,62 @@ public final class LLVMCodeGenerator {
 
         // Phase 6: print the response (unless --keep-alive) and tear down.
         emitCleanup(mainFunc: mainFunc, runtime: runtime, mainCtx: mainCtx, at: ip)
+    }
+
+    /// Emit the body of a test-harness `main` (GitLab #694).
+    ///
+    /// Three steps, all straight-line:
+    ///
+    ///   1. register every feature-set body by name, so a test's
+    ///      `When the <len> from the <get-length>.` can reach its target. The
+    ///      interpreter resolves that through the AST; a compiled binary has no
+    ///      AST, so the names have to travel as a table of function pointers.
+    ///   2. one `aro_test_run_case` per test feature set, in source order, each
+    ///      with its own context — the isolation `TestRunner` gives each test.
+    ///   3. `aro_test_report`, whose return value is the process exit code, so
+    ///      `aro test --compiled` fails the way `aro test` does.
+    private func emitTestHarness(program: AnalyzedProgram, runtime: IRValue, at ip: InsertionPoint) {
+        for analyzed in program.featureSets {
+            let fs = analyzed.featureSet
+            // `Application-Start` / `Application-End` get activity-qualified
+            // symbol names and are not callable targets for `When`, so they are
+            // not in the table.
+            guard fs.name != "Application-Start", fs.name != "Application-End" else { continue }
+            guard let bodyFunc = ctx.module.function(named: featureSetFunctionName(fs.name)) else { continue }
+            let nameStr = ctx.stringConstant(fs.name)
+            _ = ctx.module.insertCall(
+                externals.registerFeatureSetBody,
+                on: [runtime, nameStr, bodyFunc],
+                at: ip
+            )
+        }
+
+        let tests = program.featureSets.filter {
+            TestFeatureSetNaming.isTest(activity: $0.featureSet.businessActivity)
+        }
+
+        for analyzed in tests {
+            let fs = analyzed.featureSet
+            guard let bodyFunc = ctx.module.function(named: featureSetFunctionName(fs.name)) else { continue }
+
+            let nameStr = ctx.stringConstant(fs.name)
+            let activityStr = ctx.stringConstant(fs.businessActivity)
+            let testCtx = ctx.module.insertCall(
+                externals.contextCreateNamed,
+                on: [runtime, nameStr, activityStr],
+                at: ip
+            )
+            _ = ctx.module.insertCall(
+                externals.testRunCase,
+                on: [testCtx, nameStr, activityStr, bodyFunc],
+                at: ip
+            )
+            _ = ctx.module.insertCall(externals.contextDestroy, on: [testCtx], at: ip)
+        }
+
+        let exitCode = ctx.module.insertCall(externals.testReport, on: [], at: ip)
+        _ = ctx.module.insertCall(externals.runtimeShutdown, on: [runtime], at: ip)
+        ctx.module.insertReturn(exitCode, at: ip)
     }
 
     /// Phase 1 — embed the OpenAPI spec and template bundle into the runtime.

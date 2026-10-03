@@ -73,6 +73,13 @@ public func aro_context_drain_deferred(_ contextPtr: UnsafeMutableRawPointer?) {
 public func aro_context_print_error(_ contextPtr: UnsafeMutableRawPointer?) {
     guard let ptr = contextPtr else { return }
 
+    // A test-harness binary (`aro test --compiled`, GitLab #694) reports every
+    // outcome through `TestReporter`, which reads the same error off the context
+    // a moment later. Printing it here too would put a bare `Runtime error: …`
+    // above every `FAIL` line and make the two modes' output impossible to
+    // compare — which is the whole purpose of the compiled mode.
+    if CompiledTestHarness.isActive { return }
+
     let contextHandle = Unmanaged<AROCContextHandle>.fromOpaque(ptr).takeUnretainedValue()
 
     if let error = contextHandle.context.getExecutionError() {

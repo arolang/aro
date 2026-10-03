@@ -30,8 +30,22 @@ struct TestCommand: AsyncParsableCommand {
     @Option(name: .long, help: "JSONL file to record statement events to (SOLARO uses this for the live canvas pulse during a test run).")
     var record: String?
 
+    @Flag(name: .long, help: "Compile the application to a native test-harness binary and run the tests through it, instead of the interpreter (ARO-0015 §3.4).")
+    var compiled: Bool = false
+
     func run() async throws {
         let resolvedPath = URL(fileURLWithPath: path)
+
+        // `aro test` ran the interpreter and nothing else, so a green test run
+        // said nothing about the binary a user ships — which is why every
+        // compiled-mode divergence in GitLab #838 went unnoticed. `--compiled`
+        // builds a test-harness binary and runs the same test feature sets
+        // through compiled code (GitLab #694). The interpreter stays the
+        // default: it is faster, and it is what a tight edit/test loop wants.
+        if compiled {
+            try await runCompiled(at: resolvedPath)
+            return
+        }
 
         if verbose {
             print("ARO Test Runner v\(AROVersion.shortVersion)")
@@ -185,6 +199,84 @@ struct TestCommand: AsyncParsableCommand {
         if results.hasFailures {
             throw ExitCode.failure
         }
+    }
+}
+
+// MARK: - Compiled mode (GitLab #694)
+
+extension TestCommand {
+    /// Build a test-harness binary for this application and run it.
+    ///
+    /// The build is delegated to `aro build --tests` rather than reimplemented:
+    /// discovery, diagnostics, plugin baking, link-mode resolution and the LLVM
+    /// pipeline must be the *same* ones that produce a shipped binary, or the
+    /// tests would be asserting against a build nobody runs.
+    fileprivate func runCompiled(at resolvedPath: URL) async throws {
+        #if os(Windows)
+        print("Error: `aro test --compiled` needs `aro build`, which is not yet supported on Windows.")
+        print("Run `aro test \(path)` to test through the interpreter instead.")
+        throw ExitCode.failure
+        #else
+        if record != nil {
+            // Say so rather than accepting it silently. The JSONL trace comes
+            // from the interpreter's per-statement checkpoints; a compiled
+            // binary has none (ARO-0015 §5.5).
+            print("Note: --record is interpreter-only and is ignored with --compiled.")
+        }
+
+        // `aro test` accepts a directory or a single `.aro` file, as `aro run`
+        // does; the harness goes beside the application's other build
+        // intermediates either way. The name is distinct from the application
+        // binary's so `aro build` and `aro test --compiled` in one directory do
+        // not overwrite each other.
+        var isDirectory: ObjCBool = false
+        let exists = FileManager.default.fileExists(
+            atPath: resolvedPath.path, isDirectory: &isDirectory)
+        let appRoot = (exists && isDirectory.boolValue)
+            ? resolvedPath.standardizedFileURL
+            : resolvedPath.standardizedFileURL.deletingLastPathComponent()
+
+        let binary = appRoot
+            .appendingPathComponent(".build/aro-test")
+            .appendingPathComponent(appRoot.lastPathComponent + "-test")
+            .standardizedFileURL
+
+        var buildArguments = [resolvedPath.path, "--tests", "--output", binary.path]
+        if verbose { buildArguments.append("--verbose") }
+
+        let build = try BuildCommand.parse(buildArguments)
+        try await build.run()
+
+        guard FileManager.default.isExecutableFile(atPath: binary.path) else {
+            print("Error: the test harness was not built at \(binary.path)")
+            throw ExitCode.failure
+        }
+
+        // The harness binary is built once and can be run many times, so the
+        // run-time choices travel in the environment rather than being baked in.
+        var environment = ProcessInfo.processInfo.environment
+        if let filter { environment["ARO_TEST_FILTER"] = filter }
+        if noColor { environment["ARO_TEST_NO_COLOR"] = "1" }
+        if verbose { environment["ARO_TEST_VERBOSE"] = "1" }
+
+        // The build's own output is buffered in this process while the child
+        // writes straight to the terminal, so without this the build log lands
+        // after the test report.
+        fflush(stdout)
+
+        let process = Process()
+        process.executableURL = binary
+        process.environment = environment
+        // Run from the application directory so a test reading a relative path
+        // sees what it sees interpreted.
+        process.currentDirectoryURL = appRoot
+        try process.run()
+        process.waitUntilExit()
+
+        if process.terminationStatus != 0 {
+            throw ExitCode(process.terminationStatus)
+        }
+        #endif
     }
 }
 

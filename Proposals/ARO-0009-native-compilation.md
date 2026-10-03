@@ -668,6 +668,14 @@ When compiling, test feature sets are automatically excluded from the binary. Fe
 }
 ```
 
+`aro build --tests` is the one exception, and the reason it exists is this
+proposal's own promise: §1 says a compiled binary answers a program the same way
+the interpreter does, and nothing checked it, because a binary could not contain
+a test. `--tests` keeps the test feature sets and emits a `main` that drives them
+instead of calling `Application-Start`, which is what `aro test --compiled` runs
+(ARO-0015 §3.4, GitLab #694). A shipped binary is unaffected: stripping is still
+the default.
+
 ---
 
 ## Complete Example
@@ -716,6 +724,6 @@ Native compilation works!
 | **Bridge** | @_cdecl functions for C interoperability |
 | **Platforms** | macOS (arm64, x86_64), Linux (x86_64, arm64) |
 | **Output** | Single standalone executable |
-| **Test Exclusion** | Feature sets ending in "Test/Tests" stripped |
+| **Test Exclusion** | Feature sets ending in "Test/Tests" stripped (`--tests` keeps them, for a test harness) |
 
 Native compilation provides production-ready deployment while preserving the full ARO programming model and runtime services.
