@@ -631,10 +631,13 @@ public final class FeatureSetExecutor: Sendable {
         // Non-framework binds — including the action's own result — write
         // through to `outerContext`, so consumers are unaffected.
         let context: ExecutionContext
+        let scopeIsFresh: Bool
         if let runtime = outerContext as? RuntimeContext {
             context = runtime.createStatementScope()
+            scopeIsFresh = true
         } else {
             context = outerContext
+            scopeIsFresh = false
         }
 
         // Clear transient bindings from previous statements. These are
@@ -646,7 +649,19 @@ public final class FeatureSetExecutor: Sendable {
         // (`LLVMCodeGenerator.generateAROStatement`) has to sweep exactly the
         // same set and a second hand-maintained copy drifted for seven of them
         // (GitLab #552).
-        context.clearTransientFrameworkVariables()
+        //
+        // Skipped when we just built the scope above, because then there is
+        // provably nothing to clear: a fresh `RuntimeContext` has empty
+        // `variables` and `immutableVariables`, and `unbind` touches only those
+        // two — it cannot shadow an inherited binding, which is exactly why
+        // `_expression_name_` needs the explicit shadow below. So the sweep was
+        // 21 lock/unlock pairs and 42 hash lookups per statement against an
+        // empty dictionary: 13.6% of the CPU of a 300 000-row loop with a
+        // three-statement body (GitLab #702). The non-fresh branch is the one
+        // that can hold a previous statement's modifiers, and still sweeps.
+        if !scopeIsFresh {
+            context.clearTransientFrameworkVariables()
+        }
         // `unbind` only removes a binding from this scope, so it cannot hide an
         // inherited one. `_expression_name_` is the one name a parent scope may
         // legitimately still hold (EmitAction reads it to key its payload), so
@@ -1629,17 +1644,30 @@ public final class FeatureSetExecutor: Sendable {
             try await withThrowingTaskGroup(of: Void.self) { group in
                 var activeCount = 0
                 for (index, item) in items.enumerated() {
-                    // Create a child context for filter evaluation
-                    // This ensures the filter check doesn't violate immutability
-                    let filterContext = context.createChild(featureSetName: context.featureSetName)
-                    filterContext.bind(loop.itemVariable, value: item)
+                    // One child context per iteration, holding the loop
+                    // variables, used for the filter and then for the body.
+                    //
+                    // It used to be two: a `filterContext` built for every item
+                    // whether or not the loop had a filter, discarded, and a
+                    // second child built inside the task. That doubled the
+                    // per-iteration allocation of the hottest loop form for
+                    // nothing (GitLab #702) — the filter binds exactly the two
+                    // names the body binds and evaluating an expression binds
+                    // nothing else, which is why the sequential path below has
+                    // always run filter and body in one context. Each iteration
+                    // still gets its own, so immutability and concurrent bodies
+                    // are unaffected; what changes is that the body's context is
+                    // created on this (serial) side of `addTask` rather than
+                    // inside it.
+                    let iterationContext = context.createChild(featureSetName: context.featureSetName)
+                    iterationContext.bind(loop.itemVariable, value: item)
                     if let indexVar = loop.indexVariable {
-                        filterContext.bind(indexVar, value: index)
+                        iterationContext.bind(indexVar, value: index)
                     }
 
                     // Check filter condition if present
                     if let filter = loop.filter {
-                        let filterResult = try await expressionEvaluator.evaluate(filter, context: filterContext)
+                        let filterResult = try await expressionEvaluator.evaluate(filter, context: iterationContext)
                         guard let passes = filterResult as? Bool, passes else {
                             continue
                         }
@@ -1651,15 +1679,8 @@ public final class FeatureSetExecutor: Sendable {
                         // the one that also counts the handlers this body
                         // wakes. Nested work runs under this slot.
                         try await ApplicationLimits.withSlot {
-                            // Create a child context for this iteration
-                            let childContext = context.createChild(featureSetName: context.featureSetName)
-                            childContext.bind(loop.itemVariable, value: item)
-                            if let indexVar = loop.indexVariable {
-                                childContext.bind(indexVar, value: index)
-                            }
-
                             for bodyStatement in loop.body {
-                                try await self.executeStatement(bodyStatement, context: childContext)
+                                try await self.executeStatement(bodyStatement, context: iterationContext)
                             }
                         }
                     }

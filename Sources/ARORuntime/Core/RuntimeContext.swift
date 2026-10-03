@@ -285,6 +285,11 @@ public actor RuntimeContext: ExecutionContext {
     ///   - parent: Optional parent context for nested execution
     ///   - isCompiled: Whether this is a compiled binary execution (defaults to false)
     ///   - isTemplateContext: Whether this is a template rendering context (defaults to false)
+    ///   - inheritsExecutionId: Whether this context is a nested *scope* of the
+    ///     parent's execution rather than an execution of its own. See
+    ///     `executionId` below. Only `createStatementScope()` and the two
+    ///     `createChild` overloads pass `true` — the per-statement and
+    ///     per-iteration contexts, which are the hot ones.
     public init(
         featureSetName: String,
         businessActivity: String = "",
@@ -295,11 +300,37 @@ public actor RuntimeContext: ExecutionContext {
         isCompiled: Bool = false,
         isTemplateContext: Bool = false,
         driverChannel: ActionDriverChannel? = nil,
-        caller: CallerIdentity? = nil
+        caller: CallerIdentity? = nil,
+        inheritsExecutionId: Bool = false
     ) {
         self.featureSetName = featureSetName
         self.businessActivity = businessActivity
-        self.executionId = UUID().uuidString
+
+        // A nested scope of one execution shares its id instead of minting one
+        // (GitLab #702). `UUID().uuidString` is a CSPRNG draw plus hex
+        // formatting, and the interpreter builds one of these per statement and
+        // per loop iteration: in a 300 000-row loop with a three-statement body
+        // it measured 4.7% of the whole run's CPU — more than the actor, the
+        // lock and the six (empty, so unallocated) collections put together.
+        //
+        // What it gives up: a statement scope and a loop iteration are no
+        // longer distinguishable from their feature set in a trace. That is
+        // what they are — one execution — and it repairs a leak: the verb form
+        // of `Publish` registers symbols under `context.executionId`, which was
+        // the *statement scope's* id, while `FeatureSetExecutor` evicts under
+        // the feature-set context's. Nothing ever matched, so those symbols
+        // were never evicted.
+        //
+        // A fresh id is still the default, because a *feature set* execution
+        // nested inside another is a different thing: `UserDefinedActionHost`
+        // parents a callee frame to its caller and `FeatureSetExecutor` evicts
+        // on that frame's exit. Sharing an id there would have the callee evict
+        // the caller's published symbols.
+        if inheritsExecutionId, let parentCtx = parent as? RuntimeContext {
+            self.executionId = parentCtx.executionId
+        } else {
+            self.executionId = UUID().uuidString
+        }
         self._outputContext = outputContext
         self._isCompiled = isCompiled
         self._isTemplateContext = isTemplateContext
@@ -1154,7 +1185,8 @@ public actor RuntimeContext: ExecutionContext {
             parent: self,
             isCompiled: _isCompiled,
             isTemplateContext: _isTemplateContext,
-            driverChannel: driverChannel
+            driverChannel: driverChannel,
+            inheritsExecutionId: true
         )
         scope._isStatementScope = true
         return scope
@@ -1462,7 +1494,10 @@ public actor RuntimeContext: ExecutionContext {
             parent: self,
             isCompiled: _isCompiled,
             isTemplateContext: false,
-            driverChannel: driverChannel
+            driverChannel: driverChannel,
+            // A child scope — a `for each` iteration, a compiled block — is
+            // part of the parent's execution, not one of its own (GitLab #702).
+            inheritsExecutionId: true
         )
     }
 
@@ -1477,7 +1512,8 @@ public actor RuntimeContext: ExecutionContext {
             parent: self,
             isCompiled: _isCompiled,
             isTemplateContext: false,
-            driverChannel: driverChannel
+            driverChannel: driverChannel,
+            inheritsExecutionId: true
         )
     }
 
