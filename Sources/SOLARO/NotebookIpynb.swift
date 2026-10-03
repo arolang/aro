@@ -74,9 +74,16 @@ enum NotebookIpynb {
     private static func output(from output: ReplCellOutput) -> [String: Any] {
         switch output.kind {
         case .stream:
+            // nbformat allows exactly "stdout" and "stderr". The output
+            // cap's notice travels as a reserved stream name (GitLab #531),
+            // so it exports as stderr — a diagnostic, which is what it is —
+            // rather than as an invalid name Jupyter would reject.
+            let name = output.isTruncationNotice
+                ? "stderr"
+                : (output.streamName ?? "stdout")
             return [
                 "output_type": "stream",
-                "name": output.streamName ?? "stdout",
+                "name": name,
                 "text": sourceLines(output.text ?? ""),
             ]
         case .result:

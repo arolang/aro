@@ -409,6 +409,7 @@ final class ReplNotebookController {
         structural(kind == .markdown ? "Convert to Markdown" : "Convert to Code") {
             cells[idx].kind = kind
             cells[idx].outputs = []
+            streamBudgets[id] = nil
             cells[idx].executionCount = nil
             cells[idx].durationMs = nil
             if kind == .markdown {
@@ -481,6 +482,7 @@ final class ReplNotebookController {
     }
 
     func clearAllOutputs() {
+        streamBudgets.removeAll()
         structural("Clear All Outputs") {
             for idx in cells.indices {
                 cells[idx].outputs = []
@@ -574,6 +576,7 @@ final class ReplNotebookController {
             runningCellID = id
             cells[idx].outputs = []
             cells[idx].durationMs = nil
+            streamBudgets[id] = NotebookStreamBudget()
 
             let source = cells[idx].source
             let outcome = await kernel.execute(code: source, cellID: id) { [weak self] name, text in
@@ -600,17 +603,48 @@ final class ReplNotebookController {
         }
     }
 
+    /// Stream output admitted per cell for the current run (GitLab #531).
+    ///
+    /// Keyed by cell id and reset when the run clears that cell's outputs, so
+    /// a cell that was truncated once starts the next run with a full budget.
+    private var streamBudgets: [String: NotebookStreamBudget] = [:]
+
     private func appendStream(name: String, text: String, to id: String) {
         guard let idx = cellIndex(of: id) else { return }
-        // Coalesce with the previous chunk when it's the same
-        // stream — keeps the outputs array from fragmenting into
-        // per-write slivers on chatty cells.
-        if let last = cells[idx].outputs.indices.last,
-           cells[idx].outputs[last].kind == .stream,
-           cells[idx].outputs[last].streamName == name {
-            cells[idx].outputs[last].text = (cells[idx].outputs[last].text ?? "") + text
+
+        // Bound what one run may accumulate. Without this, a loop that logs
+        // per iteration grew `outputs` without limit on the MainActor,
+        // re-laid-out a megabyte-scale `Text` per chunk, and wrote the whole
+        // document back to disk every 800 ms (GitLab #531).
+        var budget = streamBudgets[id] ?? NotebookStreamBudget()
+        let admitted = budget.admit(text)
+        streamBudgets[id] = budget
+
+        if !admitted.isEmpty {
+            // Coalesce with the previous chunk when it's the same
+            // stream — keeps the outputs array from fragmenting into
+            // per-write slivers on chatty cells. The truncation notice is
+            // never coalesced into: it is not a stream the program wrote.
+            if let last = cells[idx].outputs.indices.last,
+               cells[idx].outputs[last].kind == .stream,
+               !cells[idx].outputs[last].isTruncationNotice,
+               cells[idx].outputs[last].streamName == name {
+                cells[idx].outputs[last].text =
+                    (cells[idx].outputs[last].text ?? "") + admitted
+            } else {
+                cells[idx].outputs.append(.stream(name: name, text: admitted))
+            }
+        }
+
+        guard budget.isTruncated else { return }
+        // One notice per run, rewritten in place as more is dropped, so a
+        // runaway loop costs one output rather than one per refused chunk.
+        if let existing = cells[idx].outputs.lastIndex(where: {
+            $0.isTruncationNotice
+        }) {
+            cells[idx].outputs[existing].text = budget.notice
         } else {
-            cells[idx].outputs.append(.stream(name: name, text: text))
+            cells[idx].outputs.append(.truncationNotice(budget.notice))
         }
     }
 

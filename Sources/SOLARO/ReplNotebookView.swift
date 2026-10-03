@@ -936,23 +936,68 @@ private struct ReplCellRow: View {
 private struct ReplCellOutputsView: View {
     let cell: ReplNotebookCell
 
+    /// Tallest an output area gets before it becomes a scrollable box
+    /// (GitLab #531). Chosen to show a screenful of a chatty cell without
+    /// pushing the next cell off the page — about 20 monospaced lines.
+    private static let maxHeight: CGFloat = 320
+
+    /// Measured height of the outputs themselves, which is what decides
+    /// whether the box needs to scroll.
+    ///
+    /// Measured rather than estimated from the text: counting lines would
+    /// walk up to a megabyte of string on every body evaluation, and the
+    /// body runs once per stream chunk of *any* running cell (GitLab #540).
+    @State private var contentHeight: CGFloat = 0
+
+    private var needsScrolling: Bool { contentHeight > Self.maxHeight }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             Rectangle()
                 .fill(SolaroColor.divider)
                 .frame(height: 1)
-            VStack(alignment: .leading, spacing: SolaroSpace.s) {
-                ForEach(Array(cell.outputs.enumerated()), id: \.offset) { _, output in
-                    // `.equatable()` so an output that hasn't changed
-                    // skips its body entirely while a *sibling* cell
-                    // streams and invalidates the whole column
-                    // (GitLab #540).
-                    ReplCellOutputView(output: output).equatable()
-                }
-                footer
+            ScrollView(.vertical) {
+                outputStack
+                    .onGeometryChange(for: CGFloat.self) { proxy in
+                        proxy.size.height
+                    } action: { height in
+                        contentHeight = height
+                    }
             }
-            .padding(SolaroSpace.m)
+            // Short output keeps its natural height and the notebook keeps
+            // the scroll wheel; only a tall one becomes a box that scrolls
+            // under the pointer.
+            .frame(height: min(max(contentHeight, 1), Self.maxHeight))
+            .scrollDisabled(!needsScrolling)
+            .overlay(alignment: .bottom) {
+                if needsScrolling { moreBelowHint }
+            }
         }
+    }
+
+    private var outputStack: some View {
+        VStack(alignment: .leading, spacing: SolaroSpace.s) {
+            ForEach(Array(cell.outputs.enumerated()), id: \.offset) { _, output in
+                // `.equatable()` so an output that hasn't changed
+                // skips its body entirely while a *sibling* cell
+                // streams and invalidates the whole column
+                // (GitLab #540).
+                ReplCellOutputView(output: output).equatable()
+            }
+            footer
+        }
+        .padding(SolaroSpace.m)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// A scrollable box with no edge is a box that looks like it ends where
+    /// the text happens to stop. This says otherwise.
+    private var moreBelowHint: some View {
+        LinearGradient(
+            colors: [SolaroColor.surface.opacity(0), SolaroColor.surface],
+            startPoint: .top, endPoint: .bottom)
+            .frame(height: 18)
+            .allowsHitTesting(false)
     }
 
     @ViewBuilder
@@ -987,7 +1032,11 @@ private struct ReplCellOutputView: View, Equatable {
         case .stream:
             Text((output.text ?? "").trimmingTrailingNewline)
                 .font(SolaroFont.monoCaption)
-                .foregroundStyle(output.streamName == "stderr"
+                // The cap's own notice is not something the program printed,
+                // so it reads as chrome rather than as stderr (GitLab #531).
+                .foregroundStyle(output.isTruncationNotice
+                                 ? SolaroColor.textTertiary
+                                 : output.streamName == "stderr"
                                  ? SolaroColor.stateWarn
                                  : SolaroColor.textSecondary)
                 .textSelection(.enabled)
