@@ -240,3 +240,113 @@ struct InfoPlistTemplateTests {
         }
     }
 }
+
+// ============================================================
+// Local .app signing (#288)
+// ============================================================
+//
+// tools/build-solaro-app-local.sh rewrites the inside of a bundle
+// Launch Services has already seen, and a bundle with no seal of its
+// own is SIGKILLed before main() runs — "EXC_CRASH (SIGKILL (Code
+// Signature Invalid))", which reads as a crash in Solaro rather than
+// as a stale signature. So the script ad-hoc signs what it assembled,
+// and the ORDER is the part that is easy to undo later: signing a
+// bundle seals what it contains, so nested executables go first and
+// the bundle last. These tests read the script and pin that ordering,
+// plus the invariant that the local path signs ad-hoc while the
+// distribution path keeps its own real-identity sign step.
+
+@Suite("Local app signing (#288)")
+struct LocalAppSigningTests {
+
+    /// Repo root, located from this source file's own path
+    /// (Tests/SOLAROTests/DistributionTests.swift → up three).
+    private static var repoRoot: URL {
+        URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+    }
+
+    private func script(_ relativePath: String) throws -> String {
+        try String(
+            contentsOf: Self.repoRoot.appendingPathComponent(relativePath),
+            encoding: .utf8)
+    }
+
+    private func localScript() throws -> String {
+        try script("tools/build-solaro-app-local.sh")
+    }
+
+    /// How far into the script `needle` appears. The tests below only
+    /// ever compare two of these against each other.
+    private func offset(of needle: String, in text: String) throws -> Int {
+        let range = try #require(text.range(of: needle),
+                                 "not found in script: \(needle)")
+        return text.distance(from: text.startIndex, to: range.lowerBound)
+    }
+
+    @Test("The staged bundle is re-signed, ad-hoc")
+    func reSignsAdHoc() throws {
+        let text = try localScript()
+        #expect(text.contains(#"codesign --force --sign - "$APP_DIR""#))
+        // `-` is the ad-hoc identity, and the only one available: a dev
+        // bundle never leaves the machine that built it, and signing it
+        // with a Developer ID would be a certificate prompt per build.
+        #expect(!text.contains("APPLE_SIGNING_IDENTITY"))
+    }
+
+    @Test("Signing happens after the bundle is assembled")
+    func signsAfterStaging() throws {
+        let text = try localScript()
+        // Both of the things the seal covers: the main executable…
+        let copyBinary = try offset(
+            of: #"cp "$BIN_DIR/SolaroApp" "$APP_DIR/Contents/MacOS/Solaro""#,
+            in: text)
+        // …and Info.plist, written by a heredoc that ends in `PLIST`.
+        let plistWritten = try offset(of: "\nPLIST\n", in: text)
+        let signBundle = try offset(
+            of: #"codesign --force --sign - "$APP_DIR""#, in: text)
+        #expect(copyBinary < signBundle)
+        #expect(plistWritten < signBundle)
+    }
+
+    @Test("Nested code is signed before the bundle around it")
+    func signsInsideOut() throws {
+        let text = try localScript()
+        let nested = try offset(of: #"codesign --force --sign - "$nested""#,
+                                in: text)
+        let bundle = try offset(of: #"codesign --force --sign - "$APP_DIR""#,
+                                in: text)
+        #expect(nested < bundle)
+    }
+
+    @Test("The result is verified, so a half-signed bundle fails the build")
+    func verifiesWhatItSigned() throws {
+        let text = try localScript()
+        let sign = try offset(of: #"codesign --force --sign - "$APP_DIR""#,
+                              in: text)
+        let verify = try offset(of: #"codesign --verify --strict "$APP_DIR""#,
+                                in: text)
+        #expect(sign < verify)
+    }
+
+    @Test("A missing codesign is reported, not ignored")
+    func missingCodesignIsLoud() throws {
+        let text = try localScript()
+        #expect(text.contains("command -v codesign"))
+        // The warning has to name the symptom, or the SIGKILL that
+        // follows is unattributable all over again.
+        #expect(text.contains("Code Signature Invalid"))
+    }
+
+    @Test("The distribution path still signs with a real identity")
+    func distributionPathUnchanged() throws {
+        // #288 is about the local script only. The DMG packaging path
+        // signs with a Developer ID certificate under the hardened
+        // runtime and notarizes — an ad-hoc signature cannot do either.
+        let dmg = try script("Scripts/package-solaro-dmg.sh")
+        #expect(dmg.contains(#"--sign "$IDENTITY""#))
+        #expect(dmg.contains("--options runtime"))
+    }
+}
