@@ -262,7 +262,13 @@ extension TestCommand {
         // The build's own output is buffered in this process while the child
         // writes straight to the terminal, so without this the build log lands
         // after the test report.
-        fflush(stdout)
+        //
+        // `nil` rather than `stdout`: Glibc exposes `stdout` as a mutable
+        // global, so naming it is a strict-concurrency error on Linux — this
+        // compiled on Darwin and failed the Linux build. `fflush(nil)` is the
+        // POSIX spelling for "flush every output stream", which is what is
+        // wanted here anyway (GitLab #694).
+        fflush(nil)
 
         let process = Process()
         process.executableURL = binary
