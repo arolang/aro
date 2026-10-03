@@ -123,9 +123,16 @@ New → ARO.
 
 ## Limits
 
-**Event handlers do not fire.** A feature set with a `… Handler` activity is
-registered but never dispatched, because the kernel does not run an event
-loop. This matches `aro repl`; use `aro run` for event-driven applications.
+**Transport-bound handlers do not fire.** Everything an ARO statement can
+trigger dispatches in a notebook — `{EventName} Handler` on `Emit`,
+`{repository} Observer` on a `Store`, `File Event Handler` on a change under a
+watched path, `StateTransition Handler` on an `Accept`, `NotificationSent
+Handler` on a `Notify`. What cannot is anything needing a transport the
+session does not own: `Socket Event Handler`, `WebSocket Event Handler`,
+`KeyPress Handler`, plus repository evictions, watches and `Application-End`.
+Those are kept, and the cell says so when you define one rather than leaving
+you to wait (GitLab #688). Same behaviour as `aro repl`, because it is the
+same engine; use `aro run` for the rest.
 
 **`Keepalive` is rejected.** It blocks until the process is signalled, which in
 a cell means a spinner that never stops. Services started in an earlier
