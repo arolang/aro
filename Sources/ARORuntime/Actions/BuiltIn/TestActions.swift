@@ -116,11 +116,15 @@ public struct WhenAction: ActionImplementation {
         // Extract result from response data
         // Try to get the primary result value
         let resultValue: any Sendable
-        if !response.data.isEmpty {
+        // The flattened rendering, deliberately: an assertion written against
+        // a returned list's JSON text keeps meaning what it meant. Read once,
+        // because it is rendered on access now (GitLab #711).
+        let responseData = response.data
+        if !responseData.isEmpty {
             // First try to get the value matching the result variable name
-            if let namedValue = response.data[result.base]?.get() as (any Sendable)? {
+            if let namedValue = responseData[result.base]?.get() as (any Sendable)? {
                 resultValue = namedValue
-            } else if let firstValue = response.data.values.first?.get() as (any Sendable)? {
+            } else if let firstValue = responseData.values.first?.get() as (any Sendable)? {
                 // Then try the first value from response data
                 resultValue = firstValue
             } else {

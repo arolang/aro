@@ -469,9 +469,12 @@ public final class REPLSession: @unchecked Sendable {
             entry.duration = Date().timeIntervalSince(startTime)
 
             // Check if there's a meaningful return value
-            if !response.data.isEmpty {
+            // `Response.data` renders the payload's flat form on each access
+            // (GitLab #711), so read it once.
+            let responseData = response.data
+            if !responseData.isEmpty {
                 // Convert response data to a displayable format
-                let data = convertResponseData(response.data)
+                let data = convertResponseData(responseData)
                 entry.result = .value(data)
                 addHistory(entry)
                 return .value(data)
@@ -596,8 +599,9 @@ public final class REPLSession: @unchecked Sendable {
         )
         do {
             let response = try await executor.execute(featureSet, context: child)
-            if !response.data.isEmpty {
-                return .value(convertResponseData(response.data))
+            let responseData = response.data   // rendered on access (GitLab #711)
+            if !responseData.isEmpty {
+                return .value(convertResponseData(responseData))
             }
             return .ok
         } catch {
@@ -698,8 +702,9 @@ public final class REPLSession: @unchecked Sendable {
             let response = try await executor.execute(featureSet, context: childContext)
             await settleEvents()
 
-            if !response.data.isEmpty {
-                let data = convertResponseData(response.data)
+            let responseData = response.data   // rendered on access (GitLab #711)
+            if !responseData.isEmpty {
+                let data = convertResponseData(responseData)
                 return .value(data)
             } else {
                 return .ok

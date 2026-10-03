@@ -783,24 +783,42 @@ public final class Application: @unchecked Sendable {
         // (GitLab #477): chunked, no Content-Length, nothing accumulated in
         // between. This is what makes an echo or a proxy cost one chunk of
         // memory rather than the size of the payload.
-        for value in response.data.values {
-            let body: (any UnreadBody)? = (value.get() as RequestBodyValue?) ?? (value.get() as AnchoredBody?)
-            guard let body else { continue }
+        if let body = ResponsePayload.unreadBody(in: response.payload) {
             let statement = "Return a <\(response.status): status> with the request body"
-            guard let chunks = try? body.chunkStream(consumer: statement) else { continue }
-            return HTTPResponse(
-                statusCode: statusCode,
-                headers: ["Content-Type": body.contentType ?? "application/octet-stream"],
-                body: nil,
-                bodyStream: chunks
-            )
+            // try? is acceptable: a body already consumed by an earlier
+            // statement cannot be streamed again, and that case belongs to the
+            // JSON path below, which reports it as the consumed-twice error
+            // rather than swallowing it here.
+            if let chunks = try? body.chunkStream(consumer: statement) {
+                return HTTPResponse(
+                    statusCode: statusCode,
+                    headers: ["Content-Type": body.contentType ?? "application/octet-stream"],
+                    body: nil,
+                    bodyStream: chunks
+                )
+            }
         }
 
+        // A response carrying exactly one value can answer with that value
+        // rather than with a JSON object wrapping it. `soleFlatValue` answers
+        // the "one entry, and is it text?" question off the payload; it used
+        // to be `data.count == 1` over the flattened dictionary, which meant
+        // building that dictionary — and the JSON text of any collection in it
+        // — on every single response (GitLab #711).
+        let sole = ResponsePayload.soleFlatValue(response.payload)
+
         // Check for MIME type from file extension in request path
-        if let mimeType = mimeTypeFromPath(requestPath), response.data.count == 1 {
-            // Try to get the content as a String
-            if let anySendable = response.data.values.first,
-               let content: String = anySendable.get() {
+        if let mimeType = mimeTypeFromPath(requestPath) {
+            // A collection's transport rendering is its JSON text, and this is
+            // the one place that can answer with it, so it is produced here
+            // and nowhere else.
+            let content: String?
+            switch sole {
+            case .text(let str): content = str
+            case .collection(let array): content = ResponsePayload.jsonText(for: array)
+            case .nonText, .notSingle: content = nil
+            }
+            if let content {
                 return HTTPResponse(
                     statusCode: statusCode,
                     headers: ["Content-Type": mimeType],
@@ -809,56 +827,41 @@ public final class Application: @unchecked Sendable {
             }
         }
 
-        // Check if response data contains HTML content
-        // If so, return it directly with text/html content type
-        if let htmlValue = detectHTMLContent(in: response.data) {
-            return HTTPResponse(
-                statusCode: statusCode,
-                headers: ["Content-Type": "text/html; charset=utf-8"],
-                body: htmlValue.data(using: .utf8)
-            )
-        }
+        // The content sniffers below all test a prefix, and a collection's
+        // JSON text begins with "[" — so `.collection` matched none of them
+        // before either, and declining it here keeps that answer without
+        // rendering it.
+        if case .text(let soleText) = sole {
+            // Check if the response's single value is HTML content
+            // If so, return it directly with text/html content type
+            if let htmlValue = detectHTMLContent(soleText) {
+                return HTTPResponse(
+                    statusCode: statusCode,
+                    headers: ["Content-Type": "text/html; charset=utf-8"],
+                    body: htmlValue.data(using: .utf8)
+                )
+            }
 
-        // Check if response data contains raw CSS/JS content
-        if let (rawContent, contentType) = detectRawContent(in: response.data) {
-            return HTTPResponse(
-                statusCode: statusCode,
-                headers: ["Content-Type": contentType],
-                body: rawContent.data(using: .utf8)
-            )
+            // Check if the single value is raw CSS/JS content
+            if let (rawContent, contentType) = detectRawContent(soleText) {
+                return HTTPResponse(
+                    statusCode: statusCode,
+                    headers: ["Content-Type": contentType],
+                    body: rawContent.data(using: .utf8)
+                )
+            }
         }
 
         // Default: JSON response
         let headers = ["Content-Type": "application/json"]
 
-        // Build JSON response body from Response.data
-        var jsonBody: [String: Any] = [:]
-
-        // Include response data - convert AnySendable values to regular values
-        for (key, anySendable) in response.data {
-            if let str: String = anySendable.get() {
-                // Check if the string is JSON - if so, parse it as a nested object
-                if (str.hasPrefix("{") || str.hasPrefix("[")) {
-                    if let jsonData = str.data(using: .utf8),
-                       let parsed = try? JSONSerialization.jsonObject(with: jsonData) {
-                        jsonBody[key] = parsed
-                    } else {
-                        jsonBody[key] = str
-                    }
-                } else {
-                    jsonBody[key] = str
-                }
-            } else if let int: Int = anySendable.get() {
-                jsonBody[key] = int
-            } else if let double: Double = anySendable.get() {
-                jsonBody[key] = double
-            } else if let bool: Bool = anySendable.get() {
-                jsonBody[key] = bool
-            } else {
-                // Fallback: stringify
-                jsonBody[key] = String(describing: anySendable)
-            }
-        }
+        // Build the JSON body straight from the payload: records flatten into
+        // dot-notation keys (the shape clients already see) and collections go
+        // in as collections. This used to read the flattened dictionary and
+        // parse each collection's JSON text back into a JSON value so it could
+        // re-serialise it below — encode → string → decode → encode on every
+        // response containing a list (GitLab #711).
+        var jsonBody: [String: Any] = ResponsePayload.jsonObject(response.payload)
 
         // If no data, include status info
         if jsonBody.isEmpty {
@@ -882,82 +885,77 @@ public final class Application: @unchecked Sendable {
         )
     }
 
-    /// Detect if response data contains HTML content (single string value starting with HTML markers)
-    private func detectHTMLContent(in data: [String: AnySendable]) -> String? {
-        // If there's exactly one value and it's an HTML string, return it
-        guard data.count == 1 else { return nil }
-
-        for (_, anySendable) in data {
-            if let str: String = anySendable.get() {
-                let trimmed = str.trimmingCharacters(in: .whitespacesAndNewlines)
-                if trimmed.hasPrefix("<!DOCTYPE") ||
-                   trimmed.hasPrefix("<!doctype") ||
-                   trimmed.hasPrefix("<html") ||
-                   trimmed.hasPrefix("<HTML") {
-                    return str
-                }
-            }
+    /// Detect whether the response's single value is HTML content.
+    ///
+    /// Takes the value rather than the response dictionary: the caller has
+    /// already established that there is exactly one and that it is text
+    /// (GitLab #711).
+    private func detectHTMLContent(_ str: String) -> String? {
+        let trimmed = str.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.hasPrefix("<!DOCTYPE") ||
+           trimmed.hasPrefix("<!doctype") ||
+           trimmed.hasPrefix("<html") ||
+           trimmed.hasPrefix("<HTML") {
+            return str
         }
         return nil
     }
 
-    /// Detect if response data contains raw text content that should be returned as-is
+    /// Detect whether the response's single value is raw text content that
+    /// should be returned as-is.
     /// Returns (content, contentType) tuple or nil if not detected
-    private func detectRawContent(in data: [String: AnySendable]) -> (String, String)? {
-        guard data.count == 1 else { return nil }
+    private func detectRawContent(_ str: String) -> (String, String)? {
+        let trimmed = str.trimmingCharacters(in: .whitespacesAndNewlines)
 
-        for (_, anySendable) in data {
-            if let str: String = anySendable.get() {
-                let trimmed = str.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Strip CSS/JS block comments for content detection
+        var contentForDetection = trimmed
+        if trimmed.hasPrefix("/*") {
+            // Find end of block comment and check what follows
+            if let endRange = trimmed.range(of: "*/") {
+                let afterComment = String(trimmed[endRange.upperBound...])
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                contentForDetection = afterComment
+            }
+        }
 
-                // Strip CSS/JS block comments for content detection
-                var contentForDetection = trimmed
-                if trimmed.hasPrefix("/*") {
-                    // Find end of block comment and check what follows
-                    if let endRange = trimmed.range(of: "*/") {
-                        let afterComment = String(trimmed[endRange.upperBound...])
-                            .trimmingCharacters(in: .whitespacesAndNewlines)
-                        contentForDetection = afterComment
-                    }
-                }
+        // Detect CSS first: starts with selector patterns
+        // CSS selectors: :root, element, .class, #id, @media, @keyframes, *, etc.
+        if !contentForDetection.hasPrefix("{") && !contentForDetection.hasPrefix("<") {
+            // try? is acceptable: the pattern is a hardcoded literal that
+            // always compiles; a nil here only skips the CSS sniff and the
+            // body falls through to the JSON path.
+            let cssPattern = try? NSRegularExpression(
+                pattern: "^(:|@|\\*|[a-zA-Z][a-zA-Z0-9-]*|\\.[a-zA-Z]|#[a-zA-Z])[^{]*\\{",
+                options: []
+            )
+            if let match = cssPattern?.firstMatch(in: contentForDetection, range: NSRange(contentForDetection.startIndex..., in: contentForDetection)),
+               match.range.location != NSNotFound {
+                return (str, "text/css; charset=utf-8")
+            }
+        }
 
-                // Detect CSS first: starts with selector patterns
-                // CSS selectors: :root, element, .class, #id, @media, @keyframes, *, etc.
-                if !contentForDetection.hasPrefix("{") && !contentForDetection.hasPrefix("<") {
-                    let cssPattern = try? NSRegularExpression(
-                        pattern: "^(:|@|\\*|[a-zA-Z][a-zA-Z0-9-]*|\\.[a-zA-Z]|#[a-zA-Z])[^{]*\\{",
-                        options: []
-                    )
-                    if let match = cssPattern?.firstMatch(in: contentForDetection, range: NSRange(contentForDetection.startIndex..., in: contentForDetection)),
-                       match.range.location != NSNotFound {
-                        return (str, "text/css; charset=utf-8")
-                    }
-                }
+        // Detect Prometheus text exposition format (ARO-0044)
+        // Prometheus output starts with "# HELP" or "# TYPE" comment lines
+        if trimmed.hasPrefix("# HELP ") || trimmed.hasPrefix("# TYPE ") {
+            return (str, "text/plain; version=0.0.4; charset=utf-8")
+        }
 
-                // Detect Prometheus text exposition format (ARO-0044)
-                // Prometheus output starts with "# HELP" or "# TYPE" comment lines
-                if trimmed.hasPrefix("# HELP ") || trimmed.hasPrefix("# TYPE ") {
-                    return (str, "text/plain; version=0.0.4; charset=utf-8")
-                }
+        // Detect JavaScript patterns
+        if trimmed.hasPrefix("var ") || trimmed.hasPrefix("let ") ||
+           trimmed.hasPrefix("const ") || trimmed.hasPrefix("function ") ||
+           trimmed.hasPrefix("//") ||
+           trimmed.hasPrefix("'use strict'") || trimmed.hasPrefix("\"use strict\"") ||
+           trimmed.hasPrefix("(function") || trimmed.hasPrefix("import ") ||
+           trimmed.hasPrefix("export ") {
+            return (str, "text/javascript; charset=utf-8")
+        }
 
-                // Detect JavaScript patterns
-                if trimmed.hasPrefix("var ") || trimmed.hasPrefix("let ") ||
-                   trimmed.hasPrefix("const ") || trimmed.hasPrefix("function ") ||
-                   trimmed.hasPrefix("//") ||
-                   trimmed.hasPrefix("'use strict'") || trimmed.hasPrefix("\"use strict\"") ||
-                   trimmed.hasPrefix("(function") || trimmed.hasPrefix("import ") ||
-                   trimmed.hasPrefix("export ") {
-                    return (str, "text/javascript; charset=utf-8")
-                }
-
-                // Check content after block comment for JS patterns
-                if trimmed.hasPrefix("/*") && !contentForDetection.isEmpty {
-                    if contentForDetection.hasPrefix("var ") || contentForDetection.hasPrefix("let ") ||
-                       contentForDetection.hasPrefix("const ") || contentForDetection.hasPrefix("function ") ||
-                       contentForDetection.hasPrefix("(function") {
-                        return (str, "text/javascript; charset=utf-8")
-                    }
-                }
+        // Check content after block comment for JS patterns
+        if trimmed.hasPrefix("/*") && !contentForDetection.isEmpty {
+            if contentForDetection.hasPrefix("var ") || contentForDetection.hasPrefix("let ") ||
+               contentForDetection.hasPrefix("const ") || contentForDetection.hasPrefix("function ") ||
+               contentForDetection.hasPrefix("(function") {
+                return (str, "text/javascript; charset=utf-8")
             }
         }
         return nil
