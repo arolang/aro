@@ -74,6 +74,123 @@ jobs:
           PKGCONFIG
 
       - name: Run tests
+        # Nothing is skipped here, deliberately: this is the only job in either
+        # CI that runs the Socket / WebSocket / Broadcast suites on Linux.
+        # `.gitlab-ci.yml` passes `--skip "Socket"` because its 1–2 vCPU
+        # Kubernetes pod gives the Swift cooperative pool one or two threads,
+        # and the blocking poll() inside AROSocketClient.connect then starves
+        # it — jobs 80535 and 80454 timed out at 45m having completed nothing.
+        # This runner has the cores, so the skip must never be copied here
+        # (GitLab #687).
+        run: swift test --parallel --num-workers 2
+
+  # ===========================================================================
+  # Unit Tests on macOS
+  # ===========================================================================
+  # Until this job existed, `swift test` ran only in the Linux `test` job above
+  # (GitLab #687). The two macOS jobs below build `-c release` and run the
+  # example harness, so no CI anywhere ran a unit test against Darwin code:
+  # the `#if canImport(Darwin)` / `#if os(macOS)` branches of MetricsCollector,
+  # SystemMetricsService and Linker.swift were compiled under test on no
+  # machine but a developer's own — and SOLAROTests, 653 tests, cannot even be
+  # built on Linux, because SOLARO sits behind `#if os(macOS)` in Package.swift.
+  # 4544 tests run here; 2156 of them are ARORuntime's.
+  #
+  # Why its own job rather than one more step inside `macos`:
+  #
+  #   * `macos` is the release job — it builds `-c release`, signs and
+  #     notarizes, and both later macOS jobs wait on it (`needs: [macos]`).
+  #     Tests build DEBUG and share nothing with that release build, so a
+  #     `swift test` step there is a second full compile of the package sitting
+  #     squarely on the pipeline's critical path, which today is
+  #         test 11m → macos 20m → integration-tests-macos 40m ≈ 71m
+  #     (run 37123333081, warm cache, on main). Every macOS run would grow by
+  #     the whole test build and the signed artifact would arrive that much
+  #     later — on a pipeline already close to the runner budget.
+  #   * As a sibling of `macos` and `solaro-macos` it runs beside them, so the
+  #     critical path does not move at all. What it costs instead is the
+  #     duplicated setup — checkout, toolchain, `brew install llvm@20`, a few
+  #     minutes of macOS time — and one more concurrent macOS runner. That is
+  #     the cheaper half of the trade, and it keeps a failed unit test from
+  #     burning a notarization round trip.
+  #
+  # `needs: test` leaves the expensive runner idle while the cheap Linux suite
+  # is still red, the same gate every other job here uses; `release` also
+  # waits on this job, so a tag cannot ship a macOS binary whose own unit tests
+  # fail.
+  #
+  # Version.swift is deliberately NOT regenerated here, unlike in `macos` and
+  # `solaro-macos`: those stamp a version into an artifact they ship, whereas
+  # tests assert against the committed file — exactly as the Linux `test` job
+  # does.
+  test-macos:
+    needs: test
+    name: Test · macOS
+    runs-on: macos-15
+    steps:
+      # A plain shallow checkout, unlike the macOS jobs below: they need full
+      # history because they derive a version from `git describe`, and this job
+      # asserts against the committed Version.swift. Nothing in the suite reads
+      # this repository's history either — GitActionsTests, PluginInstaller's
+      # tests and SOLARO's GitBlameTests each `git init` a temp repository and
+      # set their own identity in it, and the tests that do read repo files
+      # (DistributionTests reads this very workflow) read the working tree.
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Swift
+        uses: swift-actions/setup-swift@364295d9c23900ce04d4e5cc708387921b4e50f9  # v3
+        with:
+          swift-version: ${{ env.SWIFT_VERSION }}
+
+      - name: Cache Swift packages
+        uses: actions/cache@v5
+        with:
+          path: .build
+          # A key of its own: this job's .build holds debug test binaries, and
+          # the release jobs' caches must not be displaced by them.
+          key: macos-test-${{ env.SWIFT_VERSION }}-v1-${{ hashFiles('Package.resolved', 'Sources/**/*.swift', 'Tests/**/*.swift') }}
+
+      - name: Install LLVM 20 and dependencies
+        run: |
+          brew install llvm@20 libgit2 zeromq
+          # Same prefix detection as the `macos` job: Homebrew lives under
+          # /opt/homebrew on Apple Silicon and /usr/local on Intel runners.
+          if [ -d "/opt/homebrew/opt/llvm@20" ]; then
+            LLVM_PREFIX="/opt/homebrew/opt/llvm@20"
+          else
+            LLVM_PREFIX="/usr/local/opt/llvm@20"
+          fi
+          echo "LLVM_PATH=$LLVM_PREFIX" >> $GITHUB_ENV
+          echo "$LLVM_PREFIX/bin" >> $GITHUB_PATH
+          echo "C_INCLUDE_PATH=$LLVM_PREFIX/include" >> $GITHUB_ENV
+          echo "CPLUS_INCLUDE_PATH=$LLVM_PREFIX/include" >> $GITHUB_ENV
+          echo "LIBRARY_PATH=$LLVM_PREFIX/lib" >> $GITHUB_ENV
+          echo "DYLD_LIBRARY_PATH=$LLVM_PREFIX/lib" >> $GITHUB_ENV
+          echo "DYLD_FALLBACK_LIBRARY_PATH=$LLVM_PREFIX/lib" >> $GITHUB_ENV
+          mkdir -p $HOME/.pkgconfig
+          cat > $HOME/.pkgconfig/llvm.pc << PKGCONFIG
+          prefix=$LLVM_PREFIX
+          exec_prefix=\${prefix}
+          libdir=\${prefix}/lib
+          includedir=\${prefix}/include
+
+          Name: LLVM
+          Description: Low-level Virtual Machine compiler framework
+          Version: 20.1
+          Libs: -L\${libdir} -lLLVM
+          Cflags: -I\${includedir}
+          PKGCONFIG
+          echo "PKG_CONFIG_PATH=$HOME/.pkgconfig" >> $GITHUB_ENV
+
+      - name: Run tests
+        # Same invocation as the Linux `test` job, including the socket
+        # suites: `AROSocketClient Loopback Integration Tests` binds
+        # 127.0.0.1:0 and lets the kernel choose the port, so two jobs on one
+        # runner cannot collide, and the suite was measured green on macOS
+        # before this job was added (GitLab #687). If it ever does go flaky
+        # here, name the offending suite in a `--skip` with an issue beside
+        # it — never widen the skip to "Socket" and call the job green.
         run: swift test --parallel --num-workers 2
 
   # ===========================================================================
@@ -1897,7 +2014,12 @@ jobs:
   # ===========================================================================
   release:
     name: Create Release
-    needs: [integration-tests-linux, integration-tests-repl, integration-tests-macos, integration-tests-repl-macos, documentation, solaro-macos]
+    # `test-macos` is in here on purpose: a release ships a macOS binary, and
+    # the macOS unit suite is the only thing in the pipeline that asserts the
+    # Darwin halves of the file watcher, the metrics services and the linker
+    # (GitLab #687). The integration jobs below it would pass with FSEvents
+    # quietly broken.
+    needs: [integration-tests-linux, integration-tests-repl, integration-tests-macos, integration-tests-repl-macos, documentation, solaro-macos, test-macos]
     runs-on: ubuntu-latest
     if: github.ref_type == 'tag'
     permissions:
