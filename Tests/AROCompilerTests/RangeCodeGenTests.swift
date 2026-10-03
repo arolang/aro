@@ -28,6 +28,14 @@ struct RangeCodeGenTests {
     private let serializer = ExpressionSerializer()
     private var span: SourceSpan { SourceSpan(at: SourceLocation()) }
 
+    private func int(_ value: Int) -> LiteralExpression {
+        LiteralExpression(value: .integer(value), span: span)
+    }
+
+    private func ref(_ name: String) -> VariableRefExpression {
+        VariableRefExpression(noun: QualifiedNoun(base: name, specifiers: [], span: span), span: span)
+    }
+
     private func generateIR(_ source: String) throws -> String {
         let result = Compiler.compile(source)
         #expect(!result.hasErrors, "source should compile: \(result.diagnostics.map(\.message))")
@@ -37,34 +45,15 @@ struct RangeCodeGenTests {
     @Test("A range serialises to $range, not $unknown")
     func rangeSerialises() {
         let json = serializer.serializeExpression(
-            RangeExpression(
-                lower: LiteralExpression(value: .integer(1), span: span),
-                upper: LiteralExpression(value: .integer(10), span: span),
-                isInclusive: true, span: span))
+            RangeExpression(lower: int(1), upper: int(10), span: span))
         #expect(json.contains("$range"))
-        #expect(json.contains("\"inclusive\":true"))
         #expect(!json.contains("$unknown"))
-    }
-
-    @Test("`..<` carries its exclusive bound")
-    func exclusiveSerialises() {
-        let json = serializer.serializeExpression(
-            RangeExpression(
-                lower: LiteralExpression(value: .integer(0), span: span),
-                upper: LiteralExpression(value: .integer(24), span: span),
-                isInclusive: false, span: span))
-        #expect(json.contains("\"inclusive\":false"))
     }
 
     @Test("Endpoints are serialised as expressions, not stringified")
     func endpointsNest() {
         let json = serializer.serializeExpression(
-            RangeExpression(
-                lower: VariableRefExpression(
-                    noun: QualifiedNoun(base: "lo", specifiers: [], span: span), span: span),
-                upper: VariableRefExpression(
-                    noun: QualifiedNoun(base: "hi", specifiers: [], span: span), span: span),
-                isInclusive: true, span: span))
+            RangeExpression(lower: ref("lo"), upper: ref("hi"), span: span))
         #expect(json.contains("{\"$var\":\"lo\"}"))
         #expect(json.contains("{\"$var\":\"hi\"}"))
     }
@@ -73,10 +62,10 @@ struct RangeCodeGenTests {
     func onlyForEachIsLazy() throws {
         let ir = try generateIR("""
         (Application-Start: Demo) {
-            for each <n> in 1..10 {
+            for each <n> in 1->10 {
                 Log <n> to the <console>.
             }
-            Compute the <len: length> from 1..10.
+            Compute the <len: length> from 1->10.
             Log <len> to the <console>.
             Return an <OK: status> for the <demo>.
         }
@@ -89,14 +78,11 @@ struct RangeCodeGenTests {
 
     @Test("A range in the collection slot does not become a literal array")
     func rangeIsNotConstantFolded() {
-        // Folding `1..10` into `[1,…,10]` at compile time would be correct and
-        // would also destroy the O(1) memory property for `1..10_000_000`, so
+        // Folding `1->10` into `[1,…,10]` at compile time would be correct and
+        // would also destroy the O(1) memory property for `1->10_000_000`, so
         // `ConstantFolder` deliberately does not know ranges.
-        let range = RangeExpression(
-            lower: LiteralExpression(value: .integer(1), span: span),
-            upper: LiteralExpression(value: .integer(10), span: span),
-            isInclusive: true, span: span)
-        #expect(!ConstantFolder.isConstant(range))
+        #expect(!ConstantFolder.isConstant(
+            RangeExpression(lower: int(1), upper: int(10), span: span)))
     }
 }
 

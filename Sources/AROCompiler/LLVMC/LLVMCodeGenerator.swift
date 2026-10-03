@@ -858,7 +858,7 @@ public final class LLVMCodeGenerator {
         if let expression = loop.collectionExpression {
             let tempName = ctx.stringConstant(temp)
             // A range in the collection slot is bound as the span rather than
-            // as its elements, so the loop walks `1..10_000_000` in O(1)
+            // as its elements, so the loop walks `1->10_000_000` in O(1)
             // memory here exactly as the interpreter does (ARO-0089 §3.3,
             // GitLab #546). Everywhere else a range serialises to its
             // elements, which is why this is the only call site that asks for

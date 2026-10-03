@@ -39,7 +39,7 @@ struct ExpressionSerializer {
             // instead of expanding it — the same rule the interpreter follows,
             // written once per mode so the two cannot drift (GitLab #546).
             return """
-            {"$range":{"lower":\(serializeExpression(range.lower)),"upper":\(serializeExpression(range.upper)),"inclusive":\(range.isInclusive),"lazy":false}}
+            {"$range":{"lower":\(serializeExpression(range.lower)),"upper":\(serializeExpression(range.upper)),"lazy":false}}
             """
         } else if let unary = expr as? UnaryExpression {
             return """
@@ -91,7 +91,7 @@ struct ExpressionSerializer {
     /// `aro_array_get_next` walks it two registers at a time (ARO-0089 §3.3).
     func serializeLazyRange(_ range: RangeExpression) -> String {
         """
-        {"$range":{"lower":\(serializeExpression(range.lower)),"upper":\(serializeExpression(range.upper)),"inclusive":\(range.isInclusive),"lazy":true}}
+        {"$range":{"lower":\(serializeExpression(range.lower)),"upper":\(serializeExpression(range.upper)),"lazy":true}}
         """
     }
 

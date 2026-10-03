@@ -232,7 +232,7 @@
       "patterns": [
         {
           "name": "keyword.operator.range.aro",
-          "match": "\\.\\.<?"
+          "match": "->"
         },
         {
           "name": "keyword.operator.comparison.aro",

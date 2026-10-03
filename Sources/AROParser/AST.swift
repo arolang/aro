@@ -1647,30 +1647,31 @@ public struct BinaryExpression: Expression {
     }
 }
 
-/// A range expression: `1..10` (both ends) or `1..<10` (upper end excluded).
+/// A range expression: `1->10`, both ends included.
 ///
 /// ARO-0089. A range is a *value*, so it goes wherever an expression goes —
 /// the `for each` collection slot, `Create … with`, a Compute object, an
 /// action argument. It is deliberately **not** a `BinaryExpression`: the
-/// endpoints are not operands of an arithmetic operator (`1..10 = x` is an
+/// endpoints are not operands of an arithmetic operator (`1->10 = x` is an
 /// error rather than a comparison, §2.2), and the check-time rules in
 /// `CodeQualityValidator` have to recognise a range on sight (GitLab #546).
+///
+/// There is no exclusive-bound variant to carry a flag for: a range says
+/// where it starts and where it ends, both included (§2.1). An exclusive
+/// upper bound is `1->(<n> - 1)`, written out.
 public struct RangeExpression: Expression {
     public let lower: any Expression
     public let upper: any Expression
-    /// `true` for `..`, `false` for `..<`.
-    public let isInclusive: Bool
     public let span: SourceSpan
 
-    public init(lower: any Expression, upper: any Expression, isInclusive: Bool, span: SourceSpan) {
+    public init(lower: any Expression, upper: any Expression, span: SourceSpan) {
         self.lower = lower
         self.upper = upper
-        self.isInclusive = isInclusive
         self.span = span
     }
 
     public var description: String {
-        "\(lower.description)..\(isInclusive ? "" : "<")\(upper.description)"
+        "\(lower.description)->\(upper.description)"
     }
 
     public func accept<V: ASTVisitor>(_ visitor: V) throws -> V.Result {

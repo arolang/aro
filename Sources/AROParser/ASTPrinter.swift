@@ -235,7 +235,7 @@ public struct ASTPrinter: ASTVisitor {
     }
 
     public func visit(_ node: RangeExpression) -> String {
-        var result = "\(indentation())Range: \(node.isInclusive ? ".." : "..<")\n"
+        var result = "\(indentation())Range: ->\n"
         var printer = self
         printer.indent += 1
         result += printer.render(node.lower)

@@ -457,16 +457,16 @@ A **range** is an expression, so it goes in the collection slot too:
 
 <!-- aro-check: skip — loop headers with elided bodies, not programs -->
 ```aro
-for each <n> in 1..10 { … }        (* 1 … 10 — both ends *)
-for each <n> in 1..<10 { … }       (* 1 … 9  — upper end excluded *)
-for each <n> in <lo>..<hi> { … }   (* endpoints are expressions *)
+for each <n> in 1->10 { … }        (* 1 … 10 — both ends are included *)
+for each <n> in 1->(<n> - 1) { … } (* an exclusive bound is a subtraction *)
+for each <n> in <lo>-><hi> { … }   (* endpoints are expressions *)
 ```
 
 The collection slot is the one place a range is not materialised, so
-`for each <n> in 1..10_000_000` costs two integers of memory rather than ten
-million. `[1..10]` is a list holding one range and is rejected at check time
-with a diagnostic pointing at `1..10`. Ranges are specified in
-[ARO-0089](ARO-0089-ranges.md).
+`for each <n> in 1->10_000_000` costs two integers of memory rather than ten
+million. `[1->10]` is a list holding one range and is rejected at check time
+with a diagnostic pointing at `1->10`, and so is `1..10`, which names the
+arrow. Ranges are specified in [ARO-0089](ARO-0089-ranges.md).
 
 #### Basic Iteration
 
@@ -655,7 +655,7 @@ split between the two counting forms and why both are kept.
 - Both must be integers; a non-integer bound fails the statement.
 - The loop counts **up**. `for <n> from 10 to 1` is an error naming both
   bounds, not an empty loop and not a reversed one — unlike a descending
-  range value, which is empty (ARO-0089 §3.2).
+  range value (`10->1`), which is empty (ARO-0089 §3.2).
 - The loop variable is scoped to the body and immutable within an iteration.
 - `Break.` leaves the loop; a `Return` inside the body ends the feature set.
 
@@ -1004,7 +1004,7 @@ foreach_loop = "for" , "each" , variable_reference ,
                block ;
 
 (* A noun carries specifiers and reaches the lazy-stream path; an expression
-   covers list literals, field access and ranges (ARO-0089). *)
+   covers list literals, field access and ranges — `1->10` (ARO-0089). *)
 collection   = variable_reference | expression ;
 
 (* Parallel For-Each *)
@@ -1014,7 +1014,8 @@ parallel_foreach = "parallel" , "for" , "each" , variable_reference ,
                    [ "where" , condition ] ,
                    block ;
 
-(* Range Loop — §4.3. Counts up; the upper bound is EXCLUSIVE. *)
+(* Range Loop — §4.3. Counts up; the upper bound is EXCLUSIVE.
+   A range *value* (ARO-0089) includes both ends: `1->10`. *)
 range_loop = "for" , variable_reference ,
              "from" , expression , "to" , expression ,
              block ;

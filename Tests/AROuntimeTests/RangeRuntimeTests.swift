@@ -3,16 +3,16 @@
 // ARORuntime — ranges, executed (ARO-0089, GitLab #546)
 // ============================================================
 //
-// `RangeTests` in AROParserTests proves the spellings parse. These prove they
-// count: both ends for `..`, one for `..<`, nothing at all for a descending
-// span, and the `for each` collection slot driving a loop straight off the two
-// endpoints instead of a materialised list.
+// `RangeTests` in AROParserTests proves the spelling parses. These prove it
+// counts: both ends included, nothing at all for a descending span, and the
+// `for each` collection slot driving a loop straight off the two endpoints
+// instead of a materialised list.
 //
 // `AROIntRange` is asserted directly as well as through programs, because it
 // is the one piece of range arithmetic both execution modes share — the
 // interpreter calls it from `ExpressionEvaluator`, the compiled binary calls
 // it from the C-ABI bridge. If the two modes are ever to disagree about what
-// `1..10` contains, it has to start here.
+// `1->10` contains, it has to start here.
 
 import Foundation
 import Testing
@@ -41,17 +41,16 @@ struct RangeRuntimeTests {
 
     // MARK: - The span itself
 
-    @Test("`..` includes both ends, `..<` excludes the upper one")
+    @Test("Both ends are included")
     func countsMatchTheSpelling() {
-        #expect(AROIntRange(lower: 1, upper: 10, isInclusive: true).count == 10)
-        #expect(AROIntRange(lower: 1, upper: 10, isInclusive: false).count == 9)
-        #expect(AROIntRange(lower: 1, upper: 1, isInclusive: true).count == 1)
-        #expect(AROIntRange(lower: 1, upper: 1, isInclusive: false).count == 0)
+        #expect(AROIntRange(lower: 1, upper: 10).count == 10)
+        #expect(AROIntRange(lower: 1, upper: 1).count == 1)
+        #expect(AROIntRange(lower: 0, upper: 23).count == 24)
     }
 
     @Test("A descending range is empty, not reversed and not an error (§3.2)")
     func descendingIsEmpty() {
-        let descending = AROIntRange(lower: 10, upper: 1, isInclusive: true)
+        let descending = AROIntRange(lower: 10, upper: 1)
         #expect(descending.count == 0)
         #expect(descending.isEmpty)
         #expect(descending.elements.isEmpty)
@@ -60,23 +59,22 @@ struct RangeRuntimeTests {
 
     @Test("Elements are the span, in order")
     func elementsAreTheSpan() {
-        #expect(AROIntRange(lower: 3, upper: 6, isInclusive: true).elements == [3, 4, 5, 6])
-        #expect(AROIntRange(lower: 3, upper: 6, isInclusive: false).elements == [3, 4, 5])
-        #expect(AROIntRange(lower: -2, upper: 1, isInclusive: true).elements == [-2, -1, 0, 1])
+        #expect(AROIntRange(lower: 3, upper: 6).elements == [3, 4, 5, 6])
+        #expect(AROIntRange(lower: -2, upper: 1).elements == [-2, -1, 0, 1])
     }
 
     @Test("`count` is arithmetic, so an unwalkable span still answers")
     func countDoesNotTraverse() {
         // No iteration happens here: this is `hi - lo + 1`, which is the
         // property that makes the for-each driver O(1) (§3.3).
-        #expect(AROIntRange(lower: 1, upper: 1_000_000_000, isInclusive: true).count == 1_000_000_000)
+        #expect(AROIntRange(lower: 1, upper: 1_000_000_000).count == 1_000_000_000)
         // And it clamps rather than trapping on a span wider than Int.
-        #expect(AROIntRange(lower: Int.min, upper: Int.max, isInclusive: true).count == Int.max)
+        #expect(AROIntRange(lower: Int.min, upper: Int.max).count == Int.max)
     }
 
     @Test("`element(at:)` is the index walk both for-each drivers use")
     func elementAtIndex() {
-        let range = AROIntRange(lower: 5, upper: 9, isInclusive: true)
+        let range = AROIntRange(lower: 5, upper: 9)
         #expect(range.element(at: 0) == 5)
         #expect(range.element(at: 4) == 9)
         #expect(range.element(at: 5) == nil)
@@ -85,8 +83,8 @@ struct RangeRuntimeTests {
 
     @Test("A range prints the way it was written")
     func descriptionIsTheSourceSpelling() {
-        #expect(AROIntRange(lower: 1, upper: 10, isInclusive: true).description == "1..10")
-        #expect(AROIntRange(lower: 0, upper: 24, isInclusive: false).description == "0..<24")
+        #expect(AROIntRange(lower: 1, upper: 10).description == "1->10")
+        #expect(AROIntRange(lower: 0, upper: 23).description == "0->23")
     }
 
     // MARK: - In a program
@@ -95,18 +93,18 @@ struct RangeRuntimeTests {
     func lengthOfARange() async throws {
         let response = try await run("""
         (Application-Start: Demo) {
-            Compute the <value: length> from 1..10.
+            Compute the <value: length> from 1->10.
             Return an <OK: status> with <value>.
         }
         """)
         #expect(value(response) == 10)
     }
 
-    @Test("`..<` is one shorter")
-    func lengthOfAnExclusiveRange() async throws {
+    @Test("A zero-based span counts its upper endpoint too")
+    func lengthOfAZeroBasedRange() async throws {
         let response = try await run("""
         (Application-Start: Demo) {
-            Compute the <value: length> from 0..<24.
+            Compute the <value: length> from 0->23.
             Return an <OK: status> with <value>.
         }
         """)
@@ -117,7 +115,7 @@ struct RangeRuntimeTests {
     func rangeFeedsACollectionQualifier() async throws {
         let response = try await run("""
         (Application-Start: Demo) {
-            Compute the <value: sum> from 1..10.
+            Compute the <value: sum> from 1->10.
             Return an <OK: status> with <value>.
         }
         """)
@@ -154,37 +152,37 @@ struct RangeRuntimeTests {
 
     @Test("`for each` over a range runs once per element")
     func forEachCountsIterations() async throws {
-        #expect(try await iterations("inclusive-span", over: "for each <n> in 1..7") == 7)
+        #expect(try await iterations("inclusive-span", over: "for each <n> in 1->7") == 7)
     }
 
-    @Test("`..<` runs one time fewer")
-    func forEachExclusiveCountsIterations() async throws {
-        #expect(try await iterations("exclusive-span", over: "for each <n> in 1..<7") == 6)
+    @Test("A one-element range runs once")
+    func forEachSingleElementRange() async throws {
+        #expect(try await iterations("single-span", over: "for each <n> in 7->7") == 1)
     }
 
     @Test("A `where` filter applies to a range loop")
     func forEachWithFilter() async throws {
-        // 3, 6 and 9 of 1..10.
+        // 3, 6 and 9 of 1->10.
         #expect(try await iterations(
-            "filtered-span", over: "for each <n> in 1..10 where <n> % 3 == 0") == 3)
+            "filtered-span", over: "for each <n> in 1->10 where <n> % 3 == 0") == 3)
     }
 
     @Test("`Break` leaves a range loop (GitLab #664)")
     func breakLeavesARangeLoop() async throws {
         #expect(try await iterations(
-            "broken-span", over: "for each <n> in 1..100", body: "Break.") == 1)
+            "broken-span", over: "for each <n> in 1->100", body: "Break.") == 1)
     }
 
     @Test("A descending range loop runs zero times")
     func descendingRangeLoopDoesNothing() async throws {
-        #expect(try await iterations("descending-span", over: "for each <n> in 10..1") == 0)
+        #expect(try await iterations("descending-span", over: "for each <n> in 10->1") == 0)
     }
 
     @Test("`Return` inside a range loop ends the feature set (GitLab #665)")
     func returnInsideARangeLoop() async throws {
         let response = try await run("""
         (Application-Start: Demo) {
-            for each <value> in 1..100 {
+            for each <value> in 1->100 {
                 Return an <OK: status> with <value>.
             }
             Return an <OK: status> with "never".
@@ -199,7 +197,7 @@ struct RangeRuntimeTests {
         (Application-Start: Demo) {
             Create the <lo> with 3.
             Create the <hi> with 6.
-            Compute the <value: length> from <lo>..<hi>.
+            Compute the <value: length> from <lo>-><hi>.
             Return an <OK: status> with <value>.
         }
         """)
@@ -213,7 +211,7 @@ struct RangeRuntimeTests {
         let result = Compiler().compile("""
         (Application-Start: Demo) {
             Create the <hi> with "ten".
-            Compute the <value: length> from 1..<hi>.
+            Compute the <value: length> from 1-><hi>.
             Return an <OK: status> with <value>.
         }
         """)

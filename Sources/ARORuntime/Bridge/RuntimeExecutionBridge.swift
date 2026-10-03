@@ -843,7 +843,7 @@ func evaluateExpressionJSON(_ expr: [String: Any], context: RuntimeContext) -> a
         return negated ? !empty : empty
     }
 
-    // Range: {"$range":{"lower":{…},"upper":{…},"inclusive":true,"lazy":false}}
+    // Range: {"$range":{"lower":{…},"upper":{…},"lazy":false}}
     //
     // ARO-0089, GitLab #546. The span itself is only bound where the compiler
     // asked for it (`lazy`, the for-each collection slot); everywhere else the
@@ -858,7 +858,6 @@ func evaluateExpressionJSON(_ expr: [String: Any], context: RuntimeContext) -> a
        let upperExpr = range["upper"] as? [String: Any] {
         let lower = evaluateExpressionJSON(lowerExpr, context: context)
         let upper = evaluateExpressionJSON(upperExpr, context: context)
-        let inclusive = (range["inclusive"] as? Bool) ?? true
 
         guard let lo = rangeEndpointInt(lower), let hi = rangeEndpointInt(upper) else {
             // No error channel exists on this path — expression failures here
@@ -871,7 +870,7 @@ func evaluateExpressionJSON(_ expr: [String: Any], context: RuntimeContext) -> a
             return [any Sendable]()
         }
 
-        let span = AROIntRange(lower: lo, upper: hi, isInclusive: inclusive)
+        let span = AROIntRange(lower: lo, upper: hi)
         if (range["lazy"] as? Bool) == true { return span }
         return span.sendableElements
     }
@@ -2049,7 +2048,7 @@ public func aro_array_get_next(
 
     // A range in the for-each collection slot (ARO-0089 §3.3, GitLab #546).
     // `statePtr` is the 0-based index, exactly as for an array, so a compiled
-    // loop walks `1..10_000_000` without ever holding it — the same O(1) the
+    // loop walks `1->10_000_000` without ever holding it — the same O(1) the
     // interpreter's `executeForEachRange` gives.
     if let range = boxed.value as? AROIntRange {
         guard let element = range.element(at: Int(statePtr.pointee)) else { return nil }

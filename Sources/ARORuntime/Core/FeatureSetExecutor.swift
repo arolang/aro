@@ -1588,7 +1588,7 @@ public final class FeatureSetExecutor: Sendable {
         } else if let rangeExpression = loop.collectionExpression as? RangeExpression, !loop.isParallel {
             // ARO-0089 §3.3: the collection slot is the one place a range is
             // *not* materialised. Driving the loop from the two endpoints is
-            // what makes `for each <n> in 1..10_000_000` cost O(1) memory
+            // what makes `for each <n> in 1->10_000_000` cost O(1) memory
             // instead of 10 million boxed Ints — which is the reason the
             // feature was asked for (GitLab #546).
             //

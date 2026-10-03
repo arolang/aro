@@ -1076,7 +1076,7 @@ Examples/               # 119 examples organized by category (run `ls Examples/`
 ├── Expressions/        # Arithmetic, comparison, and logical operators
 ├── Conditionals/       # When guards and conditional execution
 ├── Iteration/          # For-each loops and collection iteration
-├── Ranges/             # `1..10` / `1..<10` as values (ARO-0089)
+├── Ranges/             # `1->10` as a value (ARO-0089)
 ├── Scoping/            # Publish as, business activity scope, framework vars, pipeline, loop isolation
 ├── Immutability/       # Immutable bindings, new-name pattern, qualifier-as-name
 ├── ErrorHandling/      # Error philosophy demonstration
@@ -1262,7 +1262,7 @@ The `Proposals/` directory contains language specifications:
 | **0086 Automatic Pipeline Detection** | Implicit pipeline detection |
 | **0087 Plugin SDK** | Plugin SDK & developer experience |
 | **0088 Concurrency Model** | What runs concurrently, ordering guarantees, `parallel for each`, event dispatch, application limits |
-| **0089 Ranges** | `1..10` / `1..<10` as values, the dot-run lexing rule, why `[1..10]` stays an error |
+| **0089 Ranges** | `1->10` as a value (both ends included, no exclusive form), why `[1->10]` stays an error |
 | **0090 Streaming I/O** | Request bodies that stream vs. bodies that become values, `x-aro-max-body`, anchoring |
 | **0091 Jupyter Kernel** | `aro repl --json` protocol, notebook cell semantics, output capture |
 | **0092 `aro ask` Assistant** | Local model, tool registry, approval model, `.context` |

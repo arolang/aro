@@ -529,7 +529,7 @@ public struct CodeQualityValidator {
                         "To test membership, compare the endpoints: "
                         + "`<n> >= \((operand as? RangeExpression)?.lower.description ?? "lo") and "
                         + "<n> <= \((operand as? RangeExpression)?.upper.description ?? "hi")`",
-                        "`where <n> in 1..10` is deliberately not part of ARO-0089 (§6)."
+                        "`where <n> in 1->10` is deliberately not part of ARO-0089 (§6)."
                     ]
                 )
             }

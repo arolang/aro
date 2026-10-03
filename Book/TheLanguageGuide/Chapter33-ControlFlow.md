@@ -847,25 +847,28 @@ This merges what would otherwise be two separate loops (one for file entries, on
 `for ... from ... to` is a statement: it counts, and that is all it can do. A **range** is the same span as a value, so it goes wherever an expression goes (ARO-0089):
 
 ```aro
-for each <n> in 1..10 { … }         (* 1 … 10 — both ends *)
-for each <n> in 1..<10 { … }        (* 1 … 9  — upper end excluded *)
-for each <n> in <lo>..<hi> { … }    (* endpoints are expressions *)
+for each <n> in 1->10 { … }         (* 1 … 10 — both ends are included *)
+for each <n> in <lo>-><hi> { … }    (* endpoints are expressions *)
 
-Create the <decade> with 1..10.
-Compute the <ten: length> from 1..10.
-Filter the <big> from 1..10 where <item> > 7.
-Application.Histogram the <h> with { hours: 0..<24 }.
+Create the <decade> with 1->10.
+Compute the <ten: length> from 1->10.
+Filter the <big> from 1->10 where <item> > 7.
+Application.Histogram the <h> with { hours: 0->23 }.
 ```
 
-The two spellings differ at the upper end, and the difference is visible where you read it: `1..10` has ten elements, `1..<10` has nine. That is why both exist — borrowing one operator and picking a meaning leaves a reader who guesses wrong off by one in a program that still runs.
+A range says where it starts and where it ends, and both are included — it reads aloud the way it is written, "one to ten". There is no exclusive-upper-bound operator: where you want one, subtract, and the subtraction is then where the reader can see it.
+
+```aro
+for each <i> in 0->(<count> - 1) { … }
+```
 
 Three things are worth knowing:
 
-- **A descending range is empty**, not reversed: `10..1` has nothing in it. Reversing is `Reverse`, so a range has exactly one direction.
-- **The collection slot never materialises a range.** `for each <n> in 1..300_000` is driven from the two endpoints, so its memory does not grow with the span — in a compiled binary as well as under `aro run`. A range used anywhere else becomes an ordinary list of integers first.
-- **`<lo>..<hi>` is inclusive.** Those characters contain `..<`, and the `<` belongs to the reference it opens; the exclusive form with a reference needs a space: `<lo>..< <hi>`. Writing `0..<<count>` is an error that says so.
+- **A descending range is empty**, not reversed: `10->1` has nothing in it. Reversing is `Reverse`, so a range has exactly one direction.
+- **The collection slot never materialises a range.** `for each <n> in 1->300_000` is driven from the two endpoints, so its memory does not grow with the span — in a compiled binary as well as under `aro run`. A range used anywhere else becomes an ordinary list of integers first.
+- **An arrow needs no spaces and no rules.** `<lo>-><hi>` is unambiguous, which a dotted operator could not be: the dot already ends every statement and spells the parent directory in `import ../ModuleA`. Writing `1..10` is an error that names the arrow.
 
-`[1..10]` is a list holding one range rather than a range of ten values, so it is rejected at check time with a diagnostic pointing at `1..10`.
+`[1->10]` is a list holding one range rather than the ten values, so it is rejected at check time with a diagnostic pointing at `1->10`.
 
 ### Reserved Words in Variable Names
 

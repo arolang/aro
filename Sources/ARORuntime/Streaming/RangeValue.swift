@@ -3,13 +3,12 @@
 // ARO-0089 — the one place range arithmetic lives
 // ============================================================
 //
-// `1..10` (both ends) and `1..<10` (upper end excluded) are expressions, so
-// they are evaluated in two places: `ExpressionEvaluator` under `aro run`,
-// and `evaluateExpressionJSON` in the C-ABI bridge under `aro build`. Both
-// call this type rather than counting for themselves — the two modes
-// disagreeing about what `1..10` contains is the divergence class GitLab #838
-// and #903 are about, and a shared `count`/`elements` is how it is avoided
-// here (GitLab #546).
+// `1->10` is an expression, so it is evaluated in two places:
+// `ExpressionEvaluator` under `aro run`, and `evaluateExpressionJSON` in the
+// C-ABI bridge under `aro build`. Both call this type rather than counting for
+// themselves — the two modes disagreeing about what `1->10` contains is the
+// divergence class GitLab #838 and #903 are about, and a shared
+// `count`/`elements` is how it is avoided here (GitLab #546).
 //
 // A range materialises everywhere except the `for each` collection slot,
 // which iterates it from the two endpoints and therefore costs O(1) memory
@@ -19,33 +18,33 @@ import Foundation
 
 /// An ascending span of integers — ARO-0089 §3.
 ///
-/// `isInclusive` distinguishes the two spellings: `1..10` has ten elements,
-/// `1..<10` has nine. A descending span (`10..1`) is **empty**, not reversed
-/// and not an error (§3.2), so a computed pair of endpoints degrades to
-/// "nothing to do" rather than running backwards.
+/// **Both endpoints are included**, always: `1->10` has ten elements. There is
+/// no exclusive-bound form to carry a flag for (§2.1), so an exclusive upper
+/// bound is `1->(<n> - 1)`, written out where a reader can see it.
+///
+/// A descending span (`10->1`) is **empty**, not reversed and not an error
+/// (§3.2), so a computed pair of endpoints degrades to "nothing to do" rather
+/// than running backwards.
 public struct AROIntRange: Sendable, Equatable, CustomStringConvertible {
     public let lower: Int
     public let upper: Int
-    public let isInclusive: Bool
 
-    public init(lower: Int, upper: Int, isInclusive: Bool) {
+    public init(lower: Int, upper: Int) {
         self.lower = lower
         self.upper = upper
-        self.isInclusive = isInclusive
     }
 
-    /// `max(0, hi - lo + 1)` for `..`, `max(0, hi - lo)` for `..<` (§3.3).
+    /// `max(0, upper - lower + 1)` (§3.3).
     ///
     /// Arithmetic, not a traversal — which is what makes `length` free on a
     /// range the consumer has not already materialised.
     public var count: Int {
-        // Clamped before the addition: `Int.min..Int.max` overflows a plain
+        // Clamped before the addition: `Int.min->Int.max` overflows a plain
         // `upper - lower + 1`, and a range nobody can iterate to the end of
         // is not worth a trap.
         guard upper >= lower else { return 0 }
         let span = upper.subtractingReportingOverflow(lower)
         if span.overflow { return Int.max }
-        guard isInclusive else { return span.partialValue }
         let inclusive = span.partialValue.addingReportingOverflow(1)
         return inclusive.overflow ? Int.max : inclusive.partialValue
     }
@@ -77,8 +76,8 @@ public struct AROIntRange: Sendable, Equatable, CustomStringConvertible {
         return lower + index
     }
 
-    /// `1..10` / `1..<10` — the source spelling, used in diagnostics.
+    /// `1->10` — the source spelling, used in diagnostics.
     public var description: String {
-        "\(lower)..\(isInclusive ? "" : "<")\(upper)"
+        "\(lower)->\(upper)"
     }
 }

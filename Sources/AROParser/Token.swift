@@ -19,14 +19,12 @@ public enum TokenKind: Sendable, Equatable, CustomStringConvertible {
     case colon              // :
     case doubleColon        // ::
     case dot                // .
-    case rangeInclusive     // ..  (ARO-0089, GitLab #546)
-    case rangeExclusive     // ..< (ARO-0089, GitLab #546)
     case hyphen             // -
     case comma              // ,
     case semicolon          // ;
     case atSign             // @
     case question           // ?
-    case arrow              // ->
+    case arrow              // -> (the range operator, ARO-0089)
     case fatArrow           // =>
     case equals             // =
     case pipe               // |> (ARO-0067 pipeline operator)
@@ -133,8 +131,6 @@ public enum TokenKind: Sendable, Equatable, CustomStringConvertible {
         case .colon: return ":"
         case .doubleColon: return "::"
         case .dot: return "."
-        case .rangeInclusive: return ".."
-        case .rangeExclusive: return "..<"
         case .hyphen: return "-"
         case .comma: return ","
         case .semicolon: return ";"

@@ -10,6 +10,6 @@ mode: both
 # 120s, not the default 60. The last loop walks 300 000 elements, which is
 # about a second on an idle laptop in either mode and several times that on a
 # shared CI runner with other pipelines competing for it. The span is the
-# example's point — a range that costs no more memory than `1..10` — so the
+# example's point — a range that costs no more memory than `1->10` — so the
 # budget moves rather than the example.
 timeout: 120

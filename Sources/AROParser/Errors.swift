@@ -35,15 +35,11 @@ public enum LexerError: CompilerError {
     /// the diagnostic names the replacement instead of leaving the lexer
     /// to read `"""` as two empty strings and cascade from there.
     case tripleQuotedStringRemoved(at: SourceLocation)
-    /// ARO-0089 §4.1: `1...10`. Two dots are a range and three are nothing,
-    /// and the lexer has to say so — left alone it reads `..` followed by a
-    /// statement-ending `.` and the parser reports a missing verb on the
-    /// next line (GitLab #546).
-    case unknownRangeOperator(String, at: SourceLocation)
-    /// ARO-0089 §4.2: `0..<<count>`. `..<` followed immediately by the `<`
-    /// that opens a variable reference is ambiguous to a reader whatever the
-    /// lexer decides, so it is rejected rather than guessed.
-    case rangeOperatorNeedsSpace(at: SourceLocation)
+    /// ARO-0089 §4.1: `1..10`, `1..<10`, `1...10` — a range reached for with
+    /// dots. The operator is `->`, and the lexer has to say so: left alone,
+    /// dots in expression position read as statement terminators and the
+    /// parser reports a missing verb on the next line (GitLab #546).
+    case dotRangeOperator(String, at: SourceLocation)
 
     public var location: SourceLocation? {
         switch self {
@@ -53,8 +49,7 @@ public enum LexerError: CompilerError {
         case .invalidNumber(_, let loc): return loc
         case .invalidUnicodeEscape(_, let loc): return loc
         case .tripleQuotedStringRemoved(let loc): return loc
-        case .unknownRangeOperator(_, let loc): return loc
-        case .rangeOperatorNeedsSpace(let loc): return loc
+        case .dotRangeOperator(_, let loc): return loc
         }
     }
 
@@ -72,10 +67,8 @@ public enum LexerError: CompilerError {
             return "Invalid unicode escape sequence '\\u{\(hex)}'"
         case .tripleQuotedStringRemoved:
             return "Triple-quoted strings were removed — a plain \"…\" string spans multiple lines"
-        case .unknownRangeOperator(let spelling, _):
-            return "Unknown operator '\(spelling)' — a range is '..' (both ends) or '..<' (upper end excluded)"
-        case .rangeOperatorNeedsSpace:
-            return "Write '..< <name>' — '..<<' reads as two operators"
+        case .dotRangeOperator(let spelling, _):
+            return "'\(spelling)' is not a range operator — a range is written with an arrow, as in 1->10"
         }
     }
 
@@ -93,8 +86,7 @@ public enum LexerError: CompilerError {
         case .invalidNumber(let num, _): return .invalidNumber(num, at: location)
         case .invalidUnicodeEscape(let hex, _): return .invalidUnicodeEscape(hex, at: location)
         case .tripleQuotedStringRemoved: return .tripleQuotedStringRemoved(at: location)
-        case .unknownRangeOperator(let spelling, _): return .unknownRangeOperator(spelling, at: location)
-        case .rangeOperatorNeedsSpace: return .rangeOperatorNeedsSpace(at: location)
+        case .dotRangeOperator(let spelling, _): return .dotRangeOperator(spelling, at: location)
         }
     }
 }

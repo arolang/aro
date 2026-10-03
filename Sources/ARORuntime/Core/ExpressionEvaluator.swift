@@ -194,7 +194,7 @@ public struct ExpressionEvaluator: Sendable {
         case let binary as BinaryExpression:
             return try await evaluateBinary(binary, context: context)
 
-        // Range: `1..10` / `1..<10` (ARO-0089, GitLab #546)
+        // Range: `1->10` (ARO-0089, GitLab #546)
         case let range as RangeExpression:
             return try await evaluateRange(range, context: context).sendableElements
 
@@ -493,15 +493,14 @@ public struct ExpressionEvaluator: Sendable {
         let upperValue = try await evaluate(expr.upper, context: context)
         return AROIntRange(
             lower: try Self.rangeEndpoint(lowerValue, side: "lower", of: expr),
-            upper: try Self.rangeEndpoint(upperValue, side: "upper", of: expr),
-            isInclusive: expr.isInclusive)
+            upper: try Self.rangeEndpoint(upperValue, side: "upper", of: expr))
     }
 
     /// An Int endpoint, or an error naming the offending side.
     ///
     /// A Double that is a whole number is accepted — arithmetic on a parsed
     /// value lands there easily (`<n> / 2` with an even `<n>`), and refusing
-    /// `1..5.0` while accepting `1..5` would be a surprise about
+    /// `1->5.0` while accepting `1->5` would be a surprise about
     /// representation rather than about the program. A fractional one is
     /// refused, which is the rule §3.1 states.
     private static func rangeEndpoint(
