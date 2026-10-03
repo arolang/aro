@@ -1,6 +1,6 @@
 // ============================================================
 // ZipService.swift
-// ARO Plugin - Zip file compression using marmelroy/Zip library
+// ARO Plugin - Zip file compression using weichsel/ZIPFoundation
 // ============================================================
 //
 // This plugin demonstrates using external Swift Package dependencies
@@ -13,7 +13,7 @@
 //   }.
 
 import Foundation
-import Zip
+import ZIPFoundation
 import AROPluginKit
 
 // MARK: - Plugin Registration
@@ -72,8 +72,19 @@ private func compress(args: Params) throws -> [String: Any] {
         }
     }
 
-    // Create zip archive
-    try Zip.zipFiles(paths: fileURLs, zipFilePath: outputURL, password: nil, progress: nil)
+    // Create zip archive. `.create` wants a path with nothing at it, so an
+    // archive from a previous run is replaced rather than appended to.
+    if FileManager.default.fileExists(atPath: outputURL.path) {
+        try FileManager.default.removeItem(at: outputURL)
+    }
+    let archive = try Archive(url: outputURL, accessMode: .create)
+    for fileURL in fileURLs {
+        try archive.addEntry(
+            with: fileURL.lastPathComponent,
+            fileURL: fileURL,
+            compressionMethod: .deflate
+        )
+    }
 
     return [
         "success": true,
@@ -98,7 +109,10 @@ private func decompress(args: Params) throws -> [String: Any] {
     }
 
     // Extract archive
-    try Zip.unzipFile(archiveURL, destination: destinationURL, overwrite: true, password: nil)
+    try FileManager.default.createDirectory(
+        at: destinationURL, withIntermediateDirectories: true
+    )
+    try FileManager.default.unzipItem(at: archiveURL, to: destinationURL)
 
     return [
         "success": true,
@@ -118,28 +132,10 @@ private func listContents(args: Params) throws -> [String: Any] {
         throw ZipPluginError.fileNotFound(archivePath)
     }
 
-    // Get file list - unzip to temp to list
-    let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
-    try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
-    defer {
-        try? FileManager.default.removeItem(at: tempDir)
-    }
-
-    try Zip.unzipFile(archiveURL, destination: tempDir, overwrite: true, password: nil)
-
-    // List extracted files
-    var files: [String] = []
-    let prefixToRemove = tempDir.path + "/"
-    if let enumerator = FileManager.default.enumerator(at: tempDir, includingPropertiesForKeys: nil) {
-        while let fileURL = enumerator.nextObject() as? URL {
-            let fullPath = fileURL.path
-            if fullPath.hasPrefix(prefixToRemove) {
-                files.append(String(fullPath.dropFirst(prefixToRemove.count)))
-            } else {
-                files.append(fullPath)
-            }
-        }
-    }
+    // Read the central directory. Listing an archive does not need it
+    // extracted, so nothing is written anywhere.
+    let archive = try Archive(url: archiveURL, accessMode: .read)
+    let files = archive.map { $0.path }
 
     return [
         "archive": archivePath,
