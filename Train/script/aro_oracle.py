@@ -215,12 +215,22 @@ def check_block(code: str, timeout: int = 20, binary: str | None = None,
 
 
 # ── `aro run` and `aro test` (GitLab #798) ───────────────────────────────────
-# `aro check` is syntax plus limited semantics. It accepts a verb no action
-# implements, it reports a wrong preposition as a warning, and it has nothing
-# to say about whether the program does what the instruction asked — "passes
-# `aro check` but does not address the instruction" is a recorded failure
-# class with 161 entries. Running the thing is the next oracle, and the only
-# one that produces an expected output to train against.
+# `aro check` is syntax plus limited semantics. It errors on an invented verb
+# and an invented Compute qualifier; it reports a preposition the action does
+# not accept as a warning, so the exit code stays 0; it says nothing at all
+# about an action handle no plugin provides, because handles are resolved
+# against the plugins an application loads. And it has nothing to say about
+# whether the program does what the instruction asked — "passes `aro check`
+# but does not address the instruction" is a recorded failure class with 161
+# entries. Running the thing is the next oracle, and the only one that
+# produces an expected output to train against.
+#
+# That first sentence used to read "it accepts a verb no action implements",
+# which is where the catalog gate below got its justification. The checker
+# closed that gap and nothing noticed for a release, because the test holding
+# the claim is skipped wherever there is no binary — which was everywhere in
+# CI (GitLab #900). `test_what_aro_check_catches` measures the division of
+# labour now, and `train:oracle` gives it a binary to measure with.
 
 # A program that waits: running it to completion is not a finite question.
 # Keepalive blocks until a signal; a bound socket or file monitor keeps the
