@@ -3,6 +3,7 @@
 // ARO Runtime - Dynamic Plugin Loader
 // ============================================================
 
+import AROToolchain
 import Foundation
 
 #if os(Windows)
@@ -1832,204 +1833,20 @@ public final class PluginLoader: @unchecked Sendable {
     // MARK: - Private
 
     /// Find the Swift executable (swift command) in PATH or common locations
+    /// The `swift` driver used to build a plugin's Swift package.
+    ///
+    /// One table, shared with `aro build`'s own plugin stage. Two lookups that
+    /// ranked the candidates differently is what made every plugin package
+    /// rebuild from scratch on a machine with more than one toolchain
+    /// (GitLab #902), and this one also spawned `which`/`where` to read a PATH
+    /// it could search in process.
     private func findSwiftExecutable() -> String? {
-        // Check for SWIFT environment variable first - allows CI to specify exact Swift
-        if let swiftEnv = ProcessInfo.processInfo.environment["SWIFT"],
-           !swiftEnv.isEmpty,
-           FileManager.default.isExecutableFile(atPath: swiftEnv) {
-            return swiftEnv
-        }
-
-        // Check SWIFTC and derive swift path from it
-        if let swiftcEnv = ProcessInfo.processInfo.environment["SWIFTC"],
-           !swiftcEnv.isEmpty,
-           swiftcEnv.hasSuffix("swiftc") {
-            // swiftc path like "/path/to/bin/swiftc" -> "/path/to/bin/swift"
-            let swiftPath = String(swiftcEnv.dropLast(1))  // Remove 'c'
-            if FileManager.default.isExecutableFile(atPath: swiftPath) {
-                return swiftPath
-            }
-        }
-
-        #if os(Windows)
-        // On Windows, use 'where' command to find swift.exe
-        let whereProcess = Process()
-        whereProcess.executableURL = URL(fileURLWithPath: "C:\\Windows\\System32\\where.exe")
-        whereProcess.arguments = ["swift"]
-
-        let pipe = Pipe()
-        whereProcess.standardOutput = pipe
-        whereProcess.standardError = FileHandle.nullDevice
-
-        do {
-            try whereProcess.run()
-            whereProcess.waitUntilExit()
-
-            if whereProcess.terminationStatus == 0 {
-                let data = pipe.fileHandleForReading.readDataToEndOfFile()
-                if let output = String(data: data, encoding: .utf8) {
-                    // 'where' may return multiple lines, take the first
-                    if let path = output.split(separator: "\r\n").first ?? output.split(separator: "\n").first,
-                       !path.isEmpty {
-                        return String(path).trimmingCharacters(in: .whitespacesAndNewlines)
-                    }
-                }
-            }
-        } catch {
-            // where failed, try common locations
-        }
-
-        // Check common Swift installation paths on Windows
-        let commonPaths = [
-            "C:\\Program Files\\Swift\\Toolchains\\0.0.0+Asserts\\usr\\bin\\swift.exe",
-            "C:\\Library\\Developer\\Toolchains\\unknown-Asserts-development.xctoolchain\\usr\\bin\\swift.exe"
-        ]
-
-        for path in commonPaths {
-            if FileManager.default.fileExists(atPath: path) {
-                return path
-            }
-        }
-
-        // Last resort: assume swift is in PATH
-        return "swift"
-        #else
-        // On Unix, use 'which' command to find swift
-        let whichProcess = Process()
-        whichProcess.executableURL = URL(fileURLWithPath: "/usr/bin/which")
-        whichProcess.arguments = ["swift"]
-
-        let pipe = Pipe()
-        whichProcess.standardOutput = pipe
-        whichProcess.standardError = FileHandle.nullDevice
-
-        do {
-            try whichProcess.run()
-            whichProcess.waitUntilExit()
-
-            if whichProcess.terminationStatus == 0 {
-                let data = pipe.fileHandleForReading.readDataToEndOfFile()
-                if let path = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
-                   !path.isEmpty {
-                    return path
-                }
-            }
-        } catch {
-            // which failed, try common locations
-        }
-
-        // Check common Swift installation paths
-        let commonPaths = [
-            "/usr/bin/swift",
-            "/usr/local/bin/swift",
-            "/usr/share/swift/usr/bin/swift",  // CI installation path
-            "/opt/swift/usr/bin/swift",
-            "/Library/Developer/Toolchains/swift-latest.xctoolchain/usr/bin/swift"
-        ]
-
-        for path in commonPaths {
-            if FileManager.default.isExecutableFile(atPath: path) {
-                return path
-            }
-        }
-
-        return nil
-        #endif
+        Toolchain.find("swift")
     }
 
-    /// Find the Swift compiler in PATH or common locations
+    /// The Swift compiler used to build loose `.swift` plugin sources.
     private func findSwiftCompiler() -> String? {
-        // Check for SWIFTC environment variable first - allows CI to specify exact compiler
-        if let swiftcEnv = ProcessInfo.processInfo.environment["SWIFTC"],
-           !swiftcEnv.isEmpty,
-           FileManager.default.isExecutableFile(atPath: swiftcEnv) {
-            return swiftcEnv
-        }
-
-        #if os(Windows)
-        // On Windows, use 'where' command to find swiftc.exe
-        let whereProcess = Process()
-        whereProcess.executableURL = URL(fileURLWithPath: "C:\\Windows\\System32\\where.exe")
-        whereProcess.arguments = ["swiftc"]
-
-        let pipe = Pipe()
-        whereProcess.standardOutput = pipe
-        whereProcess.standardError = FileHandle.nullDevice
-
-        do {
-            try whereProcess.run()
-            whereProcess.waitUntilExit()
-
-            if whereProcess.terminationStatus == 0 {
-                let data = pipe.fileHandleForReading.readDataToEndOfFile()
-                if let output = String(data: data, encoding: .utf8) {
-                    // 'where' may return multiple lines, take the first
-                    if let path = output.split(separator: "\r\n").first ?? output.split(separator: "\n").first,
-                       !path.isEmpty {
-                        return String(path).trimmingCharacters(in: .whitespacesAndNewlines)
-                    }
-                }
-            }
-        } catch {
-            // where failed, try common locations
-        }
-
-        // Check common Swift installation paths on Windows
-        let commonPaths = [
-            "C:\\Program Files\\Swift\\Toolchains\\0.0.0+Asserts\\usr\\bin\\swiftc.exe",
-            "C:\\Library\\Developer\\Toolchains\\unknown-Asserts-development.xctoolchain\\usr\\bin\\swiftc.exe"
-        ]
-
-        for path in commonPaths {
-            if FileManager.default.fileExists(atPath: path) {
-                return path
-            }
-        }
-
-        // Last resort: assume swiftc is in PATH
-        return "swiftc"
-        #else
-        // On Unix, use 'which' command to find swiftc
-        let whichProcess = Process()
-        whichProcess.executableURL = URL(fileURLWithPath: "/usr/bin/which")
-        whichProcess.arguments = ["swiftc"]
-
-        let pipe = Pipe()
-        whichProcess.standardOutput = pipe
-        whichProcess.standardError = FileHandle.nullDevice
-
-        do {
-            try whichProcess.run()
-            whichProcess.waitUntilExit()
-
-            if whichProcess.terminationStatus == 0 {
-                let data = pipe.fileHandleForReading.readDataToEndOfFile()
-                if let path = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
-                   !path.isEmpty {
-                    return path
-                }
-            }
-        } catch {
-            // which failed, try common locations
-        }
-
-        // Check common Swift installation paths
-        let commonPaths = [
-            "/usr/bin/swiftc",
-            "/usr/local/bin/swiftc",
-            "/usr/share/swift/usr/bin/swiftc",  // CI installation path
-            "/opt/swift/usr/bin/swiftc",
-            "/Library/Developer/Toolchains/swift-latest.xctoolchain/usr/bin/swiftc"
-        ]
-
-        for path in commonPaths {
-            if FileManager.default.isExecutableFile(atPath: path) {
-                return path
-            }
-        }
-
-        return nil
-        #endif
+        Toolchain.find("swiftc")
     }
 
     /// Check if source file is newer than compiled dylib

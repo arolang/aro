@@ -176,10 +176,18 @@ public enum Toolchain {
         // rebuilt all ~370 modules of SwiftSyntax from scratch — over the
         // integration harness's 300s build budget, which reported it as a
         // missing binary (GitLab #902).
+        // `SWIFTC` is honoured here too, as the directory it names rather than
+        // the file: an explicit compiler path identifies a toolchain, and the
+        // `swift` beside it is the driver that belongs to it. `PluginLoader`
+        // derived it that way for its own lookup, and that was the one part of
+        // its behaviour `PATH` cannot express, so it moves here rather than
+        // being dropped. Ahead of `PATH`, like the `SWIFT` override it stands in
+        // for.
         case "swift":
             return ToolSpec(
                 name: "swift",
                 envOverrides: ["SWIFT"],
+                preferredPaths: swiftDriverBesideConfiguredSwiftc(environment: environment),
                 fallbackPaths: swiftToolchainPaths(for: "swift")
             )
 
@@ -315,6 +323,27 @@ public enum Toolchain {
     /// Where a Swift toolchain lands when it is not on PATH. `/usr/bin/swift`
     /// does not exist on the Linux CI image, which installs under
     /// `/usr/share/swift` (GitLab #669).
+    /// The `swift` driver sitting next to an explicitly configured `swiftc`.
+    ///
+    /// Empty unless `SWIFTC`/`ARO_SWIFTC_PATH` names a file called `swiftc`;
+    /// a value pointing at something else is left to the rest of the lookup.
+    private static func swiftDriverBesideConfiguredSwiftc(
+        environment: [String: String]
+    ) -> [String] {
+        for key in ["SWIFTC", "ARO_SWIFTC_PATH"] {
+            guard let value = environment[key], !value.isEmpty else { continue }
+            let compiler = URL(fileURLWithPath: value)
+            let driver: String
+            switch compiler.lastPathComponent {
+            case "swiftc": driver = "swift"
+            case "swiftc.exe": driver = "swift.exe"
+            default: continue
+            }
+            return [compiler.deletingLastPathComponent().appendingPathComponent(driver).path]
+        }
+        return []
+    }
+
     private static func swiftToolchainPaths(for tool: String) -> [String] {
         [
             "/usr/bin/\(tool)",
