@@ -594,10 +594,14 @@ test:
 # every test gets to "started" and nothing ever completes (jobs 80535,
 # 80454 timed out at 45m with zero completions).
 #
-# The full socket surface is exercised on GitHub (Linux + macOS) where
-# the runner has enough cores, and locally. Re-enable this job once
-# the runner is sized larger OR the blocking poll() paths are moved
-# to a dedicated executor.
+# The full socket surface is exercised on GitHub, where the runner has
+# enough cores: the `test` job there runs the whole suite on Linux with
+# nothing skipped, and `test-macos` does the same on macOS. That second
+# half only became true with GitLab #687 — before it, `swift test` ran
+# on no macOS machine but a developer's own, so this paragraph claimed
+# a macOS run that did not exist. Re-enable this job once the runner is
+# sized larger OR the blocking poll() paths are moved to a dedicated
+# executor.
 #
 # The `runtime-sz-no-sockets` shard above already excludes Socket from
 # the runtime test sweep, so this comment is the only marker left.

@@ -20,6 +20,7 @@ Source-of-truth order: `Proposals/` > `Sources/` > Wiki/`OVERVIEW.md` > `Website
 - `Examples/`: 109 directories, 102 carry a `test.hint` (`mode: both|interpreter|compiled|test`). CLAUDE.md says 110 and lists 57 of them.
 - Tests: `Tests/AROParserTests`, `Tests/AROuntimeTests` (sic), `AROCompilerTests`, `AROCLITests`, `AROLSPTests`, `AROAskTests`, `AROPackageManagerTests`, `SOLAROTests`, `IntegrationTestsRunner` (Perl harness `run-tests.pl` over `Examples/*/test.hint`). Last recorded full run: 2518 tests.
 - CI: `.gitlab-ci.yml` (Linux x86_64 build/test/integration/release, macOS via GitHub `build.yml` incl. signing + notarisation on tags, Windows `swift build` job, Docker `ghcr.io/arolang/aro-buildsystem` and `aro-runtime` for amd64+arm64).
+- `swift test` runs on two platforms, both on GitHub: `test` (Linux, nothing skipped — the one place the Socket/WebSocket suites run on Linux, since `.gitlab-ci.yml` skips them for want of runner cores) and `test-macos` (GitLab #687, 4544 tests incl. the 653 of `SOLAROTests`, which cannot be built on Linux). GitLab has no macOS runner, so macOS testing lives in GitHub by necessity.
 - Distribution: Homebrew tap `arolang/aro` (macOS), `aro-linux-amd64.tar.gz` (binary + `libARORuntime.a`), `aro-macos-arm64.tar.gz`, `aro-windows-amd64.zip` (CI artifact), Solaro `.dmg`, Language Guide PDF on the latest release.
 
 ## 2. Toolchain and CLI
