@@ -88,15 +88,16 @@ public final class REPLSession: @unchecked Sendable {
     /// move between runs of the same session are worse than useless.
     private var _definitionOrder: [String] = []
 
-    /// EventBus subscription per handler feature-set name, so a
-    /// redefinition replaces its subscription instead of stacking a
-    /// second one — the same rule user-defined actions follow.
-    private var handlerSubscriptions: [String: UUID] = [:]
-
-    /// The same, for `{repository} Observer` feature sets. Kept apart from
-    /// `handlerSubscriptions` because the two watch different event types, and
-    /// one feature set is only ever in one of them.
-    private var observerSubscriptions: [String: UUID] = [:]
+    /// EventBus subscriptions per handler feature-set name, so a
+    /// redefinition replaces its subscriptions instead of stacking a
+    /// second set — the same rule user-defined actions follow.
+    ///
+    /// A list, not one id: a `File Event Handler` whose name names no
+    /// particular change subscribes to all three of created / modified /
+    /// deleted, exactly as `ExecutionEngine` does (GitLab #688). One dict
+    /// covers every family because a feature set belongs to exactly one —
+    /// `ActivityKind.parse` returns a single kind.
+    private var handlerSubscriptions: [String: [UUID]] = [:]
 
     /// Session history
     private var _history: [HistoryEntry] = []
@@ -140,6 +141,22 @@ public final class REPLSession: @unchecked Sendable {
         // Register services for REPL session
         let fileService = AROFileSystemService(eventBus: eventBus)
         self.context.register(fileService as FileSystemService)
+
+        // …and as the monitor, which is a second registration because
+        // `register` keys services by their STATIC type: registering the one
+        // object as `FileSystemService` leaves `service(FileMonitorService)`
+        // a miss. `Application.registerDefaultServices` registers both for
+        // exactly that reason.
+        //
+        // What the miss cost: `Start the <file-monitor> with "./drop".` fell
+        // through to the compiled-binary path (`NativeFileWatcher`), which
+        // publishes on `EventBus.shared` — not this session's bus. So the
+        // watcher ran, printed `[FileMonitor] Created: …`, and its events
+        // went somewhere no session handler could ever hear them
+        // (GitLab #688). With the monitor registered, watching takes the
+        // same interpreter path `aro run` takes and publishes where this
+        // session's `File Event Handler`s are subscribed.
+        self.context.register(fileService as FileMonitorService)
 
         // Register terminal service so <terminal> reflects the real TTY
         // (issue #172). Mirrors Application.registerDefaultServices().
@@ -191,16 +208,164 @@ public final class REPLSession: @unchecked Sendable {
         if let source = source {
             _featureSetSources[name] = source
         }
-        registerDomainHandlerIfNeeded(name: name, featureSet: featureSet)
-        registerRepositoryObserverIfNeeded(name: name, featureSet: featureSet)
+        registerEventHandlerIfNeeded(name: name, featureSet: featureSet)
+    }
+
+    // MARK: - Handler families (GitLab #688)
+
+    /// What this session does with a feature set whose business activity
+    /// names a handler family.
+    ///
+    /// Every front-end asks at definition time, because the answer is the one
+    /// thing the user cannot see for themselves: a handler is "defined"
+    /// either way. Before GitLab #688 a session answered
+    /// `Defined (Echo Input: Socket Event Handler)` and stopped there — the
+    /// handler compiled, registered, showed up in `:fs`, and was dead. The
+    /// Learning course teaches exactly these shapes, so a reader's first
+    /// encounter with them was a handler that never fired and nothing to
+    /// search for. Silence was the bug; dispatching what a session can
+    /// deliver and *saying so* for the rest is the fix.
+    public enum HandlerFamily: Sendable, Equatable {
+        /// Subscribed to this session's bus. `trigger` says, in the user's
+        /// own vocabulary, what makes it fire.
+        case dispatched(trigger: String)
+
+        /// Compiled and kept, but nothing a session can do will deliver its
+        /// events. `reason` is shown to the user, who would otherwise wait
+        /// for a handler that cannot run.
+        case undelivered(reason: String)
+
+        /// Not a handler at all: an OpenAPI `operationId`, a user-defined
+        /// action, plain documentation.
+        case notAHandler
+    }
+
+    /// Classify a business activity for this session.
+    ///
+    /// The line between the two answers is *where the events come from*,
+    /// which is a property of the family and not of the front-end:
+    ///
+    ///   * An ARO statement can produce them — `Emit`, `Store`, `Accept`,
+    ///     `Notify`, or a file monitor this session started — so the session
+    ///     subscribes the handler and dispatch works at the prompt exactly
+    ///     as it does under `aro run`.
+    ///   * They arrive over a transport the session does not own (a TCP
+    ///     server, an HTTP contract, the keyboard), so no amount of
+    ///     subscribing would make one arrive. Those are named, with the
+    ///     reason, and `aro run` stays their home.
+    ///
+    /// `aro repl`, `aro repl --json`, `aro kernel`, piped stdin and Solaro
+    /// all read this one function, so they cannot disagree about which is
+    /// which.
+    public static func handlerFamily(for businessActivity: String) -> HandlerFamily {
+        switch ActivityKind.parse(businessActivity) {
+        case .domainEvent(let name):
+            return .dispatched(trigger: "fires on <\(name): event>")
+
+        case .repositoryObserver(let repository):
+            return .dispatched(
+                trigger: "fires on a Store, Update or Delete in the <\(repository)>")
+
+        case .fileEvent:
+            // Deliverable since GitLab #688: the session's own file service
+            // publishes on the session's bus, so `Start the <file-monitor>`
+            // in one input feeds a handler defined in another.
+            return .dispatched(
+                trigger: "fires on changes under a path this session watches "
+                       + "— Start the <file-monitor> first")
+
+        case .stateTransition, .stateObserver:
+            return .dispatched(trigger: "fires on an Accept that moves a state field")
+
+        case .notification:
+            return .dispatched(trigger: "fires on a Notify in a later input")
+
+        case .socketEvent:
+            return .undelivered(
+                reason: "this session delivers no socket events — nothing in a session "
+                      + "starts a TCP server")
+
+        case .webSocketEvent:
+            return .undelivered(
+                reason: "this session delivers no WebSocket events — a session serves no "
+                      + "HTTP contract")
+
+        case .keyPress:
+            return .undelivered(
+                reason: "this session delivers no KeyPress events — the prompt itself owns "
+                      + "the keyboard")
+
+        case .repositoryEviction(let repository):
+            // The trigger IS a statement (a Store past `maxSize`), but
+            // `InMemoryRepositoryStorage` publishes the eviction on
+            // `EventBus.shared` rather than on the context's bus, so a
+            // session's subscription would never see it. Named rather than
+            // silently dropped; dispatching it needs a runtime change.
+            return .undelivered(
+                reason: "this session delivers no eviction events for the <\(repository)>")
+
+        case .watch:
+            return .undelivered(
+                reason: "this session does not refresh watches (ARO-0083)")
+
+        case .applicationEnd:
+            return .undelivered(
+                reason: "a session has no shutdown to run this on")
+
+        case .userAction, .plain:
+            return .notAHandler
+        }
+    }
+
+    /// The one line a front-end shows after accepting a definition, or nil
+    /// when the definition speaks for itself.
+    ///
+    /// The advice for an undelivered family carries its own way out, because
+    /// a user who has just been told "this will not fire" needs to be told
+    /// where it does.
+    public static func definitionAdvice(for businessActivity: String) -> String? {
+        switch handlerFamily(for: businessActivity) {
+        case .dispatched(let trigger):
+            return trigger
+        case .undelivered(let reason):
+            return reason + "; put it in an application and `aro run` it"
+        case .notAHandler:
+            return nil
+        }
     }
 
     // MARK: - Event dispatch (interactive sessions)
 
-    /// Handler families that hang off a running service. Their events
-    /// come from a server the session never starts (the REPL runs no
-    /// Keepalive loop), so subscribing them would promise dispatch that
-    /// can never arrive. `aro run` remains their home.
+    /// Subscribe whatever family this feature set belongs to.
+    ///
+    /// One switch over `ActivityKind`, so a family cannot be dispatched by
+    /// one path and reported undelivered by another: `handlerFamily` above
+    /// answers `.dispatched` for precisely the cases this subscribes
+    /// (GitLab #688). Both switches are exhaustive and neither has a
+    /// `default`, so a new family added to `ActivityKind` stops the build
+    /// until it has been answered here *and* classified there — which is the
+    /// only way the two stay in step.
+    private func registerEventHandlerIfNeeded(name: String, featureSet: AnalyzedFeatureSet) {
+        switch ActivityKind.parse(featureSet.featureSet.businessActivity) {
+        case .domainEvent:
+            registerDomainHandlerIfNeeded(name: name, featureSet: featureSet)
+        case .repositoryObserver:
+            registerRepositoryObserverIfNeeded(name: name, featureSet: featureSet)
+        case .fileEvent:
+            registerFileEventHandler(name: name, featureSet: featureSet)
+        case .stateTransition, .stateObserver:
+            registerStateHandler(name: name, featureSet: featureSet)
+        case .notification:
+            registerNotificationHandler(name: name, featureSet: featureSet)
+        case .socketEvent, .webSocketEvent, .keyPress, .repositoryEviction,
+             .watch, .applicationEnd, .userAction, .plain:
+            // Nothing to subscribe. The front-end has already told the user
+            // which of those it is, and why — the definition is kept either
+            // way, so moving it into an application is a copy and paste.
+            break
+        }
+    }
+
     /// Whether `businessActivity` names a domain event handler this
     /// session will dispatch to (`{EventName} Handler`, optionally with
     /// state guards). Exposed for the front-ends, so they can tell the
@@ -230,15 +395,22 @@ public final class REPLSession: @unchecked Sendable {
             for: featureSet.featureSet.businessActivity) else { return }
 
         let guardSet = StateGuardSet.parse(from: featureSet.featureSet.businessActivity)
+        dropSubscriptions(for: name)
 
-        if let previous = handlerSubscriptions.removeValue(forKey: name) {
-            eventBus.unsubscribe(previous)
-        }
-
-        handlerSubscriptions[name] = eventBus.subscribe(to: DomainEvent.self) { [weak self] event in
+        handlerSubscriptions[name] = [eventBus.subscribe(to: DomainEvent.self) { [weak self] event in
             guard let self, event.domainEventType == eventType else { return }
             if !guardSet.isEmpty, !guardSet.allMatch(payload: event.payload) { return }
             await self.runDomainHandler(featureSet, event: event)
+        }]
+    }
+
+    /// Unsubscribe everything a feature set of this name had subscribed.
+    ///
+    /// Called before every (re)registration: a redefinition that merely added
+    /// a subscription would run both bodies for one event.
+    private func dropSubscriptions(for name: String) {
+        for previous in handlerSubscriptions.removeValue(forKey: name) ?? [] {
+            eventBus.unsubscribe(previous)
         }
     }
 
@@ -265,12 +437,9 @@ public final class REPLSession: @unchecked Sendable {
         }
 
         let guardSet = StateGuardSet.parse(from: activity)
+        dropSubscriptions(for: name)
 
-        if let previous = observerSubscriptions.removeValue(forKey: name) {
-            eventBus.unsubscribe(previous)
-        }
-
-        observerSubscriptions[name] = eventBus.subscribe(to: RepositoryChangedEvent.self) { [weak self] event in
+        handlerSubscriptions[name] = [eventBus.subscribe(to: RepositoryChangedEvent.self) { [weak self] event in
             guard let self, event.repositoryName == repositoryName else { return }
 
             // A create/update carries the new entity, a delete the old one —
@@ -282,6 +451,234 @@ public final class REPLSession: @unchecked Sendable {
             }
 
             await self.runRepositoryObserver(featureSet, event: event)
+        }]
+    }
+
+    /// Subscribe a `File Event Handler` to this session's bus (GitLab #688).
+    ///
+    /// This family used to be grouped with the transports and left
+    /// unsubscribed, which was wrong for the same reason it was wrong for
+    /// repository observers: nothing wires a file handler up but the bus.
+    /// What *was* missing is the publisher — `Start the <file-monitor>` fell
+    /// through to the compiled-binary watcher and published on
+    /// `EventBus.shared`. With `FileMonitorService` registered on the session
+    /// (see `init`), a monitor started at the prompt publishes here, so a
+    /// notebook can watch a directory in one cell and react in another. Only
+    /// the session's own monitors are heard, which is the right scope: a
+    /// session that started no watcher still gets nothing, because nothing
+    /// happened.
+    ///
+    /// Which of the three changes the handler wants comes from its NAME, the
+    /// rule `ExecutionEngine.registerFileEventHandlers` uses — and a name
+    /// that asks for none gets all three (GitLab #570, #571), because the
+    /// alternative is firing never.
+    private func registerFileEventHandler(name: String, featureSet: AnalyzedFeatureSet) {
+        let lowercaseName = featureSet.featureSet.name.lowercased()
+        let wantsCreated = lowercaseName.contains("created")
+        let wantsModified = lowercaseName.contains("modified")
+        let wantsDeleted = lowercaseName.contains("deleted")
+        let named = wantsCreated || wantsModified || wantsDeleted
+
+        dropSubscriptions(for: name)
+        var subscriptions: [UUID] = []
+
+        if wantsCreated || !named {
+            subscriptions.append(eventBus.subscribe(to: FileCreatedEvent.self) { [weak self] event in
+                await self?.runFileEventHandler(featureSet, path: event.path, kind: "created")
+            })
+        }
+        if wantsModified || !named {
+            subscriptions.append(eventBus.subscribe(to: FileModifiedEvent.self) { [weak self] event in
+                // Hidden files are the editor's own scratch work — the atomic
+                // save that writes `.notes.txt.sb-1a2b` and renames it would
+                // otherwise fire the handler for a file the user never named.
+                // Same filter as `aro run`.
+                let filename = (event.path as NSString).lastPathComponent
+                guard !filename.hasPrefix(".") else { return }
+                await self?.runFileEventHandler(featureSet, path: event.path, kind: "modified")
+            })
+        }
+        if wantsDeleted || !named {
+            subscriptions.append(eventBus.subscribe(to: FileDeletedEvent.self) { [weak self] event in
+                await self?.runFileEventHandler(featureSet, path: event.path, kind: "deleted")
+            })
+        }
+
+        handlerSubscriptions[name] = subscriptions
+    }
+
+    /// Subscribe a `StateTransition Handler` or `… StateObserver` (ARO-0022).
+    ///
+    /// `Accept` publishes `StateTransitionEvent` on the context's bus — this
+    /// session's bus — so the trigger is an ordinary statement and always
+    /// was. The family was simply never subscribed here, so a notebook that
+    /// taught a state machine showed the transition and then nothing
+    /// (GitLab #688).
+    ///
+    /// The two spellings differ in their guard and in what they bind, and
+    /// both follow `ExecutionEngine.registerStateObservers`: the newer
+    /// `StateTransition Handler<toState:approved>` filters on one transition
+    /// field and binds `event`; the older `status StateObserver<draft_to_paid>`
+    /// filters on the field name plus a whole `from_to` transition and binds
+    /// `transition`.
+    private func registerStateHandler(name: String, featureSet: AnalyzedFeatureSet) {
+        let activity = featureSet.featureSet.businessActivity
+        let isHandlerStyle = activity.contains("StateTransition Handler")
+        dropSubscriptions(for: name)
+
+        if isHandlerStyle {
+            let parsedGuard = ActivityGuard.keyValue(of: activity)
+            let guardKey = parsedGuard?.key
+            let guardValue = parsedGuard?.value
+
+            handlerSubscriptions[name] = [eventBus.subscribe(to: StateTransitionEvent.self) { [weak self] event in
+                if let key = guardKey, let value = guardValue {
+                    let field: String
+                    switch key {
+                    case "toState":    field = event.toState
+                    case "fromState":  field = event.fromState
+                    case "fieldName":  field = event.fieldName
+                    case "objectName": field = event.objectName
+                    default:           field = value   // an unknown key filters nothing
+                    }
+                    guard field.lowercased() == value.lowercased() else { return }
+                }
+                await self?.runStateTransitionHandler(featureSet, event: event)
+            }]
+        } else {
+            let (beforeAngle, transitionFilter) = ActivityGuard.split(activity)
+            let fieldName = beforeAngle
+                .replacingOccurrences(of: " StateObserver", with: "")
+                .replacingOccurrences(of: "StateObserver", with: "")
+                .trimmingCharacters(in: .whitespaces)
+                .lowercased()
+
+            handlerSubscriptions[name] = [eventBus.subscribe(to: StateTransitionEvent.self) { [weak self] event in
+                guard fieldName.isEmpty || event.fieldName.lowercased() == fieldName else { return }
+                if let filter = transitionFilter {
+                    let actual = "\(event.fromState)_to_\(event.toState)"
+                    guard actual.lowercased() == filter.lowercased() else { return }
+                }
+                await self?.runStateObserver(featureSet, event: event)
+            }]
+        }
+    }
+
+    /// Subscribe a `NotificationSent Handler` (GitLab #688).
+    ///
+    /// `Notify` publishes on the context's bus, one event per target, so this
+    /// is another family whose trigger is a statement the session can run.
+    private func registerNotificationHandler(name: String, featureSet: AnalyzedFeatureSet) {
+        dropSubscriptions(for: name)
+        handlerSubscriptions[name] = [eventBus.subscribe(to: NotificationSentEvent.self) { [weak self] event in
+            await self?.runNotificationHandler(featureSet, event: event)
+        }]
+    }
+
+    /// Run a file event handler with the payload `aro run` binds — `<event: path>`
+    /// and `<event: kind>` mean the same at the prompt as in an application.
+    private func runFileEventHandler(
+        _ featureSet: AnalyzedFeatureSet,
+        path: String,
+        kind: String
+    ) async {
+        await runHandlerBody(featureSet) { child in
+            let payload: [String: any Sendable] = ["path": path, "kind": kind]
+            child.bind("event", value: payload)
+            for (key, value) in payload {
+                child.bind("event:\(key)", value: value)
+            }
+        }
+    }
+
+    /// `StateTransition Handler` payload, mirroring `runStateTransitionHandler`
+    /// in the engine.
+    private func runStateTransitionHandler(
+        _ featureSet: AnalyzedFeatureSet,
+        event: StateTransitionEvent
+    ) async {
+        await runHandlerBody(featureSet) { child in
+            var payload: [String: any Sendable] = [
+                "fieldName": event.fieldName,
+                "objectName": event.objectName,
+                "fromState": event.fromState,
+                "toState": event.toState
+            ]
+            if let entityId = event.entityId { payload["entityId"] = entityId }
+            if let entity = event.entity { payload["entity"] = entity }
+            child.bind("event", value: payload)
+            for (key, value) in payload {
+                child.bind("event:\(key)", value: value)
+            }
+        }
+    }
+
+    /// The older `StateObserver` spelling binds `transition`, not `event` —
+    /// ARO-0022's own vocabulary, kept because programs are written against it.
+    private func runStateObserver(
+        _ featureSet: AnalyzedFeatureSet,
+        event: StateTransitionEvent
+    ) async {
+        await runHandlerBody(featureSet) { child in
+            var payload: [String: any Sendable] = [
+                "fieldName": event.fieldName,
+                "objectName": event.objectName,
+                "fromState": event.fromState,
+                "toState": event.toState
+            ]
+            if let entityId = event.entityId { payload["entityId"] = entityId }
+            if let entity = event.entity { payload["entity"] = entity }
+            child.bind("transition", value: payload)
+            for (key, value) in payload {
+                child.bind("transition:\(key)", value: value)
+            }
+        }
+    }
+
+    /// `NotificationSent Handler` payload. The target value is bound under the
+    /// target's own name *and* under `user`, which is what the engine does and
+    /// what every example reads (`Extract the <user> from the <event: user>.`).
+    private func runNotificationHandler(
+        _ featureSet: AnalyzedFeatureSet,
+        event: NotificationSentEvent
+    ) async {
+        await runHandlerBody(featureSet) { child in
+            var payload: [String: any Sendable] = [
+                "message": event.message,
+                "target": event.target
+            ]
+            if let targetValue = event.targetValue {
+                payload[event.target] = targetValue
+                if event.target != "user" { payload["user"] = targetValue }
+            }
+            child.bind("event", value: payload)
+            for (key, value) in payload {
+                child.bind("event:\(key)", value: value)
+            }
+        }
+    }
+
+    /// The plumbing every handler family shares: a child of the session
+    /// context (read at dispatch time, so a handler runs against the session
+    /// as it is now), the family's own bindings, then the body through the
+    /// same executor statements use.
+    ///
+    /// Errors land on stderr. The statement that caused the event already
+    /// succeeded, so failing it retroactively would blame the wrong code —
+    /// the rule the domain-handler path set and ARO-0091 states.
+    private func runHandlerBody(
+        _ featureSet: AnalyzedFeatureSet,
+        bind: (any ExecutionContext) -> Void
+    ) async {
+        let child = context.createChild(
+            featureSetName: featureSet.featureSet.name,
+            businessActivity: featureSet.featureSet.businessActivity
+        )
+        bind(child)
+        do {
+            _ = try await executor.execute(featureSet, context: child)
+        } catch {
+            FileHandle.standardError.write(Data("\(formatError(error))\n".utf8))
         }
     }
 
@@ -724,15 +1121,14 @@ public final class REPLSession: @unchecked Sendable {
         _history.removeAll()
 
         // Cleared handlers must stop answering events — the definition
-        // they came from is gone.
-        for (_, subscription) in handlerSubscriptions {
-            eventBus.unsubscribe(subscription)
+        // they came from is gone. Every family's subscriptions are in the
+        // one dictionary, so none can be forgotten here.
+        for (_, subscriptions) in handlerSubscriptions {
+            for subscription in subscriptions {
+                eventBus.unsubscribe(subscription)
+            }
         }
         handlerSubscriptions.removeAll()
-        for (_, subscription) in observerSubscriptions {
-            eventBus.unsubscribe(subscription)
-        }
-        observerSubscriptions.removeAll()
 
         // Drop any user-defined action verbs this session registered.
         // `clear()` is synchronous (the meta-command protocol is), so the

@@ -47,6 +47,20 @@ public enum StdinScriptRunner {
                     result = try await session.defineFeatureSet(
                         name: name, activity: activity, source: unitSource
                     )
+                    // Warn when a handler family cannot be delivered here.
+                    // Piped source is a program, so a definition that works
+                    // needs no commentary — but one that can never fire does,
+                    // and this path used to print nothing at all
+                    // (GitLab #688). stderr, so a script's stdout stays its
+                    // program's output.
+                    // Only for a definition that was accepted: a compile
+                    // error is the news, and this would bury it.
+                    if result.isSuccess,
+                       case .undelivered(let reason) =
+                        REPLSession.handlerFamily(for: activity) {
+                        FileHandle.standardError.write(Data(
+                            "[ARO] Warning: (\(name): \(activity)) — \(reason)\n".utf8))
+                    }
                 case .statements(let unitSource, _):
                     result = try await session.executeStatement(unitSource)
                 case .meta:

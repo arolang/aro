@@ -144,10 +144,16 @@ struct HandlerDependencies: Sendable {
 /// index arithmetic. `StateGuardSet.parse` covers the `<field:value>` form used
 /// by domain handlers and repository observers; this covers the two shapes that
 /// are not state guards.
-enum ActivityGuard {
+///
+/// Public because the REPL needs the same reading of a bracket suffix that the
+/// engine uses: `aro repl` subscribes `StateTransition Handler<toState:paid>`
+/// and `… StateObserver<draft_to_paid>` itself (GitLab #688), and a fourth
+/// hand-written copy of this index arithmetic is precisely what this type was
+/// extracted to prevent.
+public enum ActivityGuard {
     /// The activity split into the part before the bracket suffix and the
     /// suffix's contents. An activity without a complete `<…>` is all head.
-    static func split(_ activity: String) -> (head: String, brackets: String?) {
+    public static func split(_ activity: String) -> (head: String, brackets: String?) {
         guard let angleStart = activity.firstIndex(of: "<"),
               let angleEnd = activity.firstIndex(of: ">") else {
             return (activity, nil)
@@ -160,13 +166,13 @@ enum ActivityGuard {
 
     /// The text between the first `<` and the first `>`, if the activity has a
     /// bracket suffix at all.
-    static func bracketContents(of activity: String) -> String? {
+    public static func bracketContents(of activity: String) -> String? {
         split(activity).brackets
     }
 
     /// A single `key:value` pair from the bracket suffix, trimmed.
     /// `nil` when there is no suffix or it holds no colon.
-    static func keyValue(of activity: String) -> (key: String, value: String)? {
+    public static func keyValue(of activity: String) -> (key: String, value: String)? {
         guard let contents = bracketContents(of: activity) else { return nil }
         let parts = contents.split(separator: ":", maxSplits: 1).map(String.init)
         guard parts.count == 2 else { return nil }

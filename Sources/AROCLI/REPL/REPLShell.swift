@@ -279,6 +279,15 @@ public final class REPLShell: @unchecked Sendable {
             print(colorize("Defining feature set: \(name)", .yellow))
         case .featureSetDefined(let name):
             print(colorize("Feature set '\(name)' defined", .green))
+            // …and what that means for a handler. The prompt used to stop at
+            // "defined", so a `Socket Event Handler` typed here looked
+            // indistinguishable from a `UserCreated Handler` that actually
+            // fires (GitLab #688). The activity comes from the session rather
+            // than from the result, because the result carries only the name.
+            if let activity = session.featureSets[name]?.featureSet.businessActivity,
+               let advice = REPLSession.definitionAdvice(for: activity) {
+                print(colorize("  \(advice)", .dim))
+            }
         case .statementAdded:
             print(colorize("  +", .dim))
         case .commandOutput(let text):

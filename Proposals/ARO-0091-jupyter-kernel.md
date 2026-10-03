@@ -166,11 +166,59 @@ drops it — a cleared definition must not keep answering events. Both
 front-ends behave identically because the dispatch lives in
 `REPLSession`; the terminal REPL benefits equally.
 
-Service-bound handler families — `Socket Event Handler`,
-`WebSocket Event Handler`, `File Event Handler`, `KeyPress Handler` —
-are *not* subscribed. Their events come from a server the session never
-runs; subscribing them would promise dispatch that cannot arrive. Use
-`aro run` for those.
+### Handler families
+
+A business activity says how a feature set is triggered, and a session can
+deliver some of those triggers and not others. The dividing line is **where
+the events come from**:
+
+- An **ARO statement** produces them — `Emit`, `Store`/`Update`/`Delete`,
+  `Accept`, `Notify`, or a file monitor this session started. The session
+  subscribes the handler, and dispatch at the prompt works the way it does
+  under `aro run`.
+- They arrive over a **transport the session does not own** — a TCP server,
+  an HTTP contract, the keyboard. No subscription would make one arrive.
+
+```
+                         +---------------------------+
+   Emit / Store /        |                           |
+   Accept / Notify /     |   the session's EventBus  |-----> handler runs
+   file monitor   ------>|                           |
+                         +---------------------------+
+   TCP peer / WebSocket          (nothing publishes here
+   frame / key press      --X     in a session)        -----> never arrives
+```
+
+| Business activity | In a session |
+|-------------------|--------------|
+| `{EventName} Handler` | dispatched — fires on `Emit` |
+| `{repository} Observer` | dispatched — fires on `Store`, `Update`, `Delete` |
+| `File Event Handler` | dispatched — fires on a change under a path `Start the <file-monitor>` is watching |
+| `StateTransition Handler` / `… StateObserver` | dispatched — fires on `Accept` |
+| `NotificationSent Handler` | dispatched — fires on `Notify` |
+| `Socket Event Handler` | **undelivered** — a session starts no TCP server |
+| `WebSocket Event Handler` | **undelivered** — a session serves no HTTP contract |
+| `KeyPress Handler` | **undelivered** — the prompt owns the keyboard |
+| `{repository} Evicted Handler` | **undelivered** — the eviction is published on the runtime's shared bus, not the session's |
+| `… Watch: …` | **undelivered** — a session refreshes no watches (ARO-0083) |
+| `Application-End` | **undelivered** — a session has no shutdown to run it on |
+
+**An undelivered family is named at definition time, not silently accepted.**
+The definition is still kept — it compiles, it is listed by `:fs`, and it can
+be copied into an application unchanged — but the front-end says what will not
+happen and where it will:
+
+```
+Defined (Echo Input: Socket Event Handler) — this session delivers no socket
+events — nothing in a session starts a TCP server; put it in an application
+and `aro run` it
+```
+
+A dispatched family says what makes it fire, for the same reason: "Defined"
+alone reads as "parked". The classification is one function
+(`REPLSession.handlerFamily`), read by `aro repl`, `aro repl --json`,
+`aro kernel`, piped stdin and Solaro alike, so no two front-ends can disagree
+about which family is which.
 
 ## Output capture
 
@@ -283,10 +331,11 @@ front-end.
 
 ## Limits
 
-- **Service-bound handlers do not fire.** Domain event handlers dispatch
-  (see *Event dispatch* above), but `Socket` / `WebSocket` / `File` /
-  `KeyPress` handler families need a running service the session never
-  starts — use `aro run` for those.
+- **Transport-bound handlers do not fire.** `Socket`, `WebSocket` and
+  `KeyPress` handlers — plus repository evictions, watches and
+  `Application-End` — need something a session does not own, so they are
+  reported as undelivered when defined rather than waited for (see *Handler
+  families* above). Everything an ARO statement can trigger dispatches.
 - **One request at a time.** `REPLSession` is not internally synchronised, and
   the protocol is request/response; concurrent requests are not supported.
 
