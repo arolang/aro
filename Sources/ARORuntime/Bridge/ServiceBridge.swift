@@ -1373,23 +1373,21 @@ public func aro_native_http_server_start(_ port: Int32, _ contextPtr: UnsafeMuta
                 guard ctxHandle.context.getExecutionError() == nil,
                       let response = ctxHandle.context.getResponse() else { return nil }
 
-                for value in response.data.values {
-                    let body: (any UnreadBody)? = (value.get() as RequestBodyValue?)
-                        ?? (value.get() as AnchoredBody?)
-                    guard let body else { continue }
+                if let body = ResponsePayload.unreadBody(in: response.payload) {
                     let statement = "Return a <\(response.status): status> with the request body"
                     // try? is acceptable: a body already consumed by an earlier
                     // statement cannot be streamed again, and that case belongs
                     // to the normal response path — which reports it as the
                     // consumed-twice error rather than swallowing it here.
-                    guard let chunks = try? body.chunkStream(consumer: statement) else { continue }
-                    // One catalog, shared with the interpreter (GitLab #830).
-                    let statusCode = HTTPStatusCatalog.code(for: response.status) ?? 200
-                    return NativeHTTPResponse(
-                        status: statusCode,
-                        headers: ["Content-Type": body.contentType ?? "application/octet-stream"],
-                        stream: chunks
-                    )
+                    if let chunks = try? body.chunkStream(consumer: statement) {
+                        // One catalog, shared with the interpreter (GitLab #830).
+                        let statusCode = HTTPStatusCatalog.code(for: response.status) ?? 200
+                        return NativeHTTPResponse(
+                            status: statusCode,
+                            headers: ["Content-Type": body.contentType ?? "application/octet-stream"],
+                            stream: chunks
+                        )
+                    }
                 }
                 return nil
             }
@@ -1439,78 +1437,105 @@ public func aro_native_http_server_start(_ port: Int32, _ contextPtr: UnsafeMuta
                     let expectedContentType = operationId.flatMap { httpResponseContentTypes[$0] }
 
                     // Check for single-value response that should be returned as-is
-                    if response.data.count == 1, let (_, anySendable) = response.data.first {
-                        if let str: String = anySendable.get() {
-                            let trimmed = str.trimmingCharacters(in: .whitespacesAndNewlines)
+                    //
+                    // `soleFlatValue` answers off the payload what
+                    // `response.data.count == 1` used to answer off the
+                    // flattened dictionary, so no response builds that
+                    // dictionary — or the JSON text of a collection inside it
+                    // — merely to find out whether it has one value
+                    // (GitLab #711). A collection's rendering is JSON text,
+                    // which begins with "[": the content sniffs below all test
+                    // a prefix and so never matched it, but a declared content
+                    // type or a file extension in the path still answers with
+                    // it, so those two cases render it on demand.
+                    let sole = ResponsePayload.soleFlatValue(response.payload)
+                    let soleText: String?
+                    switch sole {
+                    case .text(let str):
+                        soleText = str
+                    case .collection(let array):
+                        let pathWantsText = [".css", ".js", ".json", ".html", ".htm", ".xml", ".txt", ".svg"]
+                            .contains { requestPath.lowercased().hasSuffix($0) }
+                        if pathWantsText || expectedContentType == "text/html" || expectedContentType == "text/plain" {
+                            soleText = ResponsePayload.jsonText(for: array)
+                        } else {
+                            soleText = nil
+                        }
+                    case .nonText, .notSingle:
+                        soleText = nil
+                    }
+                    if let str = soleText {
+                        let trimmed = str.trimmingCharacters(in: .whitespacesAndNewlines)
 
-                            // Priority 1: Detect MIME type from request path file extension
-                            let lowercasePath = requestPath.lowercased()
-                            if lowercasePath.hasSuffix(".css") {
+                        // Priority 1: Detect MIME type from request path file extension
+                        let lowercasePath = requestPath.lowercased()
+                        if lowercasePath.hasSuffix(".css") {
+                            return (statusCode, ["Content-Type": "text/css; charset=utf-8"], str.data(using: .utf8))
+                        } else if lowercasePath.hasSuffix(".js") {
+                            return (statusCode, ["Content-Type": "text/javascript; charset=utf-8"], str.data(using: .utf8))
+                        } else if lowercasePath.hasSuffix(".json") {
+                            return (statusCode, ["Content-Type": "application/json; charset=utf-8"], str.data(using: .utf8))
+                        } else if lowercasePath.hasSuffix(".html") || lowercasePath.hasSuffix(".htm") {
+                            return (statusCode, ["Content-Type": "text/html; charset=utf-8"], str.data(using: .utf8))
+                        } else if lowercasePath.hasSuffix(".xml") {
+                            return (statusCode, ["Content-Type": "application/xml; charset=utf-8"], str.data(using: .utf8))
+                        } else if lowercasePath.hasSuffix(".txt") {
+                            return (statusCode, ["Content-Type": "text/plain; charset=utf-8"], str.data(using: .utf8))
+                        } else if lowercasePath.hasSuffix(".svg") {
+                            return (statusCode, ["Content-Type": "image/svg+xml"], str.data(using: .utf8))
+                        }
+
+                        // Priority 2: If OpenAPI specifies a content type, honor it
+                        if expectedContentType == "text/html" {
+                            return (statusCode, ["Content-Type": "text/html; charset=utf-8"], str.data(using: .utf8))
+                        }
+
+                        // ARO-0044: Honor text/plain for metrics endpoint (Prometheus format)
+                        if expectedContentType == "text/plain" {
+                            return (statusCode, ["Content-Type": "text/plain; version=0.0.4; charset=utf-8"], str.data(using: .utf8))
+                        }
+
+                        // Priority 3: Content-based detection (fallback)
+                        // Detect HTML content
+                        if trimmed.hasPrefix("<!DOCTYPE") || trimmed.hasPrefix("<!doctype") ||
+                           trimmed.hasPrefix("<html") || trimmed.hasPrefix("<HTML") {
+                            return (statusCode, ["Content-Type": "text/html; charset=utf-8"], str.data(using: .utf8))
+                        }
+
+                        // Detect JavaScript content
+                        if trimmed.hasPrefix("var ") || trimmed.hasPrefix("let ") ||
+                           trimmed.hasPrefix("const ") || trimmed.hasPrefix("function ") ||
+                           trimmed.hasPrefix("//") || trimmed.hasPrefix("/*") ||
+                           trimmed.hasPrefix("'use strict'") || trimmed.hasPrefix("\"use strict\"") ||
+                           trimmed.hasPrefix("(function") || trimmed.hasPrefix("import ") ||
+                           trimmed.hasPrefix("export ") {
+                            return (statusCode, ["Content-Type": "text/javascript; charset=utf-8"], str.data(using: .utf8))
+                        }
+
+                        // Detect CSS content
+                        if !trimmed.hasPrefix("{") && !trimmed.hasPrefix("<") {
+                            // try? is acceptable: the pattern is a hardcoded
+                            // literal that always compiles; a nil here only
+                            // skips the CSS content-type sniff and the body
+                            // falls through to JSON handling below.
+                            let cssPattern = try? NSRegularExpression(
+                                pattern: "^(@|\\*|[a-zA-Z][a-zA-Z0-9-]*|\\.[a-zA-Z]|#[a-zA-Z])[^{]*\\{",
+                                options: []
+                            )
+                            if let match = cssPattern?.firstMatch(in: trimmed, range: NSRange(trimmed.startIndex..., in: trimmed)),
+                               match.range.location != NSNotFound {
                                 return (statusCode, ["Content-Type": "text/css; charset=utf-8"], str.data(using: .utf8))
-                            } else if lowercasePath.hasSuffix(".js") {
-                                return (statusCode, ["Content-Type": "text/javascript; charset=utf-8"], str.data(using: .utf8))
-                            } else if lowercasePath.hasSuffix(".json") {
-                                return (statusCode, ["Content-Type": "application/json; charset=utf-8"], str.data(using: .utf8))
-                            } else if lowercasePath.hasSuffix(".html") || lowercasePath.hasSuffix(".htm") {
-                                return (statusCode, ["Content-Type": "text/html; charset=utf-8"], str.data(using: .utf8))
-                            } else if lowercasePath.hasSuffix(".xml") {
-                                return (statusCode, ["Content-Type": "application/xml; charset=utf-8"], str.data(using: .utf8))
-                            } else if lowercasePath.hasSuffix(".txt") {
-                                return (statusCode, ["Content-Type": "text/plain; charset=utf-8"], str.data(using: .utf8))
-                            } else if lowercasePath.hasSuffix(".svg") {
-                                return (statusCode, ["Content-Type": "image/svg+xml"], str.data(using: .utf8))
-                            }
-
-                            // Priority 2: If OpenAPI specifies a content type, honor it
-                            if expectedContentType == "text/html" {
-                                return (statusCode, ["Content-Type": "text/html; charset=utf-8"], str.data(using: .utf8))
-                            }
-
-                            // ARO-0044: Honor text/plain for metrics endpoint (Prometheus format)
-                            if expectedContentType == "text/plain" {
-                                return (statusCode, ["Content-Type": "text/plain; version=0.0.4; charset=utf-8"], str.data(using: .utf8))
-                            }
-
-                            // Priority 3: Content-based detection (fallback)
-                            // Detect HTML content
-                            if trimmed.hasPrefix("<!DOCTYPE") || trimmed.hasPrefix("<!doctype") ||
-                               trimmed.hasPrefix("<html") || trimmed.hasPrefix("<HTML") {
-                                return (statusCode, ["Content-Type": "text/html; charset=utf-8"], str.data(using: .utf8))
-                            }
-
-                            // Detect JavaScript content
-                            if trimmed.hasPrefix("var ") || trimmed.hasPrefix("let ") ||
-                               trimmed.hasPrefix("const ") || trimmed.hasPrefix("function ") ||
-                               trimmed.hasPrefix("//") || trimmed.hasPrefix("/*") ||
-                               trimmed.hasPrefix("'use strict'") || trimmed.hasPrefix("\"use strict\"") ||
-                               trimmed.hasPrefix("(function") || trimmed.hasPrefix("import ") ||
-                               trimmed.hasPrefix("export ") {
-                                return (statusCode, ["Content-Type": "text/javascript; charset=utf-8"], str.data(using: .utf8))
-                            }
-
-                            // Detect CSS content
-                            if !trimmed.hasPrefix("{") && !trimmed.hasPrefix("<") {
-                                // try? is acceptable: the pattern is a hardcoded
-                                // literal that always compiles; a nil here only
-                                // skips the CSS content-type sniff and the body
-                                // falls through to JSON handling below.
-                                let cssPattern = try? NSRegularExpression(
-                                    pattern: "^(@|\\*|[a-zA-Z][a-zA-Z0-9-]*|\\.[a-zA-Z]|#[a-zA-Z])[^{]*\\{",
-                                    options: []
-                                )
-                                if let match = cssPattern?.firstMatch(in: trimmed, range: NSRange(trimmed.startIndex..., in: trimmed)),
-                                   match.range.location != NSNotFound {
-                                    return (statusCode, ["Content-Type": "text/css; charset=utf-8"], str.data(using: .utf8))
-                                }
                             }
                         }
                     }
 
-                    // Build JSON from response data
-                    var jsonDict: [String: Any] = [:]
-                    for (key, anySendable) in response.data {
-                        jsonDict[key] = unwrapAnySendableForJSON(anySendable)
-                    }
+                    // Build the JSON body straight from the payload: records
+                    // flatten into dot-notation keys, collections go in as
+                    // collections. It used to read the flattened dictionary
+                    // and parse each collection's JSON text back so it could
+                    // re-serialise it below (GitLab #711). Same renderer the
+                    // interpreter uses, so the two modes cannot drift.
+                    var jsonDict: [String: Any] = ResponsePayload.jsonObject(response.payload)
 
                     // If no data, include status as fallback
                     if jsonDict.isEmpty {

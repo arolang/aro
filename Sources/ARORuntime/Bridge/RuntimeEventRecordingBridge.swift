@@ -294,19 +294,16 @@ private func buildCompiledUserActionInput(
 /// context and flatten it into the dict shape callers see from plugin
 /// and interpreter user-actions.
 ///
-/// Field values come from `structuredData` where `Return` recorded it, so a
-/// compiled binary hands lists and records back structured exactly like the
-/// interpreter does (GitLab #504). `Return` runs through the same
-/// `ReturnAction` in both modes, so there is one place where that record is
-/// made and both call sites read it.
+/// Field values are the response payload, so a compiled binary hands lists and
+/// records back structured exactly like the interpreter does (GitLab #504).
+/// `Return` runs through the same `ReturnAction` in both modes, so there is one
+/// place where the payload is recorded and both call sites read it — and since
+/// GitLab #711 there is only one payload to read.
 private func flattenCompiledUserActionResponse(_ context: RuntimeContext) -> [String: any Sendable] {
     guard let response = context.getResponse() else { return [:] }
     var dict: [String: any Sendable] = ["status": response.status]
     if !response.reason.isEmpty { dict["reason"] = response.reason }
-    for (key, anySendable) in response.data {
-        if let value: any Sendable = anySendable.get() { dict[key] = value }
-    }
-    for (key, value) in response.structuredData { dict[key] = value }
+    for (key, value) in response.payload { dict[key] = value }
     return dict
 }
 

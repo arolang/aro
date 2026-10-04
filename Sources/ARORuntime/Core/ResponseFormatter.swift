@@ -29,9 +29,15 @@ public struct ResponseFormatter: Sendable {
             "reason": response.reason
         ]
 
-        if !response.data.isEmpty {
+        // `data` renders the payload's flat form on each access (GitLab #711),
+        // so read it once. This is the printer the issue means by "render the
+        // flattened form on demand": the dot-notation keys and JSON-text
+        // collections are this output's shape, and `Examples/ContextAware`
+        // asserts them.
+        let data = response.data
+        if !data.isEmpty {
             var dataDict: [String: Any] = [:]
-            for (key, value) in response.data {
+            for (key, value) in data {
                 dataDict[key] = unwrapValue(value)
             }
             json["data"] = dataDict
@@ -45,8 +51,10 @@ public struct ResponseFormatter: Sendable {
         var lines: [String] = []
         lines.append("[\(response.status)] \(response.reason)")
 
-        if !response.data.isEmpty {
-            let flattenedPairs = flattenForHuman(response.data, prefix: "")
+        // One flattening per printed response (GitLab #711).
+        let data = response.data
+        if !data.isEmpty {
+            let flattenedPairs = flattenForHuman(data, prefix: "")
             for (key, value) in flattenedPairs.sorted(by: { $0.0 < $1.0 }) {
                 lines.append("  \(key): \(value)")
             }
@@ -148,8 +156,10 @@ public struct ResponseFormatter: Sendable {
         var pairs: [(String, String)] = []
         pairs.append(("reason", "String(\"\(response.reason)\")"))
 
-        if !response.data.isEmpty {
-            let flattened = flattenForDeveloper(response.data, prefix: "")
+        // One flattening per printed response (GitLab #711).
+        let data = response.data
+        if !data.isEmpty {
+            let flattened = flattenForDeveloper(data, prefix: "")
             pairs.append(contentsOf: flattened.sorted(by: { $0.0 < $1.0 }))
         }
 
