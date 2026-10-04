@@ -4,8 +4,8 @@
 **Author:** ARO Team
 **Status:** Implemented
 **Created:** 2026-08-17
-**Updated:** 2026-08-17
-**Requires:** ARO-0001 (Language Fundamentals), ARO-0081 (User-Defined Actions), ARO-0088 (Concurrency Model)
+**Updated:** 2026-10-04
+**Requires:** ARO-0001 (Language Fundamentals), ARO-0081 (User-Defined Actions), ARO-0083 (Terminal UI), ARO-0088 (Concurrency Model)
 
 ---
 
@@ -42,13 +42,14 @@ server's `StdioTransport` — not LSP's `Content-Length`.
 
 | `type` | Fields | Answer |
 |--------|--------|--------|
-| `execute` | `code`, optional `cellId` | `status: ok` with optional `display`, or `status: error` |
+| `execute` | `code`, optional `cellId`, optional `allowStdin` | `status: ok` with optional `display`, or `status: error` |
 | `is_complete` | `code` | `status: complete` / `incomplete` (+`indent`) / `invalid` |
 | `complete` | `code`, `cursor` | `matches`, `items`, `cursorStart`, `cursorEnd` |
 | `inspect` | `code`, `cursor` | `found`, `text` |
 | `info` | — | `info` (version, feature sets, variables) |
 | `reset` | — | `status: ok`; session cleared |
 | `shutdown` | — | `status: ok`; server exits |
+| `input_reply` | `value`, or `status: "error"` | nothing — it answers an `input_request` |
 
 **`cellId` — re-running a cell.** A front-end that has stable cell
 identity sends it with `execute`. Re-running a cell then releases the
@@ -65,7 +66,8 @@ longer binds are released with it, so the session reflects the cells as
 they are now.
 
 Every request carries an `id`. Every request gets exactly one `result` message
-with the same `id`.
+with the same `id` — `input_reply` excepted, because it is an answer rather than
+a question (see *Interactive input*).
 
 ### Messages from the server
 
@@ -74,10 +76,14 @@ with the same `id`.
 {"type":"stream","id":1,"name":"stdout","text":"hi\n"}    // output, as it happens
 {"type":"result","id":1,"status":"ok","display":{…},"durationMs":3.0}
 {"type":"result","id":1,"status":"error","error":{"ename":…,"evalue":…,"traceback":[…]}}
+{"type":"input_request","id":1,"prompt":"Your name: ","password":false}  // mid-execute
 ```
 
 **Ordering is guaranteed**: every `stream` for a request precedes that
 request's `result`. Clients never have to guess when a cell's output is done.
+An `input_request` obeys the same rule from the other side: everything the
+question is printed under — a `Select` menu, the `Log` lines above it — is on
+the wire before the question.
 
 ### Display bundles
 
@@ -198,7 +204,7 @@ the events come from**:
 | `NotificationSent Handler` | dispatched — fires on `Notify` |
 | `Socket Event Handler` | **undelivered** — a session starts no TCP server |
 | `WebSocket Event Handler` | **undelivered** — a session serves no HTTP contract |
-| `KeyPress Handler` | **undelivered** — the prompt owns the keyboard |
+| `KeyPress Handler` | **undelivered** — nothing here reads a raw keyboard (`Prompt`, `Select` and `Ask` do work — see *Interactive input*) |
 | `{repository} Evicted Handler` | **undelivered** — the eviction is published on the runtime's shared bus, not the session's |
 | `… Watch: …` | **undelivered** — a session refreshes no watches (ARO-0083) |
 | `Application-End` | **undelivered** — a session has no shutdown to run it on |
@@ -219,6 +225,125 @@ alone reads as "parked". The classification is one function
 (`REPLSession.handlerFamily`), read by `aro repl`, `aro repl --json`,
 `aro kernel`, piped stdin and Solaro alike, so no two front-ends can disagree
 about which family is which.
+
+## Interactive input
+
+`Prompt`, `Select` and `Ask` (ARO-0083 §5.2–5.3) read an answer from the user.
+They used to read it from the process's own terminal and nothing else, so in a
+notebook — where there is no terminal — the statement failed with
+`Service not registered: 'TerminalService'`, which names a Swift type and tells
+the reader nothing they can act on (GitLab #690).
+
+**The terminal is one answerer, not the only possible one.** A front-end driving
+a session already has a channel to its user; a question travels over it the same
+way output does.
+
+```
+   Prompt / Select / Ask
+            |
+            v
+   +--------------------+     no answerer registered
+   | who can answer?    |---------------------------> statement FAILS,
+   +--------------------+                             naming the reason
+      |             |
+      | terminal    | front-end channel
+      v             v
+   the TTY     input_request  -------->  front-end asks its user
+   (aro run,   <--------------  input_reply  (or refuses, or never answers:
+    aro repl)                                the wait is bounded)
+```
+
+### The message pair
+
+Jupyter already has this: `input_request` / `input_reply` on the **stdin
+channel**, which is how `input()` works in IPython. The native kernel bound that
+socket and never used it; it now serves it. The JSON protocol gains the same pair
+of messages, deliberately the same shape — `prompt` and `password` out, `value`
+back — so a kernel sitting between the two is a relay rather than a translator,
+and a reader of one protocol already knows the other.
+
+```jsonc
+// server → client, between an execute request and its result
+{"type":"input_request","id":1,"prompt":"Your name: ","password":false}
+// client → server
+{"id":1,"type":"input_reply","value":"Ada Lovelace"}
+// …or: the user dismissed the prompt and will not answer
+{"id":1,"type":"input_reply","status":"error"}
+```
+
+The `id` is the id of the `execute` that asked, which is what lets a client
+attribute the question to a cell.
+
+### Who may be asked
+
+A client declares it per request, as Jupyter does:
+
+| Front-end | Declares | Default when absent |
+|-----------|----------|---------------------|
+| `aro kernel` (native) | `allow_stdin` on `execute_request` | **false** — ipykernel's own default |
+| `aro repl --json` | `"allowStdin": true` on `execute` | **false** |
+
+False in both cases, and the reason is the same: a client that has never heard of
+`input_request` would be sent one, never reply, and the cell would sit out the
+whole timeout before failing. Opting in costs one field; refusing honestly is the
+default. "Run All Cells" and `nbconvert` send false themselves — there is nobody
+at the keyboard — and get the failure rather than a hang.
+
+### Nobody can answer
+
+The statement **fails**, with a sentence saying which front-end could have
+answered and how to get one:
+
+```
+Runtime Error: Cannot prompt the name with the _expression_. Interactive input is
+not available in this cell: the front-end ran this cell with allow_stdin: false,
+so `Prompt` has nobody to ask. Allow input for the cell and run it again.
+```
+
+Failing is the design, not a shortcut. A cell waiting forever on a question
+nobody will answer cannot be told from a slow one, and interrupting a notebook
+costs the whole session (see *Interrupt*). Every wait therefore has a way out:
+
+- **the reply**, or an `input_reply` that refuses;
+- **the channel closing** — stdin at EOF, a `shutdown` arriving instead of an
+  answer, the kernel's context shutting down;
+- **the timeout**, `ARO_INPUT_TIMEOUT_SECONDS`, 300s by default. `0` waits
+  indefinitely, for a front-end whose user may legitimately take an hour.
+
+A request arriving while a question is open is **refused by name** rather than
+run: the session is one request at a time (see *Limits*), and the refusal says
+to answer the `input_request` first.
+
+### Select without a picker
+
+Neither front-end has a menu widget, so `Select` renders the numbered menu it
+has always rendered — to the cell's output — and asks for a number:
+
+```
+Pick a colour:
+  1. Red
+  2. Green
+  3. Blue
+Enter selection (number): ▁
+```
+
+An out-of-range number selects nothing, as it always has. A front-end that grows
+a real picker overrides one method (`requestChoice`) and keeps `Prompt`
+unchanged.
+
+### What answers today
+
+| Front-end | Interactive input |
+|-----------|-------------------|
+| `aro run`, `aro repl` on a TTY | the terminal, unchanged |
+| `aro kernel` (native) | `input_request` on the stdin channel |
+| `Editor/jupyter-aro` (Python shim) | relayed onto ipykernel's `raw_input` / `getpass` |
+| SOLARO notebooks | not yet — it does not opt in, so a cell gets the explanation (GitLab #912) |
+
+A `KeyPress Handler` stays **undelivered** in a session (see *Handler
+families*), and this is where the line falls: this channel answers a question
+the program asked — one line, on request — while a `KeyPress` handler wants
+unsolicited keystrokes from a raw keyboard, which no front-end offers.
 
 ## Output capture
 
@@ -259,10 +384,12 @@ Threading follows libzmq's one-socket-one-thread rule: heartbeat echoes
 on its own thread, control has its own so shutdown stays answerable
 mid-cell, shell recv/handle/reply sequentially (one request at a time
 *is* the protocol), and iopub — written by both the shell thread and the
-output-capture readers — is serialized by a lock. Output capture is the
-same descriptor-redirection machinery the JSON server uses, sentinel
-drain included, so every `stream` for a cell is on iopub before that
-cell's reply.
+output-capture readers — is serialized by a lock. Stdin is confined to a
+serial queue of its own, because an `input_request` is raised *by* the
+cell the shell thread is blocked on. Output capture is the same
+descriptor-redirection machinery the JSON server uses, sentinel drain
+included, so every `stream` for a cell is on iopub before that cell's
+reply.
 
 Windows is excluded — the kernel shares the REPL's POSIX capture
 machinery. Use the Python shim there.
@@ -273,7 +400,9 @@ An `ipykernel` subclass owning one `aro repl --json` subprocess;
 `jupyter_client` handles ZMQ, signing, heartbeat. It predates the native
 kernel and remains the Windows path and the reference client for the
 JSON protocol. It does no ARO parsing — everything language-shaped stays
-on the ARO side.
+on the ARO side. An `input_request` is relayed onto ipykernel's own
+`raw_input` / `getpass`, which is the same stdin channel the native
+kernel speaks directly.
 
 ### Interrupt
 
@@ -337,7 +466,12 @@ front-end.
   reported as undelivered when defined rather than waited for (see *Handler
   families* above). Everything an ARO statement can trigger dispatches.
 - **One request at a time.** `REPLSession` is not internally synchronised, and
-  the protocol is request/response; concurrent requests are not supported.
+  the protocol is request/response; concurrent requests are not supported. An
+  open `input_request` is part of its cell's request, so a second request sent
+  before the answer is refused rather than queued (see *Interactive input*).
+- **No input widget.** `Select` renders a numbered menu and reads a number;
+  neither front-end offers a real picker, and SOLARO does not opt into input at
+  all yet.
 
 ## Completion & inspection
 

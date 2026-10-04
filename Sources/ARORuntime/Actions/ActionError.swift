@@ -123,6 +123,15 @@ extension AROError {
            case .unknownComputation = actionError {
             return actionError.description
         }
+        // GitLab #690. `Cannot prompt the name with the _expression_.` is a
+        // faithful rendering of the statement and tells a notebook user
+        // nothing: the statement is fine, there is simply nobody at the other
+        // end of it. The whole content of this failure is which front-end
+        // could have answered and did not.
+        if let actionError = error as? ActionError,
+           case .interactiveInputUnavailable = actionError {
+            return actionError.description
+        }
         // GitLab #843. Without this the user sees only "Cannot extract the
         // item: 5 from the short" — true, and silent about the one fact
         // that explains it.
@@ -193,6 +202,15 @@ public enum ActionError: Error, Sendable {
 
     /// Required service not registered
     case missingService(String)
+
+    /// `Prompt`, `Select` or `Ask` had nobody to ask (GitLab #690).
+    ///
+    /// Its own case rather than `missingService("TerminalService")`,
+    /// because the honest answer is a front-end one — "there is no
+    /// terminal and this front-end offered no input channel" — and the
+    /// name of a Swift type is not that. `reason` is already the complete
+    /// sentence (`InteractiveInputError.description`).
+    case interactiveInputUnavailable(reason: String)
 
     /// Repository not found
     case undefinedRepository(String)
@@ -296,6 +314,8 @@ extension ActionError: CustomStringConvertible {
             return "Invalid preposition '\(received.rawValue)' for action '\(action)'. Expected: [\(expectedStr)]"
         case .missingService(let name):
             return "Service not registered: '\(name)'"
+        case .interactiveInputUnavailable(let reason):
+            return reason
         case .undefinedRepository(let name):
             return "Repository not found: '\(name)'"
         case .typeMismatch(let expected, let actual, let variable):

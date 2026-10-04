@@ -75,6 +75,21 @@ final class ZMQSocket: @unchecked Sendable {
         zmq_setsockopt(handle, ZMQ_LINGER, &linger, MemoryLayout<Int32>.size)
     }
 
+    /// Bound the blocking receive on this socket.
+    ///
+    /// `-1` restores the default (wait forever), `0` makes a receive
+    /// non-blocking — which is how the stdin channel drains a stale reply
+    /// before asking a new question — and a positive value is the wait in
+    /// milliseconds, after which `receiveMultipart` returns nil.
+    ///
+    /// The stdin channel needs this because an `input_request` nobody
+    /// answers must end as a failed statement rather than as a cell that
+    /// spins forever (GitLab #690).
+    func setReceiveTimeout(milliseconds: Int32) {
+        var value = milliseconds
+        zmq_setsockopt(handle, ZMQ_RCVTIMEO, &value, MemoryLayout<Int32>.size)
+    }
+
     func bind(_ endpoint: String) throws {
         guard zmq_bind(handle, endpoint) == 0 else {
             throw ZMQError.bindFailed(endpoint: endpoint, message: Self.lastError())

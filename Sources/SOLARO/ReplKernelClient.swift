@@ -627,6 +627,18 @@ final class ReplKernelClient: ReplKernelDriving {
                   let continuation = pending.removeValue(forKey: id) else { return }
             streamSinks.removeValue(forKey: id)
             continuation.resume(returning: Reply(message: message))
+        case "input_request":
+            // Interactive input (GitLab #690). SOLARO does not send
+            // `"allowStdin": true`, so the server never asks — a notebook
+            // cell running `Prompt`, `Select` or `Ask` fails with the
+            // reason instead of opening an input box. Answering `error`
+            // here is the no-hang guarantee made structural rather than
+            // inferred from "we never opt in": if some later path does
+            // opt in before the cell UI exists (GitLab #912), the cell
+            // fails at once instead of sitting on a question nobody can
+            // see.
+            guard let id = message["id"] as? Int else { return }
+            sendLine(["id": id, "type": "input_reply", "status": "error"])
         default:
             break
         }

@@ -23,8 +23,12 @@
 //                      output-capture readers; serialized by
 //                      `iopubLock` (a full barrier, which is what
 //                      socket migration requires)
-//   stdin      ROUTER  bound but never used — the kernel never asks
-//                      for input, so `allow_stdin` is dead weight
+//   stdin      ROUTER  `input_request` / `input_reply`, so `Prompt`,
+//                      `Select` and `Ask` work in a cell (GitLab
+//                      #690). Confined to `stdinQueue`, a serial
+//                      queue: the round trip runs off the shell
+//                      thread because the cell that asked is what the
+//                      shell thread is blocked on.
 //
 // Interrupt is a signal (see the kernelspec): SIGINT's default
 // disposition kills the process and Jupyter restarts it — the same
@@ -33,6 +37,7 @@
 
 #if !os(Windows)
 import Foundation
+import ARORuntime
 import AROVersion
 
 final class JupyterKernelServer: @unchecked Sendable {
@@ -64,14 +69,30 @@ final class JupyterKernelServer: @unchecked Sendable {
     /// Serializes every iopub send — see the thread model above.
     private let iopubLock = NSLock()
 
+    /// The stdin socket's thread. Serial, so the socket stays confined
+    /// to one user at a time (libzmq's rule), and separate from the
+    /// shell thread because an `input_request` is raised *by* the cell
+    /// the shell thread is blocked on (GitLab #690).
+    private let stdinQueue = DispatchQueue(label: "aro.kernel.stdin")
+
     private let stateLock = NSLock()
     private var executionCount = 0
     /// Header of the request currently being served; parents every
     /// iopub message, including captured output racing in from the
     /// reader threads.
     private var currentParent: [String: Any] = [:]
+    /// ROUTER envelope of that request. The stdin channel addresses its
+    /// `input_request` with it — jupyter_client gives shell and stdin
+    /// the same identity, so the shell request's envelope reaches the
+    /// stdin peer (GitLab #690).
+    private var currentParentIdentities: [Data] = []
     private var drainToken = 0
     private var stopping = false
+    /// `allow_stdin` of the `execute_request` in flight. False unless the
+    /// front-end said otherwise — "Run All Cells" and `nbconvert` send
+    /// false, and a question nobody is there to answer must fail rather
+    /// than wait (GitLab #690).
+    private var allowStdin = false
 
     #if !os(Windows)
     private var captures: [OutputCapture] = []
@@ -108,6 +129,11 @@ final class JupyterKernelServer: @unchecked Sendable {
         engine.note = { [weak self] text in
             self?.publishStream(name: "stdout", text: text)
         }
+
+        session.useInteractiveInput(FrontEndInputChannel { [weak self] prompt, hidden in
+            guard let self else { throw InteractiveInputError.closed(action: "Prompt") }
+            return try await self.askFrontEnd(prompt: prompt, hidden: hidden)
+        })
 
         comms.publish = { [weak self] type, content in
             guard let self else { return }
@@ -221,7 +247,10 @@ final class JupyterKernelServer: @unchecked Sendable {
     // MARK: - Dispatch
 
     private func handle(_ message: JupyterWireMessage, on socket: ZMQSocket) {
-        stateLock.withLock { currentParent = message.header }
+        stateLock.withLock {
+            currentParent = message.header
+            currentParentIdentities = message.identities
+        }
         publishStatus("busy", parent: message.header)
         defer { publishStatus("idle", parent: message.header) }
 
@@ -301,11 +330,19 @@ final class JupyterKernelServer: @unchecked Sendable {
             return
         }
 
-        stateLock.withLock { executingCell = true }
+        stateLock.withLock {
+            executingCell = true
+            // ipykernel's own default, and the right one: a client that
+            // says nothing has promised nothing (GitLab #690).
+            allowStdin = (message.content["allow_stdin"] as? Bool) ?? false
+        }
         let outcome = runBlocking { [engine] in
             await engine.executeCell(code)
         }
-        stateLock.withLock { executingCell = false }
+        stateLock.withLock {
+            executingCell = false
+            allowStdin = false
+        }
         drainCaptures()
         // A cell that moved a bound variable moves its control.
         comms.syncWidgetsFromSession()
@@ -441,6 +478,122 @@ final class JupyterKernelServer: @unchecked Sendable {
     private func publishStream(name: String, text: String) {
         let parent = stateLock.withLock { currentParent }
         publish(type: "stream", parent: parent, content: ["name": name, "text": text])
+    }
+
+    // MARK: - Interactive input (GitLab #690)
+
+    /// Ask the front-end a question on the stdin channel and wait for
+    /// its `input_reply` — the mechanism behind `input()` in IPython,
+    /// and now behind `Prompt`, `Select` and `Ask` in an ARO cell.
+    ///
+    /// The reply is routed back to the same peer that sent the
+    /// `execute_request`, which is why the request's identities are
+    /// reused: jupyter_client gives its shell and stdin DEALERs the same
+    /// ZMQ identity (`session.bsession`), so the shell request's
+    /// envelope addresses the stdin socket's peer too. ipykernel relies
+    /// on exactly this.
+    ///
+    /// Three ways out, so a cell cannot hang: the reply, a receive
+    /// timeout, and the context shutting down under us.
+    private func askFrontEnd(prompt: String, hidden: Bool) async throws -> String {
+        let (allowed, parent) = stateLock.withLock { (allowStdin, currentParent) }
+
+        guard allowed else {
+            throw InteractiveInputError.declined(
+                action: "Prompt",
+                detail: "the front-end ran this cell with allow_stdin: false")
+        }
+
+        // Whatever the question is printed under — a `Select` menu, the
+        // `Log` lines above it — has to be on iopub before the input box
+        // appears, or the user is asked a question whose text is still
+        // in a pipe.
+        drainCaptures()
+
+        let timeout = InteractiveInput.timeoutSeconds
+        let identities = stateLock.withLock { currentParentIdentities }
+
+        let outcome: StdinOutcome = await withCheckedContinuation { continuation in
+            stdinQueue.async { [self] in
+                continuation.resume(returning: stdinRoundTrip(
+                    prompt: prompt,
+                    hidden: hidden,
+                    parent: parent,
+                    identities: identities,
+                    timeout: timeout
+                ))
+            }
+        }
+
+        switch outcome {
+        case .answer(let value):
+            return value
+        case .refused:
+            throw InteractiveInputError.declined(
+                action: "Prompt",
+                detail: "the front-end answered the input_request with an error")
+        case .silent where timeout == 0:
+            // No deadline was set, so the only way the receive ended is
+            // the kernel shutting down under the question.
+            throw InteractiveInputError.closed(action: "Prompt")
+        case .silent:
+            throw InteractiveInputError.timedOut(action: "Prompt", seconds: timeout)
+        }
+    }
+
+    /// What one stdin round trip produced.
+    private enum StdinOutcome {
+        case answer(String)
+        /// The front-end declined — an `input_reply` with
+        /// `status: "error"`, which is how a dismissed prompt arrives.
+        case refused
+        /// Nothing came back: the wait expired, or the context shut down.
+        case silent
+    }
+
+    /// The blocking half, confined to `stdinQueue`.
+    private func stdinRoundTrip(
+        prompt: String,
+        hidden: Bool,
+        parent: [String: Any],
+        identities: [Data],
+        timeout: Double
+    ) -> StdinOutcome {
+        // An `input_reply` left over from a previous question (a cell
+        // that timed out, a front-end that answered twice) would be read
+        // as the answer to this one. Drop whatever is already queued
+        // first — ipykernel does the same, for the same reason.
+        stdinSocket.setReceiveTimeout(milliseconds: 0)
+        while stdinSocket.receiveMultipart() != nil {}
+
+        let request = JupyterWireMessage(
+            identities: identities,
+            header: JupyterWire.header(msgType: "input_request", session: kernelSession),
+            parentHeader: parent,
+            metadata: [:],
+            content: ["prompt": prompt, "password": hidden]
+        )
+        stdinSocket.sendMultipart(JupyterWire.serialize(request, signer: signer))
+
+        // `0` means "wait as long as the user needs"; everything else is
+        // a bounded wait whose expiry fails the statement.
+        stdinSocket.setReceiveTimeout(milliseconds: timeout == 0 ? -1 : Int32(timeout * 1000))
+        defer { stdinSocket.setReceiveTimeout(milliseconds: -1) }
+
+        while true {
+            guard let frames = stdinSocket.receiveMultipart() else {
+                // Timed out, or the context shut down.
+                return .silent
+            }
+            guard let message = JupyterWire.parse(frames: frames, signer: signer) else {
+                // Unsigned or tampered: dropped, not answered, like
+                // every other channel.
+                continue
+            }
+            guard message.msgType == "input_reply" else { continue }
+            if (message.content["status"] as? String) == "error" { return .refused }
+            return .answer(message.content["value"] as? String ?? "")
+        }
     }
 
     // MARK: - Output capture

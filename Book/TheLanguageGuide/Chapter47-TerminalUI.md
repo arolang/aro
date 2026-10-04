@@ -427,6 +427,39 @@ Log "You selected: ${choices}" to the <console>.
 **Current implementation**: Numbered menu with user input.
 **Future**: Arrow key navigation, visual cursor, space to toggle.
 
+### 47.5.4 Where the Answer Comes From
+
+`Prompt`, `Select` and `Ask` need an *answerer*, and a terminal is only the
+most obvious one. Behind a pipe — the JSON REPL, a Jupyter kernel, SOLARO's
+notebooks — there is no terminal, and the front-end answers instead: the
+question travels over the protocol it already speaks, and the answer comes
+back. The statement is identical either way.
+
+```aro
+(* The same three statements in a terminal and in a notebook cell *)
+Prompt the <name> with "Your name: ".
+Prompt the <password: hidden> with "Password: ".
+Select the <colour> from the <options> with "Pick one:".
+```
+
+Three outcomes, and all three are finite:
+
+| Situation | What happens |
+|-----------|--------------|
+| A terminal, or a front-end that can ask | the answer is bound |
+| Nobody can answer | the statement **fails**, naming which front-end could have |
+| Somebody could, but does not reply | the statement fails after `ARO_INPUT_TIMEOUT_SECONDS` (300s; `0` waits indefinitely) |
+
+Failing is deliberate. A program waiting forever on an answer nobody will send
+cannot be told apart from one that is working, and in a notebook that costs the
+whole session to interrupt. The protocol messages are in ARO-0091 §Interactive
+input; a front-end opts in per cell, and a cell run with input disabled — "Run
+All Cells", `nbconvert`, a CI validator — gets the failure rather than a hang.
+
+`Select` falls back to the numbered menu above when the front-end has no picker
+of its own, so a notebook sees the same options a terminal does and answers
+with a number.
+
 ## 47.6 The Render Action and Section Compositor
 
 <div style="text-align: center; margin: 2em 0;">

@@ -121,6 +121,13 @@ public final class REPLSession: @unchecked Sendable {
     /// instead of layering a second handler on the same verb.
     private var userActionHost: UserDefinedActionHost?
 
+    /// The front-end's answer channel for `Prompt`, `Select` and `Ask`
+    /// (GitLab #690). Kept here because `clear()` builds a new
+    /// `RuntimeContext`, and a session that forgot its channel on
+    /// `:clear` would start failing interactive statements that worked a
+    /// moment earlier.
+    private var interactiveInput: (any InteractiveInputService)?
+
     /// Construct a REPL session. The action registry defaults to
     /// the process-wide singleton; tests can pass an isolated
     /// instance so concurrent sessions don't see each other's
@@ -175,6 +182,24 @@ public final class REPLSession: @unchecked Sendable {
             eventBus: eventBus,
             globalSymbols: globalSymbols
         )
+    }
+
+    // MARK: - Interactive input
+
+    /// Give this session a channel that can answer `Prompt`, `Select`
+    /// and `Ask` (GitLab #690).
+    ///
+    /// A terminal front-end needs no channel: `TerminalService` is
+    /// registered when stdout is a TTY and reads the keyboard directly.
+    /// A notebook front-end has no terminal and installs one of these
+    /// instead, so the question travels over the protocol it already
+    /// speaks. The channel takes priority over the terminal service —
+    /// see `InteractiveInput.provider`.
+    public func useInteractiveInput(_ channel: (any InteractiveInputService)?) {
+        interactiveInput = channel
+        if let channel {
+            context.register(channel as any InteractiveInputService)
+        }
     }
 
     // MARK: - Thread-safe accessors
@@ -291,9 +316,19 @@ public final class REPLSession: @unchecked Sendable {
                       + "HTTP contract")
 
         case .keyPress:
+            // Still undelivered after GitLab #690, and the reason is now
+            // the sharper one. Interactive input works in a notebook: the
+            // front-end answers `Prompt`, `Select` and `Ask` over its own
+            // channel. But that channel delivers an *answer to a question
+            // the program asked* — one line, on request — and a KeyPress
+            // handler wants the opposite: unsolicited keystrokes from a
+            // raw-mode keyboard nobody asked for. No front-end offers
+            // that, so the classification stands with its reason
+            // rewritten to say which half works.
             return .undelivered(
-                reason: "this session delivers no KeyPress events — the prompt itself owns "
-                      + "the keyboard")
+                reason: "this session delivers no KeyPress events — nothing here reads a "
+                      + "raw keyboard (Prompt, Select and Ask do work: they ask, the "
+                      + "front-end answers)")
 
         case .repositoryEviction(let repository):
             // The trigger IS a statement (a Store past `maxSize`), but
@@ -1165,6 +1200,12 @@ public final class REPLSession: @unchecked Sendable {
             context.register(TerminalService())
         }
         #endif
+
+        // …and the front-end's input channel, which the new context does
+        // not inherit (GitLab #690).
+        if let interactiveInput {
+            context.register(interactiveInput as any InteractiveInputService)
+        }
     }
 
     /// Get all variable names
