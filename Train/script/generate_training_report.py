@@ -151,9 +151,13 @@ def notebook_page(pdf, coverage, passage):
              fontsize=16, fontweight="bold", va="top")
     ax = fig.add_axes([0.30, 0.45, 0.64, 0.45])
     positions = range(len(names))
-    ax.barh(list(positions), verified, color="#2e7d32", label="verified output")
+    ax.barh(list(positions), verified, color="#2e7d32", label="mined")
+    # One grey bar for four reasons, named in full because "not mined" on its
+    # own reads as four regressions when nine of the course's cells are
+    # `(* expect-error *)` and exist in order to fail. The per-reason split is
+    # in coverage.json under each notebook's `coverage` key (GitLab #907).
     ax.barh(list(positions), unusable, left=verified, color="#bdbdbd",
-            label="not reproducible / expected error")
+            label="not mined (nondeterministic / failed /\nexpect-error / not reached)")
     ax.set_yticks(list(positions))
     ax.set_yticklabels([n.replace(".repl", "") for n in names], fontsize=6)
     ax.invert_yaxis()
