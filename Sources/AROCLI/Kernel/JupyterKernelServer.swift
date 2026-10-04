@@ -513,8 +513,25 @@ final class JupyterKernelServer: @unchecked Sendable {
         let timeout = InteractiveInput.timeoutSeconds
         let identities = stateLock.withLock { currentParentIdentities }
 
+        // The parent header crosses into the queue as bytes.
+        //
+        // It is a `[String: Any]` — a decoded JSON object — which is not
+        // `Sendable`, and capturing it in the `@Sendable` closure below is an
+        // error under Swift 6's strict checking. That error is Linux-only in
+        // practice, which is how it reached CI (GitLab #690).
+        //
+        // Serialising is the honest crossing rather than an
+        // `@unchecked Sendable` box over a dictionary this code does not own:
+        // the header is immutable JSON that arrived as bytes and goes back out
+        // as bytes, so the round trip costs one encode of a four-field object
+        // per question asked, and nothing is shared across the boundary at all.
+        let parentData = (try? JSONSerialization.data(withJSONObject: parent))
+            ?? Data("{}".utf8)
+
         let outcome: StdinOutcome = await withCheckedContinuation { continuation in
             stdinQueue.async { [self] in
+                let parent = (try? JSONSerialization.jsonObject(with: parentData))
+                    as? [String: Any] ?? [:]
                 continuation.resume(returning: stdinRoundTrip(
                     prompt: prompt,
                     hidden: hidden,
