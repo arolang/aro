@@ -514,6 +514,31 @@ public extension VariableBinding {
         resolveAny(name)
     }
 
+    /// `resolveAny(_:)` for a caller that is already `async`: identical in what
+    /// it returns, but a still-pending deferred result is *awaited* rather than
+    /// waited on with a blocking `force()` (GitLab #707).
+    ///
+    /// Use this, never `resolveAny`, from `async` code that runs on Swift's
+    /// cooperative pool — which is where every eager action and every statement
+    /// of the interpreter runs. `force()` parks the calling pthread on a
+    /// `DispatchGroup`, and the pool has only as many threads as there are
+    /// cores: at that many concurrent handlers, every thread ends up parked on a
+    /// deferred result and nothing async can run, including the work that would
+    /// resolve those results. Measured on an 18-core machine, 24 concurrent
+    /// requests to a handler reading a deferred `Request` deadlocked outright.
+    ///
+    /// Not a protocol requirement, so the call is statically dispatched and the
+    /// overwhelmingly common case — no future bound to `name` — costs the same
+    /// walk `resolveAny` would have done and nothing else.
+    func resolveAnyAwaitingDeferred(_ name: String) async -> (any Sendable)? {
+        // Only `RuntimeContext` stores bindings as `AROFuture`s, so for anything
+        // else the two resolves are the same function.
+        if let runtime = self as? RuntimeContext {
+            return await runtime.resolveAnyAsync(name)
+        }
+        return resolveAny(name)
+    }
+
     // MARK: - Default Type-Aware Implementations
 
     /// Default implementation: wrap resolved value with unknown type

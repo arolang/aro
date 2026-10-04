@@ -706,7 +706,12 @@ public actor RuntimeContext: ExecutionContext {
     /// or task body so the cooperative pool doesn't have a thread tied up
     /// blocking on another task on the same pool.
     ///
-    /// Issue #55, Phase 2.
+    /// Issue #55, Phase 2. It existed but nothing in the runtime called it — only
+    /// tests did — which is the whole of GitLab #707: every read the interpreter
+    /// makes went through the blocking `resolveAny`, from code running on the
+    /// cooperative pool. Reach for it through
+    /// `ExecutionContext.resolveAnyAwaitingDeferred(_:)`, which handles the
+    /// non-`RuntimeContext` case.
     public nonisolated func resolveAnyAsync(_ name: String) async -> (any Sendable)? {
         // Magic variables short-circuit through the sync path — they don't
         // produce futures.
@@ -718,7 +723,14 @@ public actor RuntimeContext: ExecutionContext {
         guard let typedValue = ctx.localVariable(name) else { return nil }
         if let future = typedValue.value as? AROFuture {
             do {
-                return try await future.value()
+                let forced = try await future.value()
+                // Same choice the blocking path makes, and it has to be the same
+                // answer: an action's own binding wins over the value it
+                // returned. This was missing, so adopting the async variant
+                // anywhere would have reintroduced the AROStream-vs-wrapper
+                // divergence `bindingProducedWhileForcing` exists to fix.
+                if let bound = ctx.bindingProducedWhileForcing(name) { return bound }
+                return forced
             } catch {
                 ctx.recordDeferredFailure(
                     error, binding: name, sourceLocation: future.sourceLocation)
@@ -726,6 +738,43 @@ public actor RuntimeContext: ExecutionContext {
             }
         }
         return typedValue.value
+    }
+
+    // MARK: - Non-blocking waits (GitLab #707)
+
+    /// `drainPendingFutures()` for an `async` caller: awaits instead of parking
+    /// a cooperative thread per outstanding future.
+    ///
+    /// Feature-set exit drains whatever nobody read, which is the one thing that
+    /// stops an unread failure being discarded (ARO-0088 §4). Doing it with
+    /// `force()` parked the handler's thread once per outstanding future, at the
+    /// moment a server is most likely to have many handlers finishing at once.
+    /// The compiled binary keeps the blocking drain — `aro_context_drain_deferred`
+    /// is called from generated C, where there is no cooperative thread to lose.
+    @discardableResult
+    public nonisolated func drainPendingFuturesAwaiting() async -> Error? {
+        if _isDraining { return nil }
+        let pending: [AROFuture] = withExclusiveMutation {
+            _isDraining = true
+            let snapshot = pendingFutures
+            pendingFutures.removeAll()
+            return snapshot
+        }
+        defer { _isDraining = false }
+        var firstError: Error?
+        for future in pending {
+            do {
+                _ = try await future.value()
+            } catch {
+                // Recorded as well as returned, for the same reason the blocking
+                // drain does it: the list is already empty, so a failure not
+                // recorded here is gone by the next drain.
+                recordDeferredFailure(
+                    error, binding: future.bindingName, sourceLocation: future.sourceLocation)
+                if firstError == nil { firstError = error }
+            }
+        }
+        return firstError
     }
 
     /// Resolve a variable returning the full TypedValue (type + value)
