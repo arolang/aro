@@ -137,7 +137,7 @@ how "covers every aspect that is written down" becomes checkable.
 | 35 | `35_preference_pairs.py` | Preference pairs whose two sides are the same program, one with a single thing wrong and the oracle's complaint recorded beside it. Length-matched by construction (the mean lengths agree to the character), and `reason`/`origin` travel with every row — `dpo_pairs_raw.jsonl` carried neither, and in 68.6% of its rows the chosen answer was simply the longer one (GitLab #799). `--audit FILE` reports any preference file's length bias. |
 | 34 | `34_thinking_pairs.py` | Thinking traces distilled from a real repair loop: take a program the runtime accepts, break it in one known way, ask the oracle, and write the `<think>` block from *that* diagnostic. Replaces the booster's template — 1 154 of its 1 156 traces enumerated each verb's role and preposition, and got Log's role wrong — and carries the system prompt `aro ask` sends on every row, so think and no-think never mix (GitLab #789). |
 | 33 | `33_git_diff_pairs.py` | Error→fix pairs mined from real ARO history. Whole files at both SHAs (a hunk cannot be checked), both run through `aro check`, and a pair is kept only when the *new* side checks green. Labelled `correction` when the old side failed and `code_transformation` otherwise, instead of everything being `debugging`; the answer is the commit message plus the diff, not the subject alone. Source tag `git:<path>@<sha>`, so the share cap and the quality table see one source rather than three thousand. Replaces the unversioned generator behind `git_examples_pairs.jsonl` (GitLab #781). |
-| 32 | `32_notebook_pairs.py` | **Runs in the pipeline as stage 14b.** The `Learning/` `.repl` notebook course — every code cell **executed** through `aro repl --json`, its real output becoming the expected answer. Four skills: predict a cell's output, write the next cell of a session, answer questions about the course, and emit `.repl` JSON (ARO-0091). Writes `data/32_notebooks/coverage.json`. |
+| 32 | `32_notebook_pairs.py` | **Runs in the pipeline as stage 14b.** The `Learning/` `.repl` notebook course — every code cell **executed** through `aro repl --json`, its real output becoming the expected answer. Four skills: predict a cell's output, write the next cell of a session, answer questions about the course, and emit `.repl` JSON (ARO-0091). Measured coverage: **201–203 of the course's 228 code cells mined, ~686 pairs** (GitLab #907). Writes `data/32_notebooks/coverage.json`. |
 
 #### The fix stage (`fix_training_data.py`)
 
@@ -178,6 +178,57 @@ make this stage different from the other miners:
 ```bash
 swift build --product aro
 ARO_BIN=.build/debug/aro python3 Train/script/32_notebook_pairs.py --dry-run --aro-check
+```
+
+##### How much of the course reaches the dataset (GitLab #907)
+
+Both gates above drop cells, and for a while nothing said how many. The stage
+was registered, correctly ordered before validation and assembly, and had
+twenty-two green unit tests about its plumbing — and the honest answer to "does
+the course contribute anything?" was *unknown*. So the stage reports the figure
+now: *cells mined / cells present*, per notebook, with every dropped cell
+attributed to the bucket that dropped it, and the buckets required to sum to
+the cells present. Measured over the whole course, repeated five times:
+
+| | cells |
+|---|---:|
+| code cells present (29 notebooks) | 228 |
+| **mined** — ran, and ran identically every repeat | **201–203** |
+| dropped: repeats disagreed (clocks, durations, `now`) | 11–13 |
+| dropped: `(* expect-error *)`, excluded by design | 9 |
+| dropped: ran and errored | 5 |
+| dropped: session died before reaching the cell | 0 |
+| coverage | **88.2–89.0% of present, 91.8–92.7% of eligible** |
+| pairs | 684–686 |
+
+*Eligible* excludes the nine `(* expect-error *)` cells, which exist in order
+to fail; training on one as if it were the expected result of correct code is
+the thing this stage must not do, so it is not a miss. Eligible is the figure
+to gate on, present the figure to report — and a notebook with no eligible
+cell reports no percentage rather than 0%.
+
+All five of the `failed` cells are `22-git-and-devops.repl`, and the cause is
+the sandbox rather than the notebook: its cells read `<git: "..">`, which is
+the real repository when `Learning/validate.py` runs them in place
+(`cwd=Learning/`) and an ordinary temp directory under the mirrored working
+copy the miner uses (GitLab #804). The course validator therefore passes those
+cells and the miner cannot mine them — tracked as GitLab #909, not fixed here,
+because every available fix either changes what the notebook teaches or
+rewrites it.
+
+Two jobs measure it. `train:oracle` mines a fixed two-notebook subset on every
+MR and asserts a non-zero pair count in each of the four families plus a
+per-notebook coverage floor (~2s). `train:notebook-coverage` runs the whole
+course on main, tags, release branches and schedules with
+`--min-coverage 0.85` (~47s locally, debug binary).
+
+```bash
+# the per-MR check, by hand
+ARO_BIN=.build/debug/aro python3 -m pytest \
+    Train/script/tests/test_notebook_pairs.py -q -m needs_binary -rs
+# the full-course figure, with the floor CI applies
+ARO_BIN=.build/debug/aro python3 Train/script/32_notebook_pairs.py \
+    --dry-run --min-coverage 0.85
 ```
 
 ### Re-validating a corpus that already exists (GitLab #783)
