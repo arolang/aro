@@ -265,7 +265,7 @@ func invokeCompiledFeatureSet(
 
 /// Pull the value a `When` should bind out of the callee's response.
 ///
-/// `Return … with <len>.` records its payload in `structuredData` when the value
+/// `Return … with <len>.` records its payload in `Response.payload` when the value
 /// is structured and in `data` otherwise (GitLab #504), so both are consulted —
 /// the name the test asked for first, then the single value a one-value response
 /// carries, which is what makes `When the <sum> from the <add-numbers>.` work
@@ -278,11 +278,15 @@ private func compiledResponseValue(
         return context.resolveAny(resultBase) ?? ""
     }
 
-    if let structured = response.structuredData[resultBase] { return structured }
-    if let named = response.data[resultBase]?.get() as (any Sendable)? { return named }
-    if response.structuredData.count == 1, let only = response.structuredData.values.first { return only }
-    if response.data.count == 1, let only = response.data.values.first?.get() as (any Sendable)? { return only }
+    // `payload` is the shape the feature set produced (#504). `data` is the
+    // flattened transport rendering of it, computed on each access since #711
+    // — so it is read once into a local here rather than four times.
+    if let structured = response.payload[resultBase] { return structured }
+    let flat = response.data
+    if let named = flat[resultBase]?.get() as (any Sendable)? { return named }
+    if response.payload.count == 1, let only = response.payload.values.first { return only }
+    if flat.count == 1, let only = flat.values.first?.get() as (any Sendable)? { return only }
     if let bound = context.resolveAny(resultBase) { return bound }
-    if let first = response.data.values.first?.get() as (any Sendable)? { return first }
+    if let first = flat.values.first?.get() as (any Sendable)? { return first }
     return response
 }
