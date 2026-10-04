@@ -1349,6 +1349,12 @@ public struct DataFlowAnalyzer {
             node.operand.accept(self)
         }
 
+        /// A range reads both its endpoints — `<lo>..<hi>` uses two variables
+        /// (ARO-0089, GitLab #546).
+        func visit(_ node: RangeExpression) -> Set<String> {
+            node.lower.accept(self).union(node.upper.accept(self))
+        }
+
         func visit(_ node: MemberAccessExpression) -> Set<String> {
             node.base.accept(self)
         }

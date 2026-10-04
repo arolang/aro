@@ -51,7 +51,8 @@ struct ExpressionSerializerCoverageTests {
             ("grouped", GroupedExpression(expression: ref("a"), span: span)),
             ("existence", ExistenceExpression(expression: ref("a"), span: span)),
             ("typeCheck", TypeCheckExpression(expression: ref("a"), typeName: "String", hasArticle: false, span: span)),
-            ("emptiness", EmptinessCheckExpression(expression: ref("a"), negated: false, span: span))
+            ("emptiness", EmptinessCheckExpression(expression: ref("a"), negated: false, span: span)),
+            ("range", RangeExpression(lower: ref("lo"), upper: ref("hi"), span: span))
         ]
     }
 

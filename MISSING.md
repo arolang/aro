@@ -34,7 +34,8 @@ These are absences the documentation itself works around. #830 tracks the set.
 | `Copy` / `Move` bind a fixed result name | two in one feature set is an immutability error |
 | `Publish` takes no `when` guard | |
 | No 405, 422, 429 or 503 status names | an unrecognised name silently maps to 200, with no check-time warning |
-| Ranges (`1..10`) | specified in ARO-0089, not implemented (GitLab #546) |
+| A materialised range is a `List` | ARO-0089 §10.2 — `Convert … to "list"` is unnecessary, and `Range` is not a type the runtime has |
+| `length` of a range literal counts its elements | ARO-0089 §10.3 — the answer is right, the memory is O(n); the `for each` slot is the O(1) one |
 | Type narrowing and match exhaustiveness | specified in ARO-0071, still proposed |
 | Window functions | specified in ARO-0018 §6, not implemented |
 | `<today>`, `<yesterday>`, `<tomorrow>` | specified in ARO-0041 §5, not resolved by the runtime |

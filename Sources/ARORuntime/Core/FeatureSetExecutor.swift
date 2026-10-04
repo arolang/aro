@@ -1600,6 +1600,19 @@ public final class FeatureSetExecutor: Sendable {
             for specifier in noun.specifiers {
                 collectionValue = try accessCollectionProperty(specifier, on: collectionValue)
             }
+        } else if let rangeExpression = loop.collectionExpression as? RangeExpression, !loop.isParallel {
+            // ARO-0089 §3.3: the collection slot is the one place a range is
+            // *not* materialised. Driving the loop from the two endpoints is
+            // what makes `for each <n> in 1->10_000_000` cost O(1) memory
+            // instead of 10 million boxed Ints — which is the reason the
+            // feature was asked for (GitLab #546).
+            //
+            // A `parallel for each` falls through to the eager path: it hands
+            // items to a task group, which needs them as values. Same choice
+            // the stream path makes below, and for the same reason.
+            let range = try await expressionEvaluator.evaluateRange(rangeExpression, context: context)
+            try await executeForEachRange(loop, range: range, context: context)
+            return
         } else if let expression = loop.collectionExpression {
             // Evaluated exactly once, before the first iteration — re-evaluating
             // per element would change both the semantics and the cost.
@@ -1734,6 +1747,61 @@ public final class FeatureSetExecutor: Sendable {
                     break
                 }
             }
+        }
+    }
+
+    // MARK: - Range For-Each (ARO-0089)
+
+    /// Iterate a range without materialising it: O(1) memory, whatever the
+    /// span (ARO-0089 §3.3, GitLab #546).
+    ///
+    /// Deliberately a transcription of `executeForEachLazy` rather than a
+    /// call into it — the element source is two integers, not a stream, and
+    /// wrapping them in one would reintroduce the per-element allocation this
+    /// path exists to avoid. The semantics it has to match are the loop's,
+    /// not the stream's: `where` filtering, `at <index>`, `Break` leaving the
+    /// loop (GitLab #664) and a `Return` inside the body reaching the feature
+    /// set rather than only ending the loop (GitLab #665).
+    private func executeForEachRange(
+        _ loop: ForEachLoop,
+        range: AROIntRange,
+        context: ExecutionContext
+    ) async throws {
+        var index = 0
+        var element = range.element(at: index)
+        while let value = element {
+            // Cooperative scheduling, exactly as the array path does it: a
+            // 10-million-element range must not pin a core for its duration.
+            if index % 500 == 0 { await Task.yield() }
+
+            let iterationContext = context.createChild(featureSetName: context.featureSetName)
+            iterationContext.bind(loop.itemVariable, value: value)
+            if let indexVar = loop.indexVariable {
+                iterationContext.bind(indexVar, value: index)
+            }
+
+            var passes = true
+            if let filter = loop.filter {
+                let filterResult = try await expressionEvaluator.evaluate(filter, context: iterationContext)
+                passes = (filterResult as? Bool) == true
+            }
+
+            if passes {
+                do {
+                    for bodyStatement in loop.body {
+                        try await executeStatement(bodyStatement, context: iterationContext)
+                        if let response = iterationContext.getResponse() {
+                            context.setResponse(response)
+                            return
+                        }
+                    }
+                } catch is BreakSignal {
+                    break
+                }
+            }
+
+            index += 1
+            element = range.element(at: index)
         }
     }
 

@@ -1063,7 +1063,11 @@ public final class Parser {
                     switch tokens[index + 1].kind {
                     case .plus, .minus, .hyphen, .star, .slash, .percent,
                          .plusPlus, .equalEqual, .bangEqual, .lessEqual,
-                         .greaterEqual, .and, .or, .contains, .matches:
+                         .greaterEqual, .and, .or, .contains, .matches,
+                         // The range operator makes the reference the lower
+                         // endpoint of an expression — `from <lo: n>-><hi>`
+                         // (ARO-0089, GitLab #546).
+                         .arrow:
                         return true
                     // `<params: count> default 3` is an expression, not an
                     // object with a query modifier (GitLab #547): read as an
@@ -2154,6 +2158,30 @@ public final class Parser {
         advance()
         result = String(firstValue)
 
+        // A range in a qualifier slot (ARO-0089 §4.2, GitLab #546). The
+        // qualifier slot selects an *operation*, so `<a: 1->10>` is not a
+        // range however it is spelled; left alone it dies on "Expected '>'"
+        // two tokens later. Consume the whole thing so one mistake earns one
+        // diagnostic.
+        if check(.arrow) {
+            let opToken = advance()
+            var upper = ""
+            if case .intLiteral(let endValue) = peek().kind {
+                advance()
+                upper = String(endValue)
+            }
+            diagnostics.error(
+                "A range cannot appear in a qualifier — <\(result)->\(upper)>",
+                at: opToken.span.start,
+                hints: [
+                    "The qualifier slot selects an operation; pass the range as the object instead — "
+                    + "`Compute the <len: length> from \(result)->\(upper).`",
+                    "An element range in a specifier is written with a hyphen — `<items: 1-3>` (ARO-0038)."
+                ]
+            )
+            return result
+        }
+
         // Check for range - the lexer produces intLiteral(-19) for "0-19" after the first "0"
         // So we look for a negative integer literal which indicates a range
         if case .intLiteral(let nextValue) = peek().kind, nextValue < 0 {
@@ -2498,6 +2526,10 @@ public final class Parser {
 /// `default` (GitLab #547) sits between arithmetic and comparison, so
 /// `<a> default 1 + 2` defaults to the whole sum and `<a> default 3 > 2`
 /// compares the defaulted value instead of defaulting to a boolean.
+///
+/// A range (`->`) sits in the same band, looser than arithmetic and tighter
+/// than comparison (ARO-0089 §2.2, GitLab #546): `1-><n> + 1` is
+/// `1->(<n> + 1)`, which is what it reads like.
 private enum Precedence: Int, Comparable {
     case none = 0
     case or = 1           // or
@@ -2506,10 +2538,11 @@ private enum Precedence: Int, Comparable {
     case equality = 4     // == != is is_not contains matches
     case comparison = 5   // < > <= >=
     case defaulting = 6   // default (GitLab #547)
-    case term = 7         // + - ++
-    case factor = 8       // * / %
-    case unary = 9        // unary -
-    case postfix = 10     // . []
+    case range = 7        // -> (ARO-0089)
+    case term = 8         // + - ++
+    case factor = 9       // * / %
+    case unary = 10       // unary -
+    case postfix = 11     // . []
 
     static func < (lhs: Precedence, rhs: Precedence) -> Bool {
         lhs.rawValue < rhs.rawValue
@@ -2775,6 +2808,12 @@ extension Parser {
         case .leftBracket:
             return .postfix
 
+        // The range operator (ARO-0089 §2.2, GitLab #546). `->` has no other
+        // meaning in the grammar — it lexed to an unused token before ranges
+        // existed — so no context is needed to recognise it.
+        case .arrow:
+            return .range
+
         // Context-sensitive: `default` is a value-returning fallback operator
         // (GitLab #547), not a reserved word — a variable or field may still be
         // called `default`. It is suppressed inside a where-condition, where
@@ -2808,6 +2847,26 @@ extension Parser {
             let endToken = try expect(.rightBracket, message: "']'")
             let span = left.span.merged(with: endToken.span)
             return SubscriptExpression(base: left, index: index, span: span)
+
+        // Range: `1->10` (ARO-0089 §2).
+        //
+        // The upper endpoint is parsed at `.range`, so arithmetic binds into it
+        // (`1-><n> + 1` is `1->(<n> + 1)`) while a second range operator does
+        // not. Chaining is then rejected here rather than parsed
+        // left-associatively into `(1->5)->10`, which is not a thing (§2.2).
+        case .arrow:
+            advance()
+            let upper = try parsePrecedence(.range)
+            if check(.arrow) {
+                diagnostics.error(
+                    "Ranges do not chain — `1->5->10` is not a nested range",
+                    at: peek().span.start,
+                    hints: ["Write one range: `1->10`."]
+                )
+            }
+            return RangeExpression(
+                lower: left, upper: upper,
+                span: left.span.merged(with: upper.span))
 
         // Binary operators
         default:
@@ -2989,6 +3048,21 @@ extension Parser {
         }
 
         let endToken = try expect(.rightBracket, message: "']'")
+
+        // `[1->10]` is a one-element list *holding* a range, which is almost
+        // certainly not what the author meant — so it is rejected rather than
+        // defined as sugar (ARO-0089 §5, GitLab #546). Defining it would make
+        // `[1->10]` and `[1->10, 20]` mean systematically different things.
+        for element in elements where element is RangeExpression {
+            diagnostics.error(
+                "[\(element.description)] is a list holding one range, not the values of "
+                + "\(element.description)",
+                at: element.span.start,
+                hints: ["Drop the brackets — `for each <n> in \(element.description) { … }`."]
+            )
+            break
+        }
+
         return ArrayLiteralExpression(elements: elements, span: startToken.span.merged(with: endToken.span))
     }
 

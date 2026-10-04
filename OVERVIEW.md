@@ -156,7 +156,7 @@ below. Every `ARO-NNNN` reference in the repository must resolve to a file there
 | 0022 | State Guards | Handler filtering with `field:value` |
 | 0081 | User-Defined Actions | `Application.<Name>` callable feature sets, recursion |
 | 0088 | Concurrency Model | Statement overlap, ordered effects, `parallel for each` |
-| 0089 | Ranges | `1..10` as a lazy value — **draft, not implemented** |
+| 0089 | Ranges | `1->10` as a value, both ends included; the `for each` slot iterates one in O(1) |
 
 ### Tooling & Developer Experience
 
@@ -500,7 +500,6 @@ direction:
 
 ### In Progress / Proposed
 
-- ARO-0089: Ranges — `1..10` as a lazy value (specified, not implemented)
 - Type narrowing (ARO-0071)
 - Continued LLVM expression optimization (ARO-0070)
 

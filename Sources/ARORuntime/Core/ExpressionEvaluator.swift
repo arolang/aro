@@ -194,6 +194,10 @@ public struct ExpressionEvaluator: Sendable {
         case let binary as BinaryExpression:
             return try await evaluateBinary(binary, context: context)
 
+        // Range: `1->10` (ARO-0089, GitLab #546)
+        case let range as RangeExpression:
+            return try await evaluateRange(range, context: context).sendableElements
+
         // Unary expression
         case let unary as UnaryExpression:
             return try await evaluateUnary(unary, context: context)
@@ -472,6 +476,43 @@ public struct ExpressionEvaluator: Sendable {
         if value is NullValue { return true }
         if value is NSNull { return true }
         return false
+    }
+
+    // MARK: - Range Evaluation (ARO-0089)
+
+    /// Evaluate a range's endpoints into the span they describe.
+    ///
+    /// Endpoints are evaluated **once** (§3.1) — this is called from the
+    /// expression path, and the for-each driver calls it once before the
+    /// first iteration. A non-Int endpoint throws: `aro check` catches the
+    /// literal cases, and a variable that turns out to hold a String has to
+    /// fail at the statement rather than count something it did not mean
+    /// (GitLab #546).
+    func evaluateRange(_ expr: RangeExpression, context: ExecutionContext) async throws -> AROIntRange {
+        let lowerValue = try await evaluate(expr.lower, context: context)
+        let upperValue = try await evaluate(expr.upper, context: context)
+        return AROIntRange(
+            lower: try Self.rangeEndpoint(lowerValue, side: "lower", of: expr),
+            upper: try Self.rangeEndpoint(upperValue, side: "upper", of: expr))
+    }
+
+    /// An Int endpoint, or an error naming the offending side.
+    ///
+    /// A Double that is a whole number is accepted — arithmetic on a parsed
+    /// value lands there easily (`<n> / 2` with an even `<n>`), and refusing
+    /// `1->5.0` while accepting `1->5` would be a surprise about
+    /// representation rather than about the program. A fractional one is
+    /// refused, which is the rule §3.1 states.
+    private static func rangeEndpoint(
+        _ value: any Sendable, side: String, of expr: RangeExpression
+    ) throws -> Int {
+        if let i = value as? Int { return i }
+        if let d = value as? Double, d == d.rounded(), d.magnitude < 9e18 { return Int(d) }
+        if let s = value as? String, let i = Int(s) { return i }
+        throw ActionError.typeMismatch(
+            expected: "Int",
+            actual: "\(type(of: value))",
+            variable: "the \(side) endpoint of \(expr.description)")
     }
 
     // MARK: - Unary Expression Evaluation

@@ -32,6 +32,15 @@ struct ExpressionSerializer {
             return """
             {"$binary":{"op":"\(binary.op.rawValue)","left":\(serializeExpression(binary.left)),"right":\(serializeExpression(binary.right))}}
             """
+        } else if let range = expr as? RangeExpression {
+            // ARO-0089. `lazy` is false here and true only in the for-each
+            // collection slot (`LLVMCodeGenerator.bindForEachCollection`),
+            // which is the one place the bridge keeps the range as a span
+            // instead of expanding it — the same rule the interpreter follows,
+            // written once per mode so the two cannot drift (GitLab #546).
+            return """
+            {"$range":{"lower":\(serializeExpression(range.lower)),"upper":\(serializeExpression(range.upper)),"lazy":false}}
+            """
         } else if let unary = expr as? UnaryExpression {
             return """
             {"$unary":{"op":"\(unary.op.rawValue)","operand":\(serializeExpression(unary.operand))}}
@@ -75,6 +84,15 @@ struct ExpressionSerializer {
         // not know, and the binary will silently evaluate it as "". See
         // `ExpressionSerializerCoverageTests` (#652), which fails instead.
         return "{\"$unknown\":true}"
+    }
+
+    /// The for-each collection slot's serialization of a range: the same node
+    /// with `lazy` set, so `aro_evaluate_and_bind` binds the span itself and
+    /// `aro_array_get_next` walks it two registers at a time (ARO-0089 §3.3).
+    func serializeLazyRange(_ range: RangeExpression) -> String {
+        """
+        {"$range":{"lower":\(serializeExpression(range.lower)),"upper":\(serializeExpression(range.upper)),"lazy":true}}
+        """
     }
 
     func serializeLiteralValue(_ lit: LiteralValue) -> String {

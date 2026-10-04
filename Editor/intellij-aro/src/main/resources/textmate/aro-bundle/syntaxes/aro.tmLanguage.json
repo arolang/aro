@@ -231,6 +231,10 @@
     "operators": {
       "patterns": [
         {
+          "name": "keyword.operator.range.aro",
+          "match": "->"
+        },
+        {
           "name": "keyword.operator.comparison.aro",
           "match": "(==|!=|<=|>=)"
         },

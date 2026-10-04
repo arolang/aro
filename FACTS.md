@@ -67,7 +67,7 @@ Source-of-truth order: `Proposals/` > `Sources/` > Wiki/`OVERVIEW.md` > `Website
 - Numbers: decimal, `0x` hex, `0b` binary, floats with `.` and `e/E` exponent, `_` separators between digits only (ARO-0082). Integer division truncates in both execution modes.
 - Booleans `true`/`false`; `null`; arrays `[…]`; objects `{ key: v, "quoted-key": v }`.
 - Regex literals `/pattern/flags`, flags `i s m` (`g` reserved). `/` is division after an identifier, `.`, or when followed by whitespace; otherwise a regex scan is attempted.
-- Delimiters: `( ) { } < > [ ] : . , -`. `..`/`..<` range operators are specified (ARO-0089) but not implemented.
+- Delimiters: `( ) { } < > [ ] : . , -`. The range operator is `->` (ARO-0089), both endpoints included, with no exclusive-bound form; `->` already lexed to `TokenKind.arrow`, which the parser had never consumed. A dot keeps both meanings it had — statement terminator and `../` in an import path — and a run of dots followed by an endpoint-looking character is reported as an attempted range naming the arrow.
 
 ## 5. Statements and control flow
 
