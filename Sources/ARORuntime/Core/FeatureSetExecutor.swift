@@ -799,6 +799,10 @@ public final class FeatureSetExecutor: Sendable {
         // by the route's limit, and reported against the statement that asked.
         // The materialization analysis normally prevents a streamed route from
         // ever reaching this, so it is the safety net rather than the path.
+        //
+        // This call is also where a deferred input to *this* statement stops
+        // being pending, which is what keeps `force()` off the cooperative pool
+        // (GitLab #707) — see the function's own note.
         try await materializeRequestBodyIfNeeded(
             statement: statement,
             verb: verb,
@@ -990,7 +994,12 @@ public final class FeatureSetExecutor: Sendable {
     /// is where that gets reported instead of disappearing.
     private func drainDeferredResults(context: ExecutionContext) async throws {
         guard let runtime = context as? RuntimeContext else { return }
-        let drainError = runtime.drainPendingFutures()
+        // Awaiting, not forcing: exit drains everything still outstanding, so
+        // the blocking variant parked the handler's own cooperative thread once
+        // per unread future — at exactly the moment a loaded server has many
+        // handlers finishing at once (GitLab #707). The compiled binary keeps
+        // the blocking drain; `aro_context_drain_deferred` runs on a C thread.
+        let drainError = await runtime.drainPendingFuturesAwaiting()
         if let observed = runtime.takeDeferredFailure() {
             // Fire the error-any checkpoint here too. Under ARO-0088 deferral a
             // value-producing action that fails does not throw at
@@ -1230,8 +1239,10 @@ public final class FeatureSetExecutor: Sendable {
             guard asBool(conditionResult) else { return }
         }
 
-        // Get the internal value
-        guard var value = context.resolveAny(statement.internalVariable) else {
+        // Get the internal value. Awaiting resolve, not `resolveAny`: publishing
+        // a deferred result is a read of it, and a read must not park a
+        // cooperative-pool thread (GitLab #707).
+        guard var value = await context.resolveAnyAwaitingDeferred(statement.internalVariable) else {
             throw ActionError.undefinedVariable(statement.internalVariable)
         }
 
@@ -1272,8 +1283,10 @@ public final class FeatureSetExecutor: Sendable {
         _ statement: MatchStatement,
         context: ExecutionContext
     ) async throws {
-        // Resolve the subject value
-        guard var subjectValue = context.resolveAny(statement.subject.base) else {
+        // Resolve the subject value. Awaiting resolve: a `match` on a deferred
+        // result is a read, and reading it must not park a cooperative-pool
+        // thread (GitLab #707).
+        guard var subjectValue = await context.resolveAnyAwaitingDeferred(statement.subject.base) else {
             throw ActionError.undefinedVariable(statement.subject.base)
         }
 
@@ -1483,6 +1496,25 @@ public final class FeatureSetExecutor: Sendable {
     /// The classification is `StreamConsumptionPolicy`, the same table the
     /// compile-time analysis uses — one source of truth, so what the analyzer
     /// predicts and what the runtime does cannot drift apart.
+    ///
+    /// It carries a second duty, and the reads below must not be weakened to a
+    /// non-forcing `resolveAnyRaw` without moving it: these two names are the
+    /// statement's own result and object, so resolving them here is what the
+    /// *action* then finds already materialized (GitLab #707).
+    /// `resolveAnyAwaitingDeferred` rather than `resolveAny`, because this runs
+    /// on Swift's cooperative pool,
+    /// whose thread count is the core count — forcing here parked one of those
+    /// threads on a `DispatchGroup` for the whole of the deferred action's I/O,
+    /// and at as many concurrent handlers as cores the pool had none left to
+    /// finish the work that would release them. Measured on an 18-core machine:
+    /// 24 concurrent requests to a handler that reads a deferred `Request`
+    /// deadlocked outright, 22 of them timing out at 60 s with all 18
+    /// cooperative threads in `dispatch_group_wait`.
+    ///
+    /// Awaiting changes nothing about *what* is seen — the awaiting resolve
+    /// keeps the `bindingProducedWhileForcing` preference and the
+    /// `recordDeferredFailure` attribution — and nothing about *which* names are
+    /// waited for. Only the thread stops being parked.
     private func materializeRequestBodyIfNeeded(
         statement: AROStatement,
         verb: String,
@@ -1504,13 +1536,13 @@ public final class FeatureSetExecutor: Sendable {
 
         // The body can be in either slot: `Compute … from <upload>` puts it in
         // the object, `Log <upload> to the <console>` in the result.
-        if let body = context.resolveAny(objectDescriptor.base) as? any UnreadBody,
+        if let body = await context.resolveAnyAwaitingDeferred(objectDescriptor.base) as? any UnreadBody,
            !objectDescriptor.specifiers.isEmpty || consumption == .wholeValue {
             let value = try await body.materializedValue(statement: describeStatement())
             context.bind(objectDescriptor.base, value: value, allowRebind: true)
         }
 
-        if let body = context.resolveAny(statement.result.base) as? any UnreadBody,
+        if let body = await context.resolveAnyAwaitingDeferred(statement.result.base) as? any UnreadBody,
            !statement.result.specifiers.isEmpty || consumption == .wholeValue {
             let value = try await body.materializedValue(statement: describeStatement())
             context.bind(statement.result.base, value: value, allowRebind: true)
@@ -1584,7 +1616,10 @@ public final class FeatureSetExecutor: Sendable {
         // property access) or a general expression (GitLab #519).
         var collectionValue: any Sendable
         if let noun = loop.collection {
-            guard let resolved: any Sendable = context.resolveAny(noun.base) else {
+            // Awaiting resolve: iterating a deferred collection is a read, and
+            // the loop body cannot start before it anyway — so it is the same
+            // wait, off the cooperative pool (GitLab #707).
+            guard let resolved: any Sendable = await context.resolveAnyAwaitingDeferred(noun.base) else {
                 throw ActionError.undefinedVariable(noun.base)
             }
             collectionValue = resolved
