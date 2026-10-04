@@ -227,7 +227,7 @@ Log "URL: ${<url>}" to the <console>.
 | Keepalive | `Keepalive the <application> for the <events>.` | Keep app running for external events (servers only) |
 | Return | `Return an <OK: status> for the <context>.` | Return success |
 
-**Note:** Batch applications do not need `<Keepalive>` because `<Emit>` blocks until all downstream handlers complete. Only use `<Keepalive>` for applications that must stay alive to receive external events (e.g., HTTP servers, file watchers).
+**Note:** Batch applications do not need `<Keepalive>`, but not because `<Emit>` blocks — it does not. Shutdown drains the event cascade: the runtime waits for in-flight handlers, and for publishes that have not yet fanned out, before the process exits. Only use `<Keepalive>` for applications that must stay alive to receive *external* events (e.g. HTTP servers, file watchers). Use `<Deliver>` where a later statement in the same feature set depends on a handler having finished.
 
 ---
 

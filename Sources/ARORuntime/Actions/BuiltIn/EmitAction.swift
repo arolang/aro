@@ -50,12 +50,18 @@ public struct EmitAction: ActionImplementation {
 
     public init() {}
 
-    public func execute(
+    /// The event an `Emit` or a `Deliver` statement describes.
+    ///
+    /// Shared because the two verbs differ only in whether they wait: the
+    /// event name comes from the result slot, the payload from the object
+    /// slot, and the body-anchoring rule applies to both (GitLab #905).
+    /// Two copies of this would be two chances to disagree about what an
+    /// event *is*.
+    static func buildEvent(
         result: ResultDescriptor,
         object: ObjectDescriptor,
         context: ExecutionContext
-    ) async throws -> any Sendable {
-        try validatePreposition(object.preposition)
+    ) async throws -> DomainEvent {
 
         // Get event type from result (e.g., "UserCreated" from <UserCreated: event>)
         let eventType = result.base
@@ -123,18 +129,101 @@ public struct EmitAction: ActionImplementation {
         // DomainEvent payload:   { payloadKey: value } where payloadKey = object variable name
         //   Handlers extract with: Extract the <user> from the <event: user>
         let event = DomainEvent(eventType: eventType, payload: payload)
+        return event
+    }
 
-        // Emit to event bus and wait for handlers to complete
-        // This ensures event handlers finish before continuing
+    public func execute(
+        result: ResultDescriptor,
+        object: ObjectDescriptor,
+        context: ExecutionContext
+    ) async throws -> any Sendable {
+        try validatePreposition(object.preposition)
+        let event = try await Self.buildEvent(
+            result: result, object: object, context: context)
+
+        // Hand the event to the bus and continue. `Emit` does not wait for its
+        // handlers (ARO-0088 §7, GitLab #905).
+        //
+        // It did, for one release: #893 found ARO-0088 and ARO-0007 saying
+        // opposite things, with the runtime implementing ARO-0007's "waits",
+        // and corrected the proposal to match the code. That was the wrong
+        // direction. Events are background work — a feature set that emits one
+        // has said what happened, and is not thereby responsible for
+        // everything that listens. Waiting couples the emitter to the slowest
+        // handler, and to every handler anyone adds later.
+        //
+        // Causality is still available, by asking for it: `Deliver` is this
+        // same delivery, awaited.
+        //
+        // Nothing is lost at exit. `publish` pre-increments a synchronously
+        // visible counter before it spawns its Task, and `awaitPendingEvents`
+        // waits on that counter as well as on `inFlightHandlers` — so a
+        // program that emits and returns still drains before the process does.
         if let eventBus = context.eventBus {
-            await eventBus.publishAndTrack(event)
+            eventBus.publish(event)
         } else {
-            // Fallback to fire-and-forget if no event bus
             context.emit(event)
         }
 
-        return EmitResult(eventType: eventType, success: true)
+        return EmitResult(eventType: event.domainEventType, success: true)
     }
+}
+
+/// Delivers a domain event and waits for every matching handler to finish.
+///
+/// `Emit` hands an event over and continues; `Deliver` is the same delivery
+/// with the emitter waiting, so the statement after it may rely on what the
+/// handlers did (ARO-0007 §7.3's causality promise, now attached to the verb
+/// that actually makes it — GitLab #905).
+///
+/// Identical statement shape to `Emit`, because it is the same event:
+///
+/// ```
+/// Emit    a <UserCreated: event> with <user>.    (* continues *)
+/// Deliver a <UserCreated: event> with <user>.    (* waits *)
+/// ```
+///
+/// Waiting is not ordering. The handlers still run concurrently with each
+/// other, in unspecified order; what `Deliver` promises is that all of them
+/// have finished — the distinction #893 drew, which is worth keeping.
+public struct DeliverAction: ActionImplementation {
+    public static let role: ActionRole = .export
+    public static let verbs: Set<String> = ["deliver"]
+    public static let validPrepositions: Set<Preposition> = [.with, .to]
+
+    public init() {}
+
+    public func execute(
+        result: ResultDescriptor,
+        object: ObjectDescriptor,
+        context: ExecutionContext
+    ) async throws -> any Sendable {
+        try validatePreposition(object.preposition)
+        let event = try await EmitAction.buildEvent(
+            result: result, object: object, context: context)
+
+        guard let eventBus = context.eventBus else {
+            // No bus is no handlers, so there is nothing to wait for.
+            context.emit(event)
+            return DeliveryResult(eventType: event.domainEventType, success: true)
+        }
+        await eventBus.publishAndTrack(event)
+        return DeliveryResult(eventType: event.domainEventType, success: true)
+    }
+}
+
+/// What a `Deliver` statement answers with.
+///
+/// Deliberately **not** a handler count. The number available at that point is
+/// `matchingSubscriptions.count`, and it is not what it looks like: an event
+/// with no handlers reports 1 and an event with one reports 2, because every
+/// `X Handler` subscribes to the single `"domain"` key (GitLab #704) and one
+/// subscriber in that bucket accepts everything. Reporting it would have been
+/// an authoritative-looking wrong answer; counting handlers that actually ran
+/// needs the handlers to say so, which is a change of its own.
+public struct DeliveryResult: Sendable, Equatable {
+    public let eventType: String
+    public let success: Bool
 }
 
 /// Result of an emit operation
