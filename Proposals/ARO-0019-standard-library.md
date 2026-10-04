@@ -49,7 +49,11 @@ Whole numbers without decimals.
 
 ### 1.2 Float
 
-Decimal numbers for precision calculations.
+Binary (IEEE 754) decimal numbers, for measurement and general arithmetic.
+
+For **money**, reach for `Currency` instead — §3.2.1 and ARO-0003 §Primitive
+Types. `Float` cannot represent `0.08` or `2.40`, so the example below is right
+about the tax rate and approximate about the tax.
 
 ```aro
 (Calculate Tax: Financial Example) {
@@ -287,29 +291,53 @@ should absorb rather than delegate.
 **Numeric results keep their type**: `sum` of a list of integers is an integer,
 so it logs as `6` rather than `6.0`. `avg` is always a Float — averaging
 integers rarely yields one, and truncating silently would be worse than a
-decimal point.
+decimal point. `sum` of a column of exact amounts (§3.2.1) is exact, and `avg`
+of one divides by `Currency`'s stated rule rather than dropping to `Float`.
 
 **Empty collections**: `sum` of nothing is `0`. `avg` and `random` of nothing
 are runtime errors, because neither has a defensible answer.
 
-### 3.2.1 Money: the `fixed` Qualifier
+### 3.2.1 Money: `as Currency`, and the `fixed` Qualifier
+
+**Hold money as `Currency`.** `Compute the <total> from <qty> * <price>.` with
+`3` and `2.40` produces `7.199999999999999`, because `Float` is binary floating
+point and binary floating point cannot represent `2.40`. The same statement
+written `as Currency` is exact base-10 arithmetic and produces `7.20`:
+
+```aro
+Compute the <line-total> as Currency from <qty> * <price>.   (* 7.20 *)
+```
+
+That is the recommended way to hold an amount, and ARO-0003 §Primitive Types
+specifies it: the scale rules, the stated half-up rounding on division, why the
+format carries no currency *code*, and why `as Decimal` means the same thing
+(it used to mean `Float`, which was the sharpest edge the type system had —
+GitLab #906).
+
+#### Why it matters where it matters
+
+Human-facing output has hidden the float artifact since GitLab #474 — console
+rendering is 15 significant digits, so `7.199999999999999` prints as `7.2` —
+but files do not and must not: `Write` and HTTP response bodies serialize at
+full precision. A gold-layer CSV built from float arithmetic therefore shipped
+`99.94999999999999` in its revenue column, and the analyst who opened it had a
+question. That is GitLab #517, in the language's own core demographic.
+
+An amount held as `Currency` cannot do that. It is a number, not a rendering,
+and it serialises as a JSON, CSV and YAML number at its own scale — `99.95`,
+in both `aro run` and an `aro build` binary.
+
+#### `fixed` keeps its job
 
 | Qualifier | Purpose | Example |
 |-----------|---------|---------|
 | `fixed` | Round to a fixed number of decimal places (2 by default) | `Compute the <total: fixed> from the <raw-total>.` |
 
-`Compute the <total> from <qty> * <price>.` with `3` and `2.40` produces
-`7.199999999999999`. Human-facing output has hidden that since GitLab #474 —
-console rendering is 15 significant digits, so it prints `7.2` — but files do
-not and must not: `Write` and HTTP response bodies serialize at full precision.
-A gold-layer CSV built from float arithmetic therefore shipped
-`99.94999999999999` in its revenue column, and the analyst who opened it had a
-question. That is GitLab #517, in the language's own core demographic.
-
-`fixed` moves the correction from the renderer to the *value*. It rounds through
-the decimal spelling, so the stored `Double` is the one nearest to `99.95` — and
-every downstream path then agrees about it: console, JSON, CSV, and any
-arithmetic that reads it back.
+`fixed` settles on a **presentation scale**. On a `Float` it is a repair: it
+rounds through the decimal spelling, so the stored `Double` is the one nearest
+to `99.95` and every downstream path then agrees about it — console, JSON, CSV,
+and any arithmetic that reads it back. On a `Currency` there is nothing to
+repair, so it is a rescale: `fixed` of `7.2` is the exact amount `7.20`.
 
 ```aro
 Reduce the <raw-revenue> from the <rows> with sum(<line_total>).
@@ -322,18 +350,35 @@ without one, and must be 0…15. **The result stays numeric.** Returning a
 rendered string would print correctly and then quote itself into a JSON data
 product, which is a different wrong answer.
 
-Round each amount once, where it is produced, to the precision that amount
-actually has. Rounding the *same* quantity twice at different precisions is how
-two reports come to disagree by a penny; re-applying `fixed` after a `sum` of
-already-rounded values is not that — it is the cleanup floating-point addition
-still needs. Holding money in integer minor units through the pipeline and
-dividing at the end remains available and is the stricter choice for ledgers.
+#### Which to reach for
 
-`round`, `money`, `currency` and `precision` are not qualifiers; each redirects
-to `fixed` by name at check time, because edit distance would never find it
-from "money". Capitalisation decides which advice applies: `Money` written
-PascalCase is ARO-0014's domain *type*, and is still redirected to the `as`
-clause (`Compute the <cost> as Money from …`) rather than to `fixed`.
+- The amount is **computed** — a line total, a tax, a subtotal: `as Currency`,
+  at the statement that computes it. The exactness then travels: a statement
+  reading an exact amount stays exact without the annotation, so the amount is
+  computed once and every aggregate agrees about it.
+- The amount is **displayed or exported at a fixed number of places**:
+  `fixed`, once, at the end.
+- The amount is a **float you did not compute** — read from a float column, or
+  returned by a plugin: `fixed` is still the cleanup, and `as Currency` on the
+  next statement that touches it makes the rest exact.
+
+Round each amount once, to the precision that amount actually has. Rounding the
+*same* quantity twice at different precisions is how two reports come to
+disagree by a penny.
+
+Holding money in **integer minor units** through the pipeline and dividing at
+the end remains available and is the stricter choice for ledgers: an `Integer`
+cannot acquire a fractional place at all, and equality over it needs no rule.
+
+#### Names that are not qualifiers
+
+`round`, `rounded` and `precision` redirect to `fixed` by name at check time,
+because edit distance would never find it from "round". `money`, `currency`,
+`decimal` and `exact` redirect to **`as Currency`** — rounding is not what they
+ask for; being right is. Capitalisation decides which advice applies: `Money`
+written PascalCase is ARO-0014's domain *type* and is redirected to the `as`
+clause under its own name (`Compute the <cost> as Money from …`), not to
+`Currency`.
 
 ### 3.3 The Qualifier Namespace Is Closed
 
@@ -470,7 +515,8 @@ JSON is handled automatically by the runtime for HTTP requests and responses.
 | Type | Literal Example | Description |
 |------|-----------------|-------------|
 | Integer | `42`, `-10`, `0` | Whole numbers |
-| Float | `3.14`, `0.5`, `-2.7` | Decimal numbers |
+| Float | `3.14`, `0.5`, `-2.7` | Decimal numbers, binary (IEEE 754) |
+| Currency | `as Currency` on a computed result | Decimal numbers, exact (base 10) — money |
 | String | `"Hello"`, `"World"` | Text values |
 | Boolean | `true`, `false` | Logical values |
 | DateTime | `now` | Current timestamp |
@@ -487,6 +533,7 @@ ARO uses dynamic typing with type inference. The Swift runtime maps ARO values t
 |----------|------------|
 | Integer | `Int` |
 | Float | `Double` |
+| Currency / Decimal | `AROCurrency` (a scaled `Int`) |
 | String | `String` |
 | Boolean | `Bool` |
 | DateTime | `Date` |

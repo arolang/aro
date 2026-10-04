@@ -62,6 +62,17 @@ public struct FormatSerializer: Sendable {
     }
 
 
+    /// Compact JSON for a payload holding an exact `Currency` amount
+    /// (GitLab #906).
+    ///
+    /// `JSONSerialization` cannot carry one, and widening it to `Double`
+    /// first loses exactly the precision the format exists to keep. This is
+    /// the same writer the `.json` file path uses, so an amount is spelled
+    /// identically whether it leaves over HTTP or into a file.
+    public static func serializeExactJSON(_ value: Any) -> String {
+        writeJSON(convertAnyToJSONSerializable(value), pretty: false)
+    }
+
     // MARK: - Number rendering (GitLab #517 follow-up)
 
     /// Renders a Double the way Swift prints it: the shortest decimal that
@@ -120,6 +131,13 @@ public struct FormatSerializer: Sendable {
             return renderDouble(double)
         case let float as Float:
             return renderDouble(Double(float))
+        case let exact as AROCurrency:
+            // GitLab #906. An exact amount is a JSON *number*, written at its
+            // own scale. Falling through to the `default` below would quote
+            // it, and ARO-0019 §3.2.1 already settled that a rendered string
+            // "would print correctly and then quote itself into a JSON data
+            // product, which is a different wrong answer".
+            return exact.description
         case let str as String:
             return "\"\(escapeJSON(str))\""
         case let array as [Any]:
@@ -158,40 +176,14 @@ public struct FormatSerializer: Sendable {
     // MARK: - JSON Serialization
 
     private static func serializeJSON(_ value: any Sendable) -> String {
-        var jsonValue = convertToJSONSerializable(value)
-
-        // Ensure we have a valid top-level JSON type (array or object)
-        // Wrap primitives in an object if needed
-        if !JSONSerialization.isValidJSONObject(jsonValue) {
-            // Try wrapping in an object or converting to string representation
-            switch jsonValue {
-            case let str as String:
-                return "\"\(escapeJSON(str))\""
-            case let num as Int:
-                return String(num)
-            case let num as Double:
-                return String(num)
-            case let bool as Bool:
-                return bool ? "true" : "false"
-            default:
-                // Last resort: try to describe the value as JSON-like
-                jsonValue = ["value": jsonValue]
-            }
-        }
-
         // Not JSONSerialization: it renders Doubles at 17 significant
-        // digits on Darwin (GitLab #517 follow-up).
-        if JSONSerialization.isValidJSONObject(jsonValue) {
-            return writeJSON(jsonValue, pretty: true)
-        }
-        do {
-            // Fallback for non-JSON-serializable values
-            if let str = value as? String {
-                return "\"\(escapeJSON(str))\""
-            }
-            // Try to build JSON manually
-            return buildJSONManually(value)
-        }
+        // digits on Darwin (GitLab #517 follow-up), and it rejects an exact
+        // `Currency` amount outright (GitLab #906). `writeJSON` handles
+        // scalars and containers alike and never throws, so the
+        // `isValidJSONObject` gate — which asked a question about a type
+        // system this writer no longer uses — is gone. Same shape as
+        // `serializeJSONCompact`.
+        return writeJSON(convertToJSONSerializable(value), pretty: true)
     }
 
     /// Build JSON string manually for types that JSONSerialization can't handle
@@ -203,6 +195,9 @@ public struct FormatSerializer: Sendable {
             return String(int)
         case let double as Double:
             return String(double)
+        case let exact as AROCurrency:
+            // A JSON number, at its own scale (GitLab #906).
+            return exact.description
         case let bool as Bool:
             return bool ? "true" : "false"
         case let array as [any Sendable]:
@@ -235,6 +230,8 @@ public struct FormatSerializer: Sendable {
             return String(int)
         case let double as Double:
             return String(double)
+        case let exact as AROCurrency:
+            return exact.description
         case let bool as Bool:
             return bool ? "true" : "false"
         case let array as [Any]:
@@ -290,6 +287,9 @@ public struct FormatSerializer: Sendable {
             return String(int)
         case let double as Double:
             return String(double)
+        case let exact as AROCurrency:
+            // A YAML number, at its own scale (GitLab #906).
+            return exact.description
         case let bool as Bool:
             return bool ? "true" : "false"
         case let array as [any Sendable]:
@@ -844,6 +844,11 @@ public struct FormatSerializer: Sendable {
             return int
         case let double as Double:
             return double
+        case let exact as AROCurrency:
+            // Passed through rather than widened to Double: `writeJSON` knows
+            // how to spell it exactly, and `Double(7.20)` does not
+            // (GitLab #906).
+            return exact
         case let array as [any Sendable]:
             return array.map { convertToJSONSerializable($0) }
         case let dict as [String: any Sendable]:
@@ -878,6 +883,8 @@ public struct FormatSerializer: Sendable {
             return int
         case let double as Double:
             return double
+        case let exact as AROCurrency:
+            return exact
         case let array as [Any]:
             return array.map { convertAnyToJSONSerializable($0) }
         case let dict as [String: Any]:
@@ -901,6 +908,11 @@ public struct FormatSerializer: Sendable {
             return String(int)
         case let double as Double:
             return String(double)
+        case let exact as AROCurrency:
+            // The exact decimal spelling, unquoted — this is the CSV cell a
+            // gold-layer data product ships, and the one GitLab #517 found
+            // reading `99.94999999999999` (GitLab #906).
+            return exact.description
         case let bool as Bool:
             return String(bool)
         default:

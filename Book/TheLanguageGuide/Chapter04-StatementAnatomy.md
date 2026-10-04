@@ -105,7 +105,7 @@ Backslashes inside `/…/` need no escaping, which is why raw strings are not th
 
 ### Number Literals
 
-Number literals can be integers or floating-point values. Integers are written as sequences of digits, optionally preceded by a minus sign for negative numbers. Floating-point numbers include a decimal point between digits. There is no distinction in syntax between integers and floats; the runtime handles numeric types appropriately.
+Number literals can be integers or floating-point values. Integers are written as sequences of digits, optionally preceded by a minus sign for negative numbers. Floating-point numbers include a decimal point between digits. There is no distinction in syntax between integers and floats; the runtime handles numeric types appropriately. A literal with a decimal point is a `Float`; where a statement needs a different number format it asks for one with the `as` clause on the result — `as Currency` for exact decimal money (Chapter 41).
 
 ### Boolean Literals
 

@@ -872,7 +872,15 @@ public final class Application: @unchecked Sendable {
         }
 
         let bodyData: Data?
-        if let jsonData = try? JSONSerialization.data(withJSONObject: jsonBody, options: [.sortedKeys]) {
+        if ResponseFormatter.containsExactAmount(jsonBody) {
+            // GitLab #906: an exact `Currency` amount is written by ARO's own
+            // JSON writer, which spells it at its own scale. `JSONSerialization`
+            // cannot carry the type at all, and widening it to Double first is
+            // the precision loss the format exists to prevent. The compiled
+            // path (`ServiceBridge.getContextResponse`) does the same, so a
+            // money field reads identically in both modes.
+            bodyData = FormatSerializer.serializeExactJSON(jsonBody).data(using: .utf8)
+        } else if let jsonData = try? JSONSerialization.data(withJSONObject: jsonBody, options: [.sortedKeys]) {
             bodyData = jsonData
         } else {
             bodyData = "{\"status\":\"\(response.status)\"}".data(using: .utf8)

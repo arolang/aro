@@ -30,8 +30,16 @@ struct ModifierBinder {
 
     // MARK: - Value Source Binding
 
-    func bindValueSource(_ valueSource: ValueSource, prefix: String) {
+    /// - Parameter asType: the statement's `as <Type>` annotation, which
+    ///   decides whether the expression may be constant-folded at build time
+    ///   (GitLab #906). The runtime reads the same annotation from the
+    ///   `_as_type_` modifier to pick its arithmetic; see
+    ///   `bindResultTypeAnnotation`.
+    func bindValueSource(
+        _ valueSource: ValueSource, prefix: String, asType: String? = nil
+    ) {
         let ip = ctx.insertionPoint
+        let folding = NumberFormatCatalog.allowsConstantFolding(asType)
 
         switch valueSource {
         case .none:
@@ -43,7 +51,8 @@ struct ModifierBinder {
 
         case .expression(let expr):
             // Serialize expression (with constant folding if applicable)
-            let exprJSON = ctx.stringConstant(serializer.serializeExpression(expr))
+            let exprJSON = ctx.stringConstant(
+                serializer.serializeExpression(expr, folding: folding))
             _ = ctx.module.insertCall(
                 externals.evaluateExpression,
                 on: [ctx.currentContextVar!, exprJSON],
@@ -54,13 +63,42 @@ struct ModifierBinder {
             // Sink expression: evaluate and bind to _result_expression_ for LogAction/response actions
             // Constant folding happens in serializeExpression (GitLab #102)
             let resultExprName = ctx.stringConstant("_result_expression_")
-            let exprJSON = ctx.stringConstant(serializer.serializeExpression(expr))
+            let exprJSON = ctx.stringConstant(
+                serializer.serializeExpression(expr, folding: folding))
             _ = ctx.module.insertCall(
                 externals.evaluateAndBind,
                 on: [ctx.currentContextVar!, resultExprName, exprJSON],
                 at: ip
             )
         }
+    }
+
+    /// Binds the statement's `as <Type>` annotation as the `_as_type_`
+    /// modifier (GitLab #906).
+    ///
+    /// The C result descriptor carries a base, its specifiers and their count
+    /// — there is no fourth field, and the LLVM struct type mirrors it. So the
+    /// annotation travelled nowhere, and `ResultTypeCoercion` was a
+    /// guaranteed no-op in compiled code: every `as Float`, `as Integer` and
+    /// `as Currency` statement behaved differently under `aro build` than
+    /// under `aro run`. Carrying it as a per-statement modifier is what every
+    /// other clause already does, so it is swept by the same
+    /// `aro_context_clear_transients` call and cannot leak into the next
+    /// statement.
+    ///
+    /// Emitted only when there is an annotation, which is almost never, so
+    /// the common statement pays nothing.
+    func bindResultTypeAnnotation(_ asType: String?) {
+        guard let asType, !asType.isEmpty else { return }
+        _ = ctx.module.insertCall(
+            externals.variableBindString,
+            on: [
+                ctx.currentContextVar!,
+                ctx.stringConstant("_as_type_"),
+                ctx.stringConstant(asType),
+            ],
+            at: ctx.insertionPoint
+        )
     }
 
     // MARK: - Query and Range Modifiers Binding

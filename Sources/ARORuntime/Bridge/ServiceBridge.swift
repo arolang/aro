@@ -1547,6 +1547,14 @@ public func aro_native_http_server_start(_ port: Int32, _ contextPtr: UnsafeMuta
                     // (e.g. a non-JSON object slipped into response.data) — the
                     // client would get a bare {"status":"ok"} with the real data
                     // silently dropped, so surface it.
+                    // GitLab #906: same rule as the interpreter
+                    // (`Application.buildHTTPResponse`) — a payload holding an
+                    // exact amount is written by ARO's own JSON writer, so a
+                    // money field reads identically in both modes.
+                    if ResponseFormatter.containsExactAmount(jsonDict) {
+                        let body = FormatSerializer.serializeExactJSON(jsonDict)
+                        return (statusCode, ["Content-Type": "application/json"], body.data(using: .utf8))
+                    }
                     if let jsonData = try? JSONSerialization.data(withJSONObject: jsonDict, options: [.sortedKeys]) {
                         return (statusCode, ["Content-Type": "application/json"], jsonData)
                     }

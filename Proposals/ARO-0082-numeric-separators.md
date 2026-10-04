@@ -120,6 +120,16 @@ Underscores do not affect the numeric value:
 | `1_234.567_890` | 1234.56789 |
 | `1234.56789` | 1234.56789 |
 
+A separated literal is still a `Float`, so `1_000.00` is the nearest `Double`
+to 1000.00 and not the decimal itself. Underscores make a literal *readable*;
+they do not change what it is. Where the value is money and the arithmetic has
+to be exact, annotate the statement that computes it — `as Currency`, ARO-0003
+§Primitive Types — and write the literal however reads best:
+
+```aro
+Compute the <budget> as Currency from 1_250_000.00 / 12.
+```
+
 ### 3.2 Grouping Freedom
 
 Underscores can appear between any digits, not just at thousand separators:

@@ -642,6 +642,12 @@ public final class LLVMCodeGenerator {
             on: [ctx.currentContextVar!],
             at: ctx.insertionPoint)
 
+        // GitLab #906: the `as <Type>` annotation, as a modifier. It has no
+        // slot in the C result descriptor, so this is how it reaches both the
+        // expression evaluator (which must pick its arithmetic *before*
+        // evaluating) and the action (which coerces afterwards).
+        binder.bindResultTypeAnnotation(statement.result.asType)
+
         // Bind query modifiers if present
         binder.bindQueryModifiers(statement.queryModifiers)
 
@@ -649,7 +655,8 @@ public final class LLVMCodeGenerator {
         binder.bindRangeModifiers(statement.rangeModifiers)
 
         // Bind value source if present
-        binder.bindValueSource(statement.valueSource, prefix: prefix)
+        binder.bindValueSource(
+            statement.valueSource, prefix: prefix, asType: statement.result.asType)
 
         // `Start the <socket-server> with { port: 9123 }.` has nowhere to put
         // the map except the object slot, so it parses as `with the

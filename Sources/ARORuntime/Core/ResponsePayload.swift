@@ -130,6 +130,12 @@ public enum ResponsePayload {
             json[key] = int
         case let double as Double:
             json[key] = double
+        case let exact as AROCurrency:
+            // Carried through as itself (GitLab #906). `String(describing:)`
+            // via the `default` below would quote it into the body, and
+            // widening it to Double is the precision loss `Currency` exists
+            // to prevent. The body writer spells it exactly.
+            json[key] = exact
         case let bool as Bool:
             json[key] = bool
         case let dict as [String: any Sendable]:

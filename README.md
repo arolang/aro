@@ -129,8 +129,8 @@ paths:
 ```
 
 The contract is also the only place complex types are defined. ARO itself has String, Integer,
-Float, Boolean and DateTime, plus `List` and `Map`; everything else comes from
-`components.schemas`.
+Float, Currency (exact base-10 decimals, for money), Boolean and DateTime, plus `List` and `Map`;
+everything else comes from `components.schemas`.
 
 ### The rules worth knowing on day one
 
