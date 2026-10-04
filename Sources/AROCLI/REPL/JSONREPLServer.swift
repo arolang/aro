@@ -254,7 +254,7 @@ final class JSONREPLServer: @unchecked Sendable {
     // MARK: - Execute
 
     /// Run a cell, with relative paths resolving against the notebook's own
-    /// folder when the front-end said which one it is (GitLab #909).
+    /// folder when the front-end said which one it is (GitLab #915).
     ///
     /// `AROWorkingDirectory.setProcessDefault` rather than its task-local:
     /// binding an ARORuntime `@TaskLocal` from AROCLI segfaults on Linux

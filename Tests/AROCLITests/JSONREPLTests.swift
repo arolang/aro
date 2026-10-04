@@ -189,7 +189,7 @@ struct JSONREPLProtocolTests {
 
     @Test("An execute request carries the notebook's directory, or nothing")
     func baseDirOnRequest() throws {
-        // The front-end half of GitLab #909: the kernel process runs in the
+        // The front-end half of GitLab #915: the kernel process runs in the
         // project root, so the notebook says which folder its relative paths
         // mean. Absent is the session default, not the empty string — a
         // front-end that does not know stays on today's behaviour.

@@ -43,7 +43,7 @@ struct JSONREPLRequest: Decodable {
     /// `Learning/validate.py` has always used (it runs with `cwd=Learning/`).
     /// A front-end that serves several notebooks from one session cannot
     /// express that with the process's working directory, because they are in
-    /// different folders (GitLab #909).
+    /// different folders (GitLab #915).
     ///
     /// Absent means the session's own default: the project directory for
     /// `aro repl <dir>`, otherwise the process's working directory.

@@ -76,7 +76,7 @@ a project holds notebooks in several folders, and a reader looking at
 `<git: "..">`. Without the field that cell discovered whatever repository sits
 above the project root, or none, and answered `Cannot retrieve the status from
 the git: ..` — while the same notebook passed under `Learning/validate.py`,
-which runs with `cwd=Learning/` (GitLab #909).
+which runs with `cwd=Learning/` (GitLab #915).
 
 So the directory travels per request. The server applies it for that cell and
 restores the previous default afterwards, which also means a front-end may run
