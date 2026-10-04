@@ -1545,6 +1545,13 @@ public func aro_native_http_server_start(_ port: Int32, _ contextPtr: UnsafeMuta
                     // surface it.
                     // try? is acceptable: the warning below is the report, and
                     // the status-only body is the pre-existing answer.
+                    //
+                    // `jsonBody` also picks the writer: a payload carrying an
+                    // exact `Currency` amount is written by ARO's own
+                    // (GitLab #906). That decision used to sit here and in
+                    // `Application.buildHTTPResponse`, duplicated; it moved
+                    // inside, where the serialiser now lives, so the two modes
+                    // cannot disagree about which writer a money response got.
                     if let jsonData = try? ResponsePayload.jsonBody(
                         response.payload, whenEmpty: [("status", response.status)]) {
                         return (statusCode, ["Content-Type": "application/json"], jsonData)

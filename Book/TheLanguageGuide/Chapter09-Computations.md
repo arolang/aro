@@ -85,11 +85,36 @@ Aggregating a list, deduplicating it, or counting the lines of a file are things
 | `sha256` | SHA-256 digest, hex-encoded (alias of `hash`) | `Compute the <digest: sha256> from <payload>.` |
 | `trim` | Strip surrounding whitespace | `Compute the <clean: trim> from <field>.` |
 | `replace` | Substring replacement | `Compute the <id: replace> from <t> with { find: "-", replace: "_" }.` |
-| `fixed` | Round to a fixed number of decimals | `Compute the <price: fixed> from <amount> with { digits: 2 }.` |
+| `fixed` | Round to a fixed number of decimals | `Compute the <price: fixed> from <amount> with { places: 2 }.` |
 
-`fixed` is the one to reach for with money. `Compute the <price: fixed> from
-3.14159 with { digits: 2 }.` binds `3.14`, and it accepts a String as readily as
-a number, so a value that arrived from a request body needs no conversion first.
+`fixed` settles on a **presentation scale**. `Compute the <price: fixed> from
+3.14159 with { places: 2 }.` binds `3.14`; the count comes from
+`with { places: N }` (or a bare `with N`), is 2 without one, and must be 0…15.
+It accepts a String as readily as a number, so a value that arrived from a
+request body needs no conversion first. The result stays numeric — returning a
+rendered string would print correctly and then quote itself into a JSON data
+product, which is a different wrong answer.
+
+For **money**, the thing to reach for is not a qualifier at all: it is
+`as Currency`, which makes the arithmetic exact at the statement that computes
+the amount (Chapter 41).
+
+```aro
+Compute the <line-total> as Currency from <qty> * <price>.   (* 7.20, exactly *)
+```
+
+The two divide the work. `as Currency` is about being *right*: base-10
+arithmetic, so `3 * 2.40` is `7.20` rather than `7.199999999999999`, and the
+exactness travels to every statement that reads the amount. `fixed` is about
+being *presented*: two places in the CSV, four in the rate table. On a `Float`
+`fixed` is a repair — it rounds through the decimal spelling, so the stored
+`Double` is the one nearest `99.95` and every downstream path agrees about it.
+On a `Currency` there is nothing to repair, so it is a rescale: `fixed` of
+`7.2` is the exact amount `7.20`.
+
+Round each amount once, at the precision that amount actually has. Rounding the
+*same* quantity twice at different precisions is how two reports come to
+disagree by a penny.
 
 Counting the lines of a file is `lines` then `length`:
 

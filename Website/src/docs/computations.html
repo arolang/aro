@@ -296,7 +296,7 @@ Compute the &lt;second-length: length&gt; from the &lt;second-message&gt;.</code
                 <tr><td><code>sum</code></td><td>Total of a numeric collection</td><td>List</td></tr>
                 <tr><td><code>avg</code> / <code>average</code></td><td>Arithmetic mean</td><td>List</td></tr>
                 <tr><td><code>random</code></td><td>A random element, or a random Int below a bound</td><td>String, List, Int, Float</td></tr>
-                <tr><td><code>fixed</code></td><td>Round to N decimal places, 2 by default; <code>with 3</code></td><td>Int, Float, String</td></tr>
+                <tr><td><code>fixed</code></td><td>Settle on a presentation scale: N decimal places, 2 by default; <code>with { places: 3 }</code></td><td>Int, Float, Currency, String</td></tr>
                 <tr><td><code>identity</code></td><td>Return the input unchanged</td><td>Any</td></tr>
             </tbody>
         </table>
@@ -387,9 +387,35 @@ Compute the &lt;second-length: length&gt; from the &lt;second-message&gt;.</code
 Compute the &lt;taxed&gt; from &lt;subtotal&gt; * 1.19.
 Compute the &lt;total: fixed&gt; from &lt;taxed&gt;.</code></pre>
 
+        <h2>Money</h2>
         <p>
-            <code>fixed</code> is the one to reach for with money: it rounds to two decimal places
-            unless you say otherwise.
+            What you reach for with money is not a qualifier but the <code>as</code> clause.
+            <code>Float</code> is binary floating point and cannot represent <code>2.40</code>, so
+            three of them is <code>7.199999999999999</code>. <code>as Currency</code> makes the same
+            statement exact base-10 arithmetic:
+        </p>
+
+        <pre><code>Compute the &lt;line-total&gt; as Currency from &lt;qty&gt; * &lt;price&gt;.   (* 7.20 *)
+Compute the &lt;with-fee&gt; from &lt;line-total&gt; + 1.05.             (* still exact *)</code></pre>
+
+        <p>
+            A <code>Currency</code> is a number, not a rendering: it serialises as a JSON, CSV or YAML
+            number, and in an HTTP body, at its own scale — <code>99.95</code>, never
+            <code>99.94999999999999</code> and never <code>"99.95"</code>. Exactness is contagious, as
+            the second statement above shows, so an amount is computed once and every aggregate
+            downstream agrees about it. <code>as Decimal</code> is the same format under a different
+            name. The format carries no currency <em>code</em>; that lives in
+            <a href="https://github.com/arolang/aro/blob/main/Proposals/ARO-0014-domain-modeling.md" class="proposal-link">ARO-0014</a>'s
+            <code>Money</code> schema, and the two compose.
+        </p>
+
+        <p>
+            <code>fixed</code> then settles the <em>presentation</em> scale — two places in a CSV, four
+            in a rate table. On a <code>Float</code> it is a repair, rounding through the decimal
+            spelling so the stored <code>Double</code> is the one nearest <code>99.95</code>; on a
+            <code>Currency</code> there is nothing to repair, so it is a rescale and <code>fixed</code>
+            of <code>7.2</code> is the exact amount <code>7.20</code>. Round each amount once, at the
+            precision that amount actually has.
         </p>
 
         <h2>Chaining</h2>
@@ -424,7 +450,11 @@ Compute the &lt;ranked: stats.sort&gt; from the &lt;numbers&gt;.</code></pre>
             <li>
                 <strong>A result <em>type</em> uses <code>as</code></strong>, because the qualifier slot
                 is already spoken for by the operation:
-                <code>Compute the &lt;n&gt; as Float from &lt;s&gt;.</code>
+                <code>Compute the &lt;n&gt; as Float from &lt;s&gt;.</code> This is also where
+                <code>as Currency</code> lives, so <code>money</code>, <code>currency</code>,
+                <code>decimal</code> and <code>exact</code> are redirected to it by name;
+                <code>round</code>, <code>rounded</code> and <code>precision</code> are redirected to
+                <code>fixed</code>.
             </li>
         </ul>
 

@@ -157,10 +157,36 @@ public enum ResponsePayload {
     /// Throws what `JSONSerialization` throws: a payload holding a value it
     /// refuses — a non-finite `Double`, in practice — is the caller's to
     /// report, since only the caller knows what it was rendering.
+    /// ## Exact amounts take the other writer (GitLab #906)
+    ///
+    /// `JSONSerialization` cannot encode an `AROCurrency` — it is a Swift
+    /// struct, not a Foundation object — and the two ways of making it
+    /// acceptable both defeat the point of having it: `Double` reintroduces
+    /// the binary-floating-point error the format exists to remove, and a
+    /// string quotes itself into the body, which ARO-0019 §3.2.1 settled is a
+    /// different wrong answer. So a payload carrying one is written by ARO's
+    /// own JSON writer instead.
+    ///
+    /// **The decision is made here, before any graph is built**, and that
+    /// ordering is the load-bearing part. Letting an amount into the
+    /// Foundation graph and deciding afterwards would hand
+    /// `JSONSerialization` an object it refuses: it throws, every caller's
+    /// `try?` turns that into the status-only fallback body, and the client
+    /// gets `{"status":"ok"}` with the money silently dropped. The route has
+    /// to be chosen from the payload, not from the graph.
+    ///
+    /// It is also why this lives in `ResponsePayload` rather than at the two
+    /// call sites. The interpreter and the compiled server both call this one
+    /// function, so neither can drift from the other about which writer a
+    /// money response got.
     public static func jsonBody(
         _ payload: [String: any Sendable],
         whenEmpty extras: [(key: String, value: String)] = []
     ) throws -> Data {
+        if containsExactAmount(payload) {
+            return try exactJSONBody(payload, whenEmpty: extras)
+        }
+
         let json = NSMutableDictionary(capacity: payload.count)
         for (key, value) in payload {
             insert(value, as: key, into: json)
@@ -171,6 +197,126 @@ public enum ResponsePayload {
             }
         }
         return try JSONSerialization.data(withJSONObject: json, options: [.sortedKeys])
+    }
+
+    /// Whether `value`, or anything nested in it, is an exact amount
+    /// (GitLab #906).
+    ///
+    /// Reads the *payload*, which is Swift values — deliberately not the
+    /// rendered graph, for the reason `jsonBody` gives.
+    static func containsExactAmount(_ value: Any) -> Bool {
+        switch value {
+        case is AROCurrency:
+            return true
+        case let array as [any Sendable]:
+            return array.contains { containsExactAmount($0) }
+        case let dict as [String: any Sendable]:
+            return dict.values.contains { containsExactAmount($0) }
+        case let array as [Any]:
+            return array.contains { containsExactAmount($0) }
+        case let dict as [String: Any]:
+            return dict.values.contains { containsExactAmount($0) }
+        default:
+            return false
+        }
+    }
+
+    /// A body holding an exact amount, written by ARO's own JSON writer
+    /// (GitLab #906).
+    ///
+    /// Mirrors the walk above with one difference: the graph stays
+    /// Swift-native so an `AROCurrency` survives to the writer as itself.
+    /// GitLab #904's Foundation graph exists to save a bridge on the way into
+    /// `JSONSerialization`, and this route does not go there, so there is
+    /// nothing for it to save — the hot path is untouched, and this one is
+    /// only taken by a response that actually carries money.
+    ///
+    /// `ResponsePayloadRenderingTests` renders the same payload down both
+    /// routes and compares, which is what keeps the two walks in step.
+    private static func exactJSONBody(
+        _ payload: [String: any Sendable],
+        whenEmpty extras: [(key: String, value: String)] = []
+    ) throws -> Data {
+        var json: [String: Any] = [:]
+        json.reserveCapacity(payload.count)
+        for (key, value) in payload {
+            insertExact(value, as: key, into: &json)
+        }
+        if json.isEmpty {
+            for extra in extras {
+                json[extra.key] = extra.value
+            }
+        }
+        guard let data = FormatSerializer.serializeExactJSON(json).data(using: .utf8) else {
+            throw ActionError.runtimeError(
+                "Could not encode the response body as UTF-8")
+        }
+        return data
+    }
+
+    /// The Swift-native twin of `insert`, for the exact route.
+    private static func insertExact(
+        _ value: any Sendable, as key: String, into json: inout [String: Any]
+    ) {
+        switch value {
+        case let str as String:
+            json[key] = inlineJSONSwift(str)
+        case let int as Int:
+            json[key] = int
+        case let double as Double:
+            json[key] = double
+        case let exact as AROCurrency:
+            // Carried as itself. The writer spells it at its own scale, as a
+            // number — which is the whole reason this route exists.
+            json[key] = exact
+        case let bool as Bool:
+            json[key] = bool
+        case let dict as [String: any Sendable]:
+            for (nestedKey, nested) in dict {
+                insertExact(nested, as: "\(key).\(nestedKey)", into: &json)
+            }
+        case let array as [any Sendable]:
+            json[key] = array.map { exactValue($0) }
+        default:
+            json[key] = inlineJSONSwift(String(describing: value))
+        }
+    }
+
+    /// One value of a collection, Swift-native, for the exact route.
+    private static func exactValue(_ value: any Sendable) -> Any {
+        switch value {
+        case let exact as AROCurrency:
+            return exact
+        case let dict as [String: any Sendable]:
+            var out: [String: Any] = [:]
+            out.reserveCapacity(dict.count)
+            for (key, nested) in dict { out[key] = exactValue(nested) }
+            return out
+        case let array as [any Sendable]:
+            return array.map { exactValue($0) }
+        default:
+            // String, Int, Double, Bool and the `toJSON` rules for Date, Data
+            // and everything else — the same mapping `foundationValue`
+            // delegates, landing on Swift objects rather than Foundation ones.
+            return SendableConverter.toJSON(value)
+        }
+    }
+
+    /// `inlineJSON` without the Foundation bridge: a string that *is* JSON
+    /// text becomes the value it spells, for the Swift-native route.
+    ///
+    /// The parsed form comes back from `JSONSerialization` as Foundation
+    /// containers either way, and `FormatSerializer.writeJSON` reads those —
+    /// it asks `NSNumber` before the Swift casts, so a bridged `true` stays
+    /// `true` rather than becoming `1`.
+    private static func inlineJSONSwift(_ str: String) -> Any {
+        guard str.hasPrefix("{") || str.hasPrefix("[") else { return str }
+        // try? is acceptable: this is a probe, exactly as in `inlineJSON`. A
+        // string that merely starts with "{" or "[" need not be JSON, and it
+        // is returned unchanged when it is not, so nothing is lost.
+        guard let data = str.data(using: .utf8),
+              let parsed = try? JSONSerialization.jsonObject(with: data) else { return str }
+        return parsed
     }
 
     private static func insert(_ value: any Sendable, as key: String, into json: NSMutableDictionary) {

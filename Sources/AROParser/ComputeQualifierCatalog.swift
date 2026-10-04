@@ -100,21 +100,40 @@ public enum ComputeQualifierCatalog {
             return "Timezone conversion is an Extract: "
                  + "Extract the <\(result): timezone> from the <\(object)> "
                  + "with \"Europe/Berlin\"."
-        case "round", "rounded", "money", "currency", "precision":
-            // GitLab #517: these are the names people reach for when a
-            // price prints as 7.199999999999999. `fixed` is one word
-            // away, and edit distance will never find it from "money".
+        case "currency", "money", "decimal", "exact":
+            // GitLab #906: these are the names people reach for when they
+            // want money to be *right* rather than rounded afterwards — and
+            // now there is something to point them at. `as Currency` is exact
+            // base-10 arithmetic (ARO-0003 §Primitive Types), so the amount
+            // never acquires the error `fixed` would have to clean up.
             //
-            // `Money` written PascalCase is the *other* thing — a domain
-            // type from ARO-0014 — and belongs in the `as` clause, so
-            // capitalisation decides which advice is right.
+            // Capitalisation still decides, exactly as it did for `fixed`:
+            // `Money` written PascalCase is ARO-0014's domain *type* — an
+            // object with `amount` and `currency` — and belongs in the `as`
+            // clause under its own name, not redirected to `Currency`.
+            if looksLikeTypeName(qualifier) {
+                return "For a result type, use `as`: "
+                     + "Compute the <\(result)> as \(qualifier) from the <\(object)>."
+            }
+            return "Exact decimal arithmetic is a result type, not a "
+                 + "qualifier: Compute the <\(result)> as Currency from the "
+                 + "<\(object)>."
+        case "round", "rounded", "precision":
+            // GitLab #517: the names people reach for when a price has
+            // already printed as 7.199999999999999. `fixed` is one word
+            // away, and edit distance will never find it from "round".
+            //
+            // `fixed` is still the right answer here: it rounds to a stated
+            // number of places, which is what these names ask for. Reach for
+            // `as Currency` to stop the error happening at all.
             if looksLikeTypeName(qualifier) {
                 return "For a result type, use `as`: "
                      + "Compute the <\(result)> as \(qualifier) from the <\(object)>."
             }
             return "Rounding to decimal places is the `fixed` qualifier: "
                  + "Compute the <\(result): fixed> from the <\(object)> "
-                 + "(2 places; `with { places: 3 }` for more)."
+                 + "(2 places; `with { places: 3 }` for more). To compute the "
+                 + "amount exactly instead, use `as Currency`."
         default:
             // A type name in the qualifier slot is the other common
             // confusion. The two are different things and GitLab #475
@@ -134,6 +153,8 @@ public enum ComputeQualifierCatalog {
         let primitives: Set<String> = [
             "string", "int", "integer", "float", "double", "number",
             "bool", "boolean", "list", "array", "set", "object", "dictionary",
+            // GitLab #906: both spellings of the exact decimal format.
+            "currency", "decimal",
         ]
         if primitives.contains(qualifier.lowercased()) { return true }
         guard let first = qualifier.first else { return false }

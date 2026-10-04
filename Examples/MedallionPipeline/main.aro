@@ -125,12 +125,13 @@
         Extract the <customer: first> from the <candidates>.
 
         (* Qualified refs compute directly — no Extract per operand.
-         * `fixed` rounds to two places, so what lands in the file is
-         * 39.98 rather than IEEE 754's 39.979999999999997. Files
-         * serialize at full precision; the console does not, which is
-         * why this only shows up once someone opens the output. *)
-        Compute the <raw-total> from <order: quantity> * <order: unit_price>.
-        Compute the <line-total: fixed> from the <raw-total>.
+         *
+         * `as Currency` makes this base-10 arithmetic, so the amount is
+         * 39.98 and not IEEE 754's 39.979999999999997. Money is computed
+         * once, here, exactly — files serialize at full precision, and the
+         * console does not, which is why a float would only show up once
+         * someone opened the output. (ARO-0003 §Primitive Types.) *)
+        Compute the <line-total> as Currency from <order: quantity> * <order: unit_price>.
 
         Create the <fact> with {
             order_id: <order: order_id>,
@@ -170,10 +171,19 @@
 
     for each <region-name> in <regions> {
         Filter the <rows> from the <facts> where <region> = <region-name>.
-        Reduce the <raw-revenue> from the <rows> with sum(<line_total>).
         Reduce the <order-count> from the <rows> with count().
+
+        (* A file boundary is where the *format* stops: silver wrote 39.98
+         * exactly, but JSONL has only numbers, so the column arrives here as
+         * the Double nearest each amount. `as Currency` on the aggregate adds
+         * the column in base 10 instead of binary — 99.95, not
+         * 99.94999999999999 — and the average follows Currency's stated
+         * rounding rather than a silent one. The two `fixed` statements are
+         * then a presentation choice, two places for the CSV, rather than
+         * the repair they would have to be after float arithmetic. *)
+        Reduce the <raw-revenue> as Currency from the <rows> with sum(<line_total>).
         Compute the <revenue: fixed> from the <raw-revenue>.
-        Compute the <raw-avg> from <revenue> / <order-count>.
+        Compute the <raw-avg> as Currency from <raw-revenue> / <order-count>.
         Compute the <avg-order: fixed> from the <raw-avg>.
 
         Create the <row> with {

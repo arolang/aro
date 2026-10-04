@@ -876,6 +876,11 @@ public final class Application: @unchecked Sendable {
         // value JSONSerialization refuses — a non-finite Double, in practice.
         // The status-only body below is the pre-existing answer to that, kept
         // so a single bad field cannot take down the route.
+        //
+        // `jsonBody` also picks the writer: a payload carrying an exact
+        // `Currency` amount is written by ARO's own (GitLab #906). That
+        // decision moved inside, because it has to be made before the graph
+        // is built — see the note there.
         if let jsonData = try? ResponsePayload.jsonBody(response.payload, whenEmpty: extras) {
             bodyData = jsonData
         } else {
