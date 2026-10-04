@@ -583,6 +583,14 @@ public func aro_evaluate_expression(
 
     let contextHandle = Unmanaged<AROCContextHandle>.fromOpaque(ptr).takeUnretainedValue()
 
+    // GitLab #906: the statement's `as <Type>` annotation, which the compiled
+    // path carries as the `_as_type_` modifier because the C result descriptor
+    // has no slot for it. Picking the arithmetic BEFORE evaluating is the
+    // whole point — correcting afterwards cannot undo an integer division or a
+    // binary-float multiply, which is why `FeatureSetExecutor` also chooses
+    // the interpreter's evaluator up front.
+    let mode = compiledNumericMode(contextHandle.context)
+
     // If the calling thread is running low on stack, evaluate on a fresh 8 MB thread.
     // This prevents SIGBUS from JSONSerialization's recursive JSON parser consuming
     // the remaining stack space in compiled handler threads.
@@ -598,7 +606,7 @@ public func aro_evaluate_expression(
 
         // Handle arrays (e.g., JSON array literals)
         if let array = parsed as? [Any] {
-            let result = evaluateJSONArray(array, context: contextHandle.context)
+            let result = evaluateJSONArray(array, context: contextHandle.context, mode: mode)
             contextHandle.context.bind("_expression_", value: result)
             return
         }
@@ -608,7 +616,7 @@ public func aro_evaluate_expression(
             return
         }
 
-        let result = evaluateExpressionJSON(dict, context: contextHandle.context)
+        let result = evaluateExpressionJSON(dict, context: contextHandle.context, mode: mode)
         contextHandle.context.bind("_expression_", value: result)
 
         // For simple variable references ($var), also set _expression_name_ so EmitAction
@@ -621,6 +629,18 @@ public func aro_evaluate_expression(
             contextHandle.context.bind("_expression_name_", value: "", allowRebind: true)
         }
     }
+}
+
+/// The arithmetic a compiled statement asked for, from its `_as_type_`
+/// modifier (GitLab #906).
+///
+/// `.natural` when the statement carries no annotation, which is almost all
+/// of them, so this costs one context lookup per expression.
+func compiledNumericMode(_ context: RuntimeContext) -> AroNumberFormat {
+    guard let asType = context.resolveAny("_as_type_") as? String, !asType.isEmpty else {
+        return .natural
+    }
+    return NumberFormatCatalog.format(for: asType)
 }
 
 /// Evaluate a JSON expression and bind to a specific variable name
@@ -640,6 +660,14 @@ public func aro_evaluate_and_bind(
 
     let contextHandle = Unmanaged<AROCContextHandle>.fromOpaque(ptr).takeUnretainedValue()
 
+    // GitLab #906: the statement's `as <Type>` annotation, which the compiled
+    // path carries as the `_as_type_` modifier because the C result descriptor
+    // has no slot for it. Picking the arithmetic BEFORE evaluating is the
+    // whole point — correcting afterwards cannot undo an integer division or a
+    // binary-float multiply, which is why `FeatureSetExecutor` also chooses
+    // the interpreter's evaluator up front.
+    let mode = compiledNumericMode(contextHandle.context)
+
     withStackGuard {
         // Parse the JSON. The expression JSON is compiler-generated, so a parse
         // failure is a codegen bug: returning silently would leave the variable
@@ -652,7 +680,7 @@ public func aro_evaluate_and_bind(
 
         // Handle arrays
         if let array = parsed as? [Any] {
-            let result = evaluateJSONArray(array, context: contextHandle.context)
+            let result = evaluateJSONArray(array, context: contextHandle.context, mode: mode)
             contextHandle.context.bind(nameStr, value: result)
             return
         }
@@ -662,13 +690,15 @@ public func aro_evaluate_and_bind(
             return
         }
 
-        let result = evaluateExpressionJSON(dict, context: contextHandle.context)
+        let result = evaluateExpressionJSON(dict, context: contextHandle.context, mode: mode)
         contextHandle.context.bind(nameStr, value: result)
     }
 }
 
 /// Evaluate a JSON array by recursively evaluating each element
-private func evaluateJSONArray(_ array: [Any], context: RuntimeContext) -> [any Sendable] {
+private func evaluateJSONArray(
+    _ array: [Any], context: RuntimeContext, mode: AroNumberFormat = .natural
+) -> [any Sendable] {
     return array.map { element -> any Sendable in
         if let dict = element as? [String: Any] {
             // Check if it's an expression object
@@ -678,12 +708,12 @@ private func evaluateJSONArray(_ array: [Any], context: RuntimeContext) -> [any 
             // each newly serialised node ($unary, $member, $subscript) had
             // to be remembered here separately.
             if dict.keys.contains(where: { $0.hasPrefix("$") }) {
-                return evaluateExpressionJSON(dict, context: context)
+                return evaluateExpressionJSON(dict, context: context, mode: mode)
             }
             // Otherwise it's a plain object - evaluate its values recursively
-            return evaluateJSONObject(dict, context: context)
+            return evaluateJSONObject(dict, context: context, mode: mode)
         } else if let nestedArray = element as? [Any] {
-            return evaluateJSONArray(nestedArray, context: context)
+            return evaluateJSONArray(nestedArray, context: context, mode: mode)
         } else {
             return convertToSendable(element)
         }
@@ -691,7 +721,9 @@ private func evaluateJSONArray(_ array: [Any], context: RuntimeContext) -> [any 
 }
 
 /// Evaluate a JSON object by recursively evaluating its values
-private func evaluateJSONObject(_ obj: [String: Any], context: RuntimeContext) -> [String: any Sendable] {
+private func evaluateJSONObject(
+    _ obj: [String: Any], context: RuntimeContext, mode: AroNumberFormat = .natural
+) -> [String: any Sendable] {
     var result: [String: any Sendable] = [:]
     for (key, value) in obj {
         if let dict = value as? [String: Any] {
@@ -702,13 +734,13 @@ private func evaluateJSONObject(_ obj: [String: Any], context: RuntimeContext) -
             // each newly serialised node ($unary, $member, $subscript) had
             // to be remembered here separately.
             if dict.keys.contains(where: { $0.hasPrefix("$") }) {
-                result[key] = evaluateExpressionJSON(dict, context: context)
+                result[key] = evaluateExpressionJSON(dict, context: context, mode: mode)
             } else {
                 // Plain nested object
-                result[key] = evaluateJSONObject(dict, context: context)
+                result[key] = evaluateJSONObject(dict, context: context, mode: mode)
             }
         } else if let array = value as? [Any] {
-            result[key] = evaluateJSONArray(array, context: context)
+            result[key] = evaluateJSONArray(array, context: context, mode: mode)
         } else {
             result[key] = convertToSendable(value)
         }
@@ -761,7 +793,9 @@ private func subscriptValue(_ index: any Sendable, of base: any Sendable) -> any
 
 /// Recursively evaluate a JSON-encoded expression
 // #313: widened from `private` to internal — called from RuntimeEventRecordingBridge.swift.
-func evaluateExpressionJSON(_ expr: [String: Any], context: RuntimeContext) -> any Sendable {
+func evaluateExpressionJSON(
+    _ expr: [String: Any], context: RuntimeContext, mode: AroNumberFormat = .natural
+) -> any Sendable {
     // Literal value
     if let lit = expr["$lit"] {
         return convertToSendable(lit)
@@ -837,7 +871,7 @@ func evaluateExpressionJSON(_ expr: [String: Any], context: RuntimeContext) -> a
     // two answers to "is this empty" is how the modes drift apart again.
     if let emptiness = expr["$empty"] as? [String: Any],
        let inner = emptiness["expr"] as? [String: Any] {
-        let value = evaluateExpressionJSON(inner, context: context)
+        let value = evaluateExpressionJSON(inner, context: context, mode: mode)
         let negated = (emptiness["negated"] as? Bool) ?? false
         let empty = ExpressionEvaluator.isEmptyValue(value)
         return negated ? !empty : empty
@@ -856,8 +890,8 @@ func evaluateExpressionJSON(_ expr: [String: Any], context: RuntimeContext) -> a
     if let range = expr["$range"] as? [String: Any],
        let lowerExpr = range["lower"] as? [String: Any],
        let upperExpr = range["upper"] as? [String: Any] {
-        let lower = evaluateExpressionJSON(lowerExpr, context: context)
-        let upper = evaluateExpressionJSON(upperExpr, context: context)
+        let lower = evaluateExpressionJSON(lowerExpr, context: context, mode: mode)
+        let upper = evaluateExpressionJSON(upperExpr, context: context, mode: mode)
 
         guard let lo = rangeEndpointInt(lower), let hi = rangeEndpointInt(upper) else {
             // No error channel exists on this path — expression failures here
@@ -888,7 +922,7 @@ func evaluateExpressionJSON(_ expr: [String: Any], context: RuntimeContext) -> a
        let op = unary["op"] as? String,
        let operandExpr = unary["operand"] as? [String: Any] {
 
-        let operand = evaluateExpressionJSON(operandExpr, context: context)
+        let operand = evaluateExpressionJSON(operandExpr, context: context, mode: mode)
 
         switch op {
         case "not":
@@ -920,16 +954,16 @@ func evaluateExpressionJSON(_ expr: [String: Any], context: RuntimeContext) -> a
         // missing field yields the record itself, both of which would look
         // present. Mirrors `ExpressionEvaluator.evaluatePresentValue`.
         if op == BinaryOperator.defaulting.rawValue {
-            if let present = evaluatePresentExpressionJSON(leftExpr, context: context) {
+            if let present = evaluatePresentExpressionJSON(leftExpr, context: context, mode: mode) {
                 return present
             }
-            return evaluateExpressionJSON(rightExpr, context: context)
+            return evaluateExpressionJSON(rightExpr, context: context, mode: mode)
         }
 
-        let left = evaluateExpressionJSON(leftExpr, context: context)
-        let right = evaluateExpressionJSON(rightExpr, context: context)
+        let left = evaluateExpressionJSON(leftExpr, context: context, mode: mode)
+        let right = evaluateExpressionJSON(rightExpr, context: context, mode: mode)
 
-        return evaluateBinaryOp(op: op, left: left, right: right)
+        return evaluateBinaryOp(op: op, left: left, right: right, mode: mode)
     }
 
     // Interpolated string: {"$interpolated":"Hello ${name}!"}
@@ -946,7 +980,7 @@ func evaluateExpressionJSON(_ expr: [String: Any], context: RuntimeContext) -> a
     if let member = expr["$member"] as? [String: Any],
        let baseExpr = member["base"] as? [String: Any],
        let name = member["member"] as? String {
-        let base = evaluateExpressionJSON(baseExpr, context: context)
+        let base = evaluateExpressionJSON(baseExpr, context: context, mode: mode)
         return memberValue(name, of: base)
     }
 
@@ -954,8 +988,8 @@ func evaluateExpressionJSON(_ expr: [String: Any], context: RuntimeContext) -> a
     if let subscriptExpr = expr["$subscript"] as? [String: Any],
        let baseExpr = subscriptExpr["base"] as? [String: Any],
        let indexExpr = subscriptExpr["index"] as? [String: Any] {
-        let base = evaluateExpressionJSON(baseExpr, context: context)
-        let index = evaluateExpressionJSON(indexExpr, context: context)
+        let base = evaluateExpressionJSON(baseExpr, context: context, mode: mode)
+        let index = evaluateExpressionJSON(indexExpr, context: context, mode: mode)
         return subscriptValue(index, of: base)
     }
 
@@ -966,9 +1000,9 @@ func evaluateExpressionJSON(_ expr: [String: Any], context: RuntimeContext) -> a
         var result: [String: any Sendable] = [:]
         for (key, value) in expr {
             if let nestedDict = value as? [String: Any] {
-                result[key] = evaluateExpressionJSON(nestedDict, context: context)
+                result[key] = evaluateExpressionJSON(nestedDict, context: context, mode: mode)
             } else if let nestedArray = value as? [Any] {
-                result[key] = evaluateJSONArray(nestedArray, context: context)
+                result[key] = evaluateJSONArray(nestedArray, context: context, mode: mode)
             } else {
                 result[key] = convertToSendable(value)
             }
@@ -993,7 +1027,9 @@ func evaluateExpressionJSON(_ expr: [String: Any], context: RuntimeContext) -> a
 /// returned, so the default does not fire on falsiness. This is the compiled
 /// counterpart of `ExpressionEvaluator.evaluatePresentValue`; the two must
 /// agree, because `aro run` and `aro build` run the same source.
-private func evaluatePresentExpressionJSON(_ expr: [String: Any], context: RuntimeContext) -> (any Sendable)? {
+private func evaluatePresentExpressionJSON(
+    _ expr: [String: Any], context: RuntimeContext, mode: AroNumberFormat = .natural
+) -> (any Sendable)? {
     // A literal `nil` / `null` on the left is absent by definition. It has to
     // be caught here: the JSON converter renders NSNull as the string "null".
     if let lit = expr["$lit"], lit is NSNull {
@@ -1012,7 +1048,7 @@ private func evaluatePresentExpressionJSON(_ expr: [String: Any], context: Runti
 
         // Other magic sources are always present — let the general path answer.
         if varName == "env" || (specs == ["count"] && InMemoryRepositoryStorage.isRepositoryName(varName)) {
-            return evaluateExpressionJSON(expr, context: context)
+            return evaluateExpressionJSON(expr, context: context, mode: mode)
         }
 
         guard var value = context.resolveAny(varName) else { return nil }
@@ -1042,7 +1078,7 @@ private func evaluatePresentExpressionJSON(_ expr: [String: Any], context: Runti
         return value
     }
 
-    return evaluateExpressionJSON(expr, context: context)
+    return evaluateExpressionJSON(expr, context: context, mode: mode)
 }
 
 /// Interpolate a string template with ${varname} or ${<base: specifier>} placeholders
@@ -1194,6 +1230,23 @@ private func checkedInt(
     return result.partialValue
 }
 
+/// `+ - * / %` in exact base 10, for the compiled evaluator (GitLab #906).
+///
+/// Delegates to the same `ExpressionEvaluator.exactOperation` the interpreter
+/// uses, so there is one implementation of money arithmetic rather than two
+/// that agree until they do not. The C ABI cannot throw, so a failure exits
+/// with the message the interpreter would have thrown — the pattern Int
+/// overflow and division by zero already follow here (GitLab #472).
+func exactBinaryOp(op: String, left: any Sendable, right: any Sendable) -> any Sendable {
+    do {
+        return try ExpressionEvaluator.exactOperation(left, right, symbol: op)
+    } catch let error as AROCurrencyError {
+        aroArithmeticFailure(error.description)
+    } catch {
+        aroArithmeticFailure("\(error)")
+    }
+}
+
 /// Apply a binary operator in compiled code.
 ///
 /// Internal rather than private so a test can assert it covers every
@@ -1201,11 +1254,34 @@ private func checkedInt(
 /// `in` all fell through to `default`, which returns "" — read as false by a
 /// guard, so `aro build` silently skipped statements `aro run` executed
 /// (GitLab #516, #558).
-func evaluateBinaryOp(op: String, left: any Sendable, right: any Sendable) -> any Sendable {
+func evaluateBinaryOp(
+    op: String, left: any Sendable, right: any Sendable,
+    mode: AroNumberFormat = .natural
+) -> any Sendable {
+    // GitLab #906: an `as Currency` / `as Decimal` statement, or an operand
+    // that is already an exact amount, is arithmetic in base 10. Checked
+    // before the Int and Double paths below because those are the ones that
+    // introduce the error — the same precedence `ExpressionEvaluator` uses,
+    // and `*` keeps string repetition ahead of it exactly as the interpreter
+    // does.
+    if ExpressionEvaluator.wantsExact(mode.interpreterMode, left, right),
+       !(op == "*" && (left is String || right is String)),
+       ["+", "-", "*", "/", "%"].contains(op) {
+        return exactBinaryOp(op: op, left: left, right: right)
+    }
+
+    // GitLab #475/#501, reachable in compiled code for the first time now
+    // that `_as_type_` arrives: `as Float` means the Int fast paths are
+    // skipped, so `<x> / 2 as Float` is 3.5 rather than 3 and `<n> * 2 as
+    // Float` is a number rather than a repeated string. The interpreter has
+    // behaved this way since #475; the compiled path dropped the annotation
+    // and so could not.
+    let keepsInt = mode != .float
+
     switch op {
     // Arithmetic
     case "+":
-        if let li = left as? Int, let ri = right as? Int {
+        if keepsInt, let li = left as? Int, let ri = right as? Int {
             return checkedInt(li.addingReportingOverflow(ri), li, "+", ri)
         }
         if let l = asDouble(left), let r = asDouble(right) {
@@ -1214,7 +1290,7 @@ func evaluateBinaryOp(op: String, left: any Sendable, right: any Sendable) -> an
         return 0
 
     case "-":
-        if let li = left as? Int, let ri = right as? Int {
+        if keepsInt, let li = left as? Int, let ri = right as? Int {
             return checkedInt(li.subtractingReportingOverflow(ri), li, "-", ri)
         }
         if let l = asDouble(left), let r = asDouble(right) {
@@ -1230,7 +1306,7 @@ func evaluateBinaryOp(op: String, left: any Sendable, right: any Sendable) -> an
         if let str = right as? String, let count = left as? Int {
             return String(repeating: str, count: max(0, count))
         }
-        if let li = left as? Int, let ri = right as? Int {
+        if keepsInt, let li = left as? Int, let ri = right as? Int {
             return checkedInt(li.multipliedReportingOverflow(by: ri), li, "*", ri)
         }
         if let l = asDouble(left), let r = asDouble(right) {
@@ -1239,7 +1315,7 @@ func evaluateBinaryOp(op: String, left: any Sendable, right: any Sendable) -> an
         return 0
 
     case "/":
-        if let li = left as? Int, let ri = right as? Int {
+        if keepsInt, let li = left as? Int, let ri = right as? Int {
             guard ri != 0 else { aroArithmeticFailure("Division by zero") }
             // Integer / Integer → integer floor division (e.g. 80/3 = 26)
             return checkedInt(li.dividedReportingOverflow(by: ri), li, "/", ri)
@@ -1491,6 +1567,10 @@ private func asDouble(_ value: any Sendable) -> Double? {
     switch value {
     case let i as Int: return Double(i)
     case let d as Double: return d
+    // An exact amount is a number here too (GitLab #906). Without this case
+    // every comparison against one fell through to the lexicographic string
+    // fallback below, and arithmetic returned a silent 0.
+    case let c as AROCurrency: return c.doubleValue
     case let s as String: return Double(s)
     default: return nil
     }
@@ -1507,6 +1587,9 @@ private func asString(_ value: any Sendable) -> String {
         // the `String(Int(d))` trap this used to hit for whole values outside
         // Int's range, e.g. 1e21.
         return AroNumberFormatting.string(for: d)
+    // An exact amount prints what it is, at its own scale — the same spelling
+    // the interpreter's ResponseFormatter gives it (GitLab #906).
+    case let c as AROCurrency: return c.description
     case let b as Bool: return b ? "true" : "false"
     default: return String(describing: value)
     }

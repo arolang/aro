@@ -129,8 +129,8 @@ paths:
 ```
 
 The contract is also the only place complex types are defined. ARO itself has String, Integer,
-Float, Boolean and DateTime, plus `List` and `Map`; everything else comes from
-`components.schemas`.
+Float, Currency (exact base-10 decimals, for money), Boolean and DateTime, plus `List` and `Map`;
+everything else comes from `components.schemas`.
 
 ### The rules worth knowing on day one
 
@@ -170,7 +170,8 @@ aro check ./MyApp            # errors, warnings, per-route body analysis
 aro test ./MyApp             # run the Given/When/Then feature sets
 aro test --compiled ./MyApp  # run the same tests through a native binary
 aro build ./MyApp            # compile to a native binary via LLVM
-aro repl                     # interactive
+aro repl [./MyApp]           # interactive; a project directory wires in its
+                             # contract, stores, templates and plugins
 aro kernel install           # register the Jupyter kernel
 aro ui ./MyApp               # open Solaro, the ARO IDE
 aro ask "add a delete route" # local-model assistant

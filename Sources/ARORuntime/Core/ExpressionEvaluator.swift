@@ -72,6 +72,11 @@ public struct ExpressionEvaluator: Sendable {
         /// Double, so `7 / 2` is 3.5. Selected by an `as Float` / `as Double`
         /// result annotation (GitLab #475).
         case float
+        /// Arithmetic is done in exact base 10 and the result is an
+        /// `AROCurrency`, so `3 * 2.40` is `7.20` and not
+        /// `7.199999999999999`. Selected by an `as Currency` / `as Decimal`
+        /// result annotation (GitLab #906).
+        case exact
     }
 
     /// The numeric mode for this evaluator.
@@ -357,6 +362,11 @@ public struct ExpressionEvaluator: Sendable {
                 doubleOp: { $0 * $1 }
             )
         case .divide:
+            // Exact first: division is the one currency operation that has to
+            // round, and `AROCurrency.divided` states how (GitLab #906).
+            if Self.wantsExact(numericMode, left, right) {
+                return try Self.exactOperation(left, right, symbol: "/")
+            }
             // Int/Int → integer floor division (matches binary mode evaluateBinaryOp behavior).
             // Skipped in .float mode so `<x> / 2 as Float` yields 3.5 rather than 3.
             if numericMode == .natural, let li = left as? Int, let ri = right as? Int {
@@ -538,6 +548,8 @@ public struct ExpressionEvaluator: Sendable {
                 return value
             }
             if let d = operand as? Double { return -d }
+            // An exact amount negates exactly (GitLab #906).
+            if let c = operand as? AROCurrency { return c.negated }
             throw ExpressionError.typeMismatch("Cannot negate \(type(of: operand))")
         case .not:
             return try !asBool(operand, operator: "not")
@@ -704,6 +716,10 @@ public struct ExpressionEvaluator: Sendable {
         intOp: (Int, Int) -> (partialValue: Int, overflow: Bool),
         doubleOp: (Double, Double) -> Double
     ) throws -> any Sendable {
+        if Self.wantsExact(numericMode, left, right) {
+            return try Self.exactOperation(left, right, symbol: symbol)
+        }
+
         if numericMode == .natural, let li = left as? Int, let ri = right as? Int {
             let (value, overflow) = intOp(li, ri)
             guard !overflow else { throw Self.overflowError(li, symbol, ri) }
@@ -715,12 +731,62 @@ public struct ExpressionEvaluator: Sendable {
         return doubleOp(l, r)
     }
 
+    /// Whether this operation must be done in exact base 10 (GitLab #906).
+    ///
+    /// Either the statement asked for it (`as Currency`), or one of the
+    /// operands already *is* an exact amount — in which case staying exact is
+    /// the only answer that does not throw the precision away a line after it
+    /// was established. That contagion is what lets a pipeline compute
+    /// `line_total` once, exactly, and have every `sum` downstream agree.
+    static func wantsExact(
+        _ mode: NumericMode, _ left: any Sendable, _ right: any Sendable
+    ) -> Bool {
+        mode == .exact || left is AROCurrency || right is AROCurrency
+    }
+
+    /// `+ - * / %` in exact base 10.
+    ///
+    /// A non-numeric operand is a type mismatch here rather than a silent
+    /// zero: the whole point of the annotation is that the author cares what
+    /// the number is.
+    static func exactOperation(
+        _ left: any Sendable, _ right: any Sendable, symbol: String
+    ) throws -> any Sendable {
+        guard let l = AROCurrency.from(left) else {
+            throw ExpressionError.typeMismatch(
+                "Cannot read \(type(of: left)) as an exact amount for '\(symbol)'")
+        }
+        guard let r = AROCurrency.from(right) else {
+            throw ExpressionError.typeMismatch(
+                "Cannot read \(type(of: right)) as an exact amount for '\(symbol)'")
+        }
+        do {
+            switch symbol {
+            case "+": return try l.adding(r)
+            case "-": return try l.subtracting(r)
+            case "*": return try l.multiplied(by: r)
+            case "/": return try l.divided(by: r)
+            case "%": return try l.remainder(dividingBy: r)
+            default:
+                throw ExpressionError.typeMismatch(
+                    "'\(symbol)' has no exact-decimal form")
+            }
+        } catch let error as AROCurrencyError {
+            // Re-thrown as the runtime error shape every other arithmetic
+            // failure uses, so the statement reconstruction reads the same.
+            throw ActionError.runtimeError(error.description)
+        }
+    }
+
     private func intOperation(
         _ left: any Sendable,
         _ right: any Sendable,
         symbol: String,
         _ op: (Int, Int) -> (partialValue: Int, overflow: Bool)
     ) throws -> any Sendable {
+        if Self.wantsExact(numericMode, left, right) {
+            return try Self.exactOperation(left, right, symbol: symbol)
+        }
         guard let l = left as? Int, let r = right as? Int else {
             throw ExpressionError.typeMismatch("Expected integers for modulo operation")
         }
@@ -741,6 +807,15 @@ public struct ExpressionEvaluator: Sendable {
             let leftTime = leftDate.date.timeIntervalSince1970
             let rightTime = rightDate.date.timeIntervalSince1970
             return compare(leftTime, rightTime)
+        }
+
+        // Exact amounts compare exactly (GitLab #906): two amounts a cent
+        // apart at the limit of Double's precision must not come out equal.
+        // The `compare` closure is fed -1/0/1, which answers every one of
+        // `<`, `>`, `<=`, `>=` correctly.
+        if left is AROCurrency || right is AROCurrency,
+           let l = AROCurrency.from(left), let r = AROCurrency.from(right) {
+            return compare(Double(l.compare(r)), 0)
         }
 
         let l = try asDouble(left)
@@ -764,6 +839,7 @@ public struct ExpressionEvaluator: Sendable {
     private func asDouble(_ value: any Sendable) throws -> Double {
         if let i = value as? Int { return Double(i) }
         if let d = value as? Double { return d }
+        if let c = value as? AROCurrency { return c.doubleValue }
         if let s = value as? String, let d = Double(s) { return d }
         throw ExpressionError.typeMismatch("Cannot convert \(type(of: value)) to number")
     }
@@ -808,6 +884,14 @@ public struct ExpressionEvaluator: Sendable {
         if let l = left as? Double, let r = right as? Double { return l == r }
         if let l = left as? Int, let r = right as? Double { return Double(l) == r }
         if let l = left as? Double, let r = right as? Int { return l == Double(r) }
+
+        // Exact amounts compare exactly, and compare equal to the Int or
+        // Double that spells the same number (GitLab #906). Without this the
+        // fallback below compared "7.20" to "7.2" as text.
+        if left is AROCurrency || right is AROCurrency,
+           let l = AROCurrency.from(left), let r = AROCurrency.from(right) {
+            return l == r
+        }
 
         // Boolean comparison
         if let l = left as? Bool, let r = right as? Bool { return l == r }

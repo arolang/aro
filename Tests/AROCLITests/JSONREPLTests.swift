@@ -187,6 +187,27 @@ struct JSONREPLProtocolTests {
         #expect(error.name == "AROError")
     }
 
+    @Test("An execute request carries the notebook's directory, or nothing")
+    func baseDirOnRequest() throws {
+        // The front-end half of GitLab #909: the kernel process runs in the
+        // project root, so the notebook says which folder its relative paths
+        // mean. Absent is the session default, not the empty string — a
+        // front-end that does not know stays on today's behaviour.
+        let withBase = try JSONDecoder().decode(
+            JSONREPLRequest.self,
+            from: Data(#"""
+            {"id":1,"type":"execute","code":"Retrieve the <s> from the <git: \"..\">.",
+             "cellId":"nb22-c01","baseDir":"/repo/Learning"}
+            """#.utf8))
+        #expect(withBase.baseDir == "/repo/Learning")
+        #expect(withBase.cellId == "nb22-c01")
+
+        let without = try JSONDecoder().decode(
+            JSONREPLRequest.self,
+            from: Data(#"{"id":2,"type":"execute","code":"Compute the <a> from 1."}"#.utf8))
+        #expect(without.baseDir == nil)
+    }
+
     @Test("Stream messages carry their request id")
     func streamLine() throws {
         let line = JSONREPLEncoder.stream(id: 3, name: "stderr", text: "boom\n")

@@ -17,10 +17,19 @@ struct ExpressionSerializer {
 
     // MARK: - Expression Serialization
 
-    func serializeExpression(_ expr: any AROParser.Expression) -> String {
+    /// - Parameter folding: whether a wholly-constant subtree may be folded
+    ///   to a literal at build time. `false` for a statement annotated
+    ///   `as Currency` / `as Decimal`: the folder works in `Int` and
+    ///   `Double`, so folding `3 * 2.40` writes `7.199999999999999` into the
+    ///   binary and nothing downstream can recover `7.20` from it
+    ///   (GitLab #906). `NumberFormatCatalog.allowsConstantFolding` is the
+    ///   one place that decision is made.
+    func serializeExpression(
+        _ expr: any AROParser.Expression, folding: Bool = true
+    ) -> String {
         // GitLab #102: Constant folding optimization
         // If the expression is entirely constant, evaluate it at compile time
-        if ConstantFolder.isConstant(expr), let value = ConstantFolder.evaluate(expr) {
+        if folding, ConstantFolder.isConstant(expr), let value = ConstantFolder.evaluate(expr) {
             return serializeLiteralValue(value)
         }
 
@@ -30,7 +39,7 @@ struct ExpressionSerializer {
             return serializeVariableRef(ref)
         } else if let binary = expr as? BinaryExpression {
             return """
-            {"$binary":{"op":"\(binary.op.rawValue)","left":\(serializeExpression(binary.left)),"right":\(serializeExpression(binary.right))}}
+            {"$binary":{"op":"\(binary.op.rawValue)","left":\(serializeExpression(binary.left, folding: folding)),"right":\(serializeExpression(binary.right, folding: folding))}}
             """
         } else if let range = expr as? RangeExpression {
             // ARO-0089. `lazy` is false here and true only in the for-each

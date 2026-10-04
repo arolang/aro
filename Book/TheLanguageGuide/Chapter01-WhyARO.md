@@ -253,7 +253,7 @@ ARO provides `for each` loops for serial iteration and `parallel for each` for c
 
 **Type System**
 
-ARO has four built-in primitive types (String, Integer, Float, Boolean) and collection types (List, Map). Complex types—records and enums—are defined in your `openapi.yaml` file's components/schemas section. This "single source of truth" approach means OpenAPI defines both your HTTP routes and your data types. Runtime type checking validates data against these schemas, with errors reported in business terms rather than technical stack traces.
+ARO has five built-in primitive types (String, Integer, Float, Currency, Boolean) and collection types (List, Map). Complex types—records and enums—are defined in your `openapi.yaml` file's components/schemas section. This "single source of truth" approach means OpenAPI defines both your HTTP routes and your data types. Runtime type checking validates data against these schemas, with errors reported in business terms rather than technical stack traces.
 
 **Debugging Tools**
 

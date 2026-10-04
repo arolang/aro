@@ -110,12 +110,29 @@ too.
 ## `aro repl` — interactive
 
 ```
-aro repl [-l, --load <file>] [--no-color] [--json]
+aro repl [<project>] [-l, --load <file>] [--no-color] [--json]
 ```
 
 `--json` speaks line-delimited JSON on stdio (ARO-0091) instead of running a
-terminal REPL. These three are the only flags; ARO-0049 lists others that were
-never implemented.
+terminal REPL.
+
+A project directory wires in what `aro run` discovers for it — `openapi.yaml`,
+`.store` seed rows, `templates/`, project plugins and the project's own feature
+sets — **without executing `Application-Start`**, because a session is not a run
+(GitLab #691). Each item is independent: a malformed contract is a warning and
+the rest still loads. Without a directory, nothing changes.
+
+```
+aro repl ./MyApp
+Project: MyApp
+  contract: 3 path(s) from openapi.yaml
+  stores: 12 row(s) in 2 repositories
+  templates: templates/
+  feature sets: 7 from 3 file(s)
+  lifecycle: 1 Application-Start/End not run
+```
+
+ARO-0049 lists other flags that were never implemented.
 
 A `--json` client that wants `Prompt`, `Select` or `Ask` to work sends
 `"allowStdin": true` with its `execute` and answers the server's
@@ -126,13 +143,14 @@ explanation rather than waiting — see ARO-0091 §Interactive input, and
 ## `aro kernel` — Jupyter
 
 ```
-aro kernel [--connection-file <file>]
+aro kernel [--connection-file <file>] [--project <dir>]
 aro kernel install
 ```
 
 `install` writes the kernelspec into the user's Jupyter kernels directory; the
 front end then launches `aro kernel --connection-file …`. Native ZMQ, no Python
-needed.
+needed. `--project` is the same project wiring `aro repl` takes, for a notebook
+that belongs to an application.
 
 `Prompt`, `Select` and `Ask` work in a cell: the kernel serves Jupyter's
 `input_request` / `input_reply` on the stdin channel, the same mechanism behind

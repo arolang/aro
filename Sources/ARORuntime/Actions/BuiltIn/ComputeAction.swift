@@ -922,8 +922,30 @@ public struct ComputeAction: SynchronousAction {
         if let d = value as? Double { return d }
         if let i = value as? Int { return Double(i) }
         if let f = value as? Float { return Double(f) }
+        if let c = value as? AROCurrency { return c.doubleValue }
         if let s = value as? String { return Double(s) }
         return nil
+    }
+
+    /// True when the aggregate must be exact (GitLab #906): either an element
+    /// already is an amount, or the statement asked with `as Currency`.
+    ///
+    /// One `Currency` in a column is enough — a pipeline that computed
+    /// `line_total` exactly must not lose it in the `sum` that reads the
+    /// column back. The annotation covers the other direction: a column of
+    /// `Double`s read out of a file, which the author wants added in base 10
+    /// rather than summed in binary and converted afterwards.
+    ///
+    /// The annotation is read from `_as_type_` rather than from the result
+    /// descriptor because the qualifier operations are not handed one. Both
+    /// execution modes bind that name, so this answers the same in `aro run`
+    /// and in a compiled binary.
+    private static func wantsExact(
+        _ items: [any Sendable], _ context: ExecutionContext
+    ) -> Bool {
+        if items.contains(where: { $0 is AROCurrency }) { return true }
+        guard let asType = context.resolveAny("_as_type_") as? String else { return false }
+        return ResultTypeCoercion.requestsExact(asType)
     }
 
     /// Every element of `input` as a list, for the collection ops.
@@ -944,6 +966,27 @@ public struct ComputeAction: SynchronousAction {
         if input is AnyStreamingValue { throw NeedsAsyncExecution() }
         let items = elements(input)
         guard !items.isEmpty else { return 0 }
+
+        // An exact column sums exactly (GitLab #906). Addition of amounts is
+        // the operation money most needs to be right, and this is the path a
+        // gold-layer aggregate takes.
+        if wantsExact(items, context) {
+            var total = AROCurrency(0)
+            for item in items {
+                guard let amount = AROCurrency.from(item) else {
+                    throw ActionError.typeMismatch(
+                        expected: "Number",
+                        actual: String(describing: type(of: item)),
+                        variable: "sum")
+                }
+                do { total = try total.adding(amount) }
+                catch let error as AROCurrencyError {
+                    throw ActionError.runtimeError(error.description)
+                }
+            }
+            return total
+        }
+
         var total = 0.0
         var allIntegral = true
         for item in items {
@@ -968,6 +1011,32 @@ public struct ComputeAction: SynchronousAction {
         guard !items.isEmpty else {
             throw ActionError.validationFailed("avg of an empty collection is undefined")
         }
+
+        // An exact column averages exactly as far as it can: the sum is
+        // exact, and the division follows `AROCurrency`'s stated rule — six
+        // decimal places, half-up (GitLab #906). A mean is not generally
+        // representable at the operands' scale, so the alternative is a
+        // silent rounding, and this one is at least written down.
+        if wantsExact(items, context) {
+            var total = AROCurrency(0)
+            for item in items {
+                guard let amount = AROCurrency.from(item) else {
+                    throw ActionError.typeMismatch(
+                        expected: "Number",
+                        actual: String(describing: type(of: item)),
+                        variable: "avg")
+                }
+                do { total = try total.adding(amount) }
+                catch let error as AROCurrencyError {
+                    throw ActionError.runtimeError(error.description)
+                }
+            }
+            do { return try total.divided(by: AROCurrency(items.count)) }
+            catch let error as AROCurrencyError {
+                throw ActionError.runtimeError(error.description)
+            }
+        }
+
         var total = 0.0
         for item in items {
             guard let value = numeric(item) else {
@@ -1117,6 +1186,18 @@ public struct ComputeAction: SynchronousAction {
         guard places >= 0, places <= 15 else {
             throw ActionError.validationFailed(
                 "fixed expects 0…15 decimal places, got \(places)")
+        }
+
+        // An exact amount rescales exactly and stays exact (GitLab #906).
+        // `fixed` keeps its job — settling on a presentation scale — but on a
+        // `Currency` it is no longer a repair: there is nothing to repair, so
+        // it rounds half-up to `places` and hands back an amount, not the
+        // nearest Double to one.
+        if let exact = input as? AROCurrency {
+            do { return try exact.rescaled(to: places) }
+            catch let error as AROCurrencyError {
+                throw ActionError.runtimeError(error.description)
+            }
         }
 
         let value: Double

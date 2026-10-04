@@ -101,11 +101,15 @@ final class JupyterKernelServer: @unchecked Sendable {
     private let logFD: Int32
     #endif
 
-    init(connection: JupyterConnection) throws {
+    init(connection: JupyterConnection, session: REPLSession? = nil) throws {
         self.connection = connection
         self.signer = JupyterSigner(key: connection.key)
-        self.session = REPLSession()
-        self.engine = REPLCellEngine(session: session)
+        // A caller may hand in a session it has already prepared — which is
+        // how `--project` reaches a kernel: the command wires the project in
+        // (an async operation) and passes the result here (GitLab #691).
+        let resolvedSession = session ?? REPLSession()
+        self.session = resolvedSession
+        self.engine = REPLCellEngine(session: resolvedSession)
         self.logFD = dup(STDERR_FILENO)
 
         guard let context = ZMQContext() else {
@@ -130,7 +134,9 @@ final class JupyterKernelServer: @unchecked Sendable {
             self?.publishStream(name: "stdout", text: text)
         }
 
-        session.useInteractiveInput(FrontEndInputChannel { [weak self] prompt, hidden in
+        // `resolvedSession`, not `session`: inside `init` that name is the
+        // optional parameter a caller may have handed in (GitLab #691).
+        resolvedSession.useInteractiveInput(FrontEndInputChannel { [weak self] prompt, hidden in
             guard let self else { throw InteractiveInputError.closed(action: "Prompt") }
             return try await self.askFrontEnd(prompt: prompt, hidden: hidden)
         })
@@ -161,7 +167,7 @@ final class JupyterKernelServer: @unchecked Sendable {
             }
         }
 
-        debugAdapter = KernelDebugAdapter(session: session) { [weak self] expression in
+        debugAdapter = KernelDebugAdapter(session: resolvedSession) { [weak self] expression in
             guard let self else { return nil }
             // Never race a running cell — the session is one-request-
             // at-a-time by design (ARO-0091 limits).

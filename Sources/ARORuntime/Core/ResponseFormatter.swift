@@ -124,6 +124,11 @@ public struct ResponseFormatter: Sendable {
             return String(int)
         case let double as Double:
             return AroNumberFormatting.string(for: double)
+        case let exact as AROCurrency:
+            // An exact amount prints what it is (GitLab #906). No 15-digit
+            // absorption is needed: there is no artifact to absorb, and
+            // re-rendering through Double would put one back.
+            return exact.description
         case let bool as Bool:
             return bool ? "true" : "false"
         case let response as Response:
@@ -254,6 +259,11 @@ public struct ResponseFormatter: Sendable {
             return String(int)
         case let double as Double:
             return AroNumberFormatting.string(for: double)
+        case let exact as AROCurrency:
+            // An exact amount prints what it is (GitLab #906). No 15-digit
+            // absorption is needed: there is no artifact to absorb, and
+            // re-rendering through Double would put one back.
+            return exact.description
         case let bool as Bool:
             return bool ? "true" : "false"
         case let dict as [String: any Sendable]:
@@ -322,6 +332,10 @@ public struct ResponseFormatter: Sendable {
             return int
         case let double as Double:
             return double
+        case let exact as AROCurrency:
+            // Left as itself; `toJSONString` routes a payload holding one
+            // through ARO's own JSON writer (GitLab #906).
+            return exact
         case let bool as Bool:
             return bool
         case let dict as [String: any Sendable]:
@@ -346,6 +360,20 @@ public struct ResponseFormatter: Sendable {
     }
 
     private static func toJSONString(_ value: Any) -> String {
+        // GitLab #906: an exact amount cannot go through
+        // `JSONSerialization` — it is not a type that writer knows, and
+        // widening it to `Double` first is the precision loss `Currency`
+        // exists to prevent. A payload holding one is written by ARO's own
+        // JSON writer instead, which spells it exactly.
+        //
+        // Only such a payload. Plain `Double`s still go through
+        // `JSONSerialization` here, so HTTP bodies keep rendering them at 17
+        // significant digits while file JSON renders them shortest-round-trip
+        // — that inconsistency is GitLab #908, and is deliberately not
+        // touched here.
+        if ResponsePayload.containsExactAmount(value) {
+            return FormatSerializer.serializeExactJSON(value)
+        }
         do {
             let data = try JSONSerialization.data(withJSONObject: value, options: [.sortedKeys])
             return String(data: data, encoding: .utf8) ?? "{}"

@@ -56,6 +56,10 @@ swift build --product ARORuntime && swift build --product aro
 #   the binary was built against the release you have installed.
 
 aro repl                 # Start the interactive ARO REPL
+aro repl ./MyApp         # …inside a project: its contract, .store seed rows,
+                         # templates/, plugins and feature sets are wired in,
+                         # WITHOUT running Application-Start (GitLab #691).
+                         # `aro kernel --project ./MyApp` does the same.
 aro repl --json          # REPL over line-delimited JSON on stdio (ARO-0091);
                          # the Python shim kernel in Editor/jupyter-aro speaks this
 aro kernel install       # Register the native Jupyter kernel (ZMQ, no Python);
@@ -756,8 +760,28 @@ The Compute action transforms data using built-in operations:
 | `captures` | First regex match, as a record of its groups | `Compute the <p: captures> from <line> by /(?<k>\w+)=(?<v>.*)/.` |
 | `all-captures` | Every match, as a list of those records | `Compute the <ps: all-captures> from <line> by /…/.` |
 | `symmetric-difference` | Elements in exactly one of the two | `Compute the <changed: symmetric-difference> from <before> with <after>.` |
-| `fixed` | Round to N decimal places (2 by default) — money | `Compute the <total: fixed> from <raw>.` |
+| `fixed` | Round to N decimal places (`with { places: N }`, 2 by default) | `Compute the <total: fixed> from <raw>.` |
 | Arithmetic | +, -, *, /, % | `Compute the <total> from <price> * <qty>.` |
+
+**Money is a result type, not a qualifier.** `as Currency` (and `as Decimal`,
+the same format) is exact base-10 arithmetic, so `3 * 2.40` is `7.20` where
+`Float` says `7.199999999999999`. `Decimal` used to be a silent alias for
+`Float` — the word that promises exactness delivering binary floating point —
+and is not any more (GitLab #906). The scale comes from the operands rather
+than being invented: `+`/`-`/`%` take the wider, `*` adds the two and drops
+trailing zeros back to the wider. Division cannot be exact, so the rule is
+stated: six places, half-up, then trimmed the same way — six is four more than
+any circulating currency's minor unit, so an intermediate division never
+decides the cents. Exactness is **contagious**, which is the point: a statement
+reading an exact amount stays exact without the annotation, so an amount is
+computed once and every aggregate downstream agrees about it. `Currency`
+carries **no currency code** — it is a precision format, and the code lives in
+ARO-0014's `Money` schema (`{ amount, currency }`), which composes with it. An
+amount is a number in every sink (JSON, CSV, YAML, HTTP bodies) at its own
+scale, in both execution modes. `fixed` keeps its job — settling a
+*presentation* scale — and on an exact amount it rescales rather than repairs.
+`round`/`rounded`/`precision` still redirect to `fixed`;
+`money`/`currency`/`decimal`/`exact` redirect to `as Currency`.
 
 Encoding qualifiers are specified in `Proposals/ARO-0019-standard-library.md` §3.1,
 collection/text qualifiers in §3.2. A template whose path ends `.html` or `.htm`
@@ -1060,10 +1084,10 @@ Sources/
 │       └── RuntimeExecutionBridge.swift # Expression evaluation for built code
 └── AROCLI/             # CLI (run, compile, check, build commands)
 
-Examples/               # 119 examples organized by category (run `ls Examples/` for full list)
+Examples/               # 122 examples organized by category (run `ls Examples/` for full list)
 │                       #
 │                       # plan.md is the canonical description of an example:
-│                       # 110 of the 119 have one, and it is the prompt the
+│                       # 113 of the 122 have one, and it is the prompt the
 │                       # example was written from. expected.txt is its
 │                       # executable contract, and test.hint tells the
 │                       # integration harness how (or whether) to run it.
@@ -1087,6 +1111,7 @@ Examples/               # 119 examples organized by category (run `ls Examples/`
 ├── ErrorHandling/      # Error philosophy demonstration
 ├── UserDefinedActions/ # Application.<Name> callable actions (ARO-0081)
 ├── RecursiveActions/   # Recursion shapes: nested frames, tail calls, mutual (ARO-0081 §9)
+├── CurrencyAmounts/    # `as Currency`: exact decimal money, both modes (ARO-0003)
 │
 │   # Events & Lifecycle
 ├── EventExample/       # Custom event emission and handling

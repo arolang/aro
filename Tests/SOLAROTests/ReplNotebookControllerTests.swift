@@ -63,11 +63,17 @@ final class FakeKernel: ReplKernelDriving {
     /// bindings (GitLab #544).
     var executedCellIDs: [String?] = []
 
+    /// Base directories the notebook sent — the notebook's own folder, so a
+    /// cell's relative paths mean what they mean on disk (GitLab #909).
+    var executedBaseDirs: [String?] = []
+
     func execute(code: String,
                  cellID: String?,
+                 baseDir: String?,
                  onStream: @escaping @MainActor (String, String) -> Void)
         async -> ReplKernelClient.ExecOutcome {
         executed.append(code)
+        executedBaseDirs.append(baseDir)
         executedCellIDs.append(cellID)
         if holdFirstExecution {
             holdFirstExecution = false
@@ -162,6 +168,35 @@ struct ReplNotebookControllerTests {
         #expect(kernel.ensureStartedCount >= 1)
         #expect(nb.runningCellID == nil)
         #expect(nb.queuedCellIDs.isEmpty)
+    }
+
+    @Test("A cell carries the notebook's own directory, not the project root")
+    func baseDirIsTheNotebooksDirectory() async throws {
+        // The kernel process is launched with the project root as its working
+        // directory, so a relative path in a cell used to resolve against the
+        // root however deep the notebook sat. `Learning/22-git-and-devops.repl`
+        // asking `<git: "..">` therefore discovered whatever is above the
+        // repository rather than the repository (GitLab #909).
+        let root = tmpDir()
+        let folder = root.appendingPathComponent("Learning")
+        try FileManager.default.createDirectory(
+            at: folder, withIntermediateDirectories: true)
+        let url = folder.appendingPathComponent("nb.repl")
+        var doc = ReplNotebookDocument()
+        doc.cells = [ReplNotebookCell(kind: .code, source: "one")]
+        try doc.save(to: url)
+
+        let kernel = FakeKernel()
+        let nb = ReplNotebookController(
+            url: url,
+            project: Project(rootPath: root),
+            kernel: kernel,
+            saveDebounce: .milliseconds(20))
+        nb.runAll()
+        await drain(nb)
+
+        #expect(kernel.executedBaseDirs == [folder.path],
+                "sent \(kernel.executedBaseDirs), project root is \(root.path)")
     }
 
     @Test("Enqueuing the same cell twice runs it once")

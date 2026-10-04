@@ -332,6 +332,21 @@ public struct ReduceAction: ActionImplementation {
             return element
         }
 
+        // GitLab #906: `Reduce the <revenue> as Currency from the <rows> with
+        // sum(<line_total>).` aggregates in exact base 10.
+        //
+        // The annotation has to reach the *elements*, not the result. A gold
+        // layer reads its column back out of a file, so the values arrive as
+        // the `Double` nearest each written amount; summing those and
+        // coercing afterwards gives `99.94999999999999` converted faithfully,
+        // which is the wrong number spelled exactly. Converting each element
+        // by its decimal spelling first and adding in base 10 gives `99.95`.
+        if ResultTypeCoercion.requestsExact(result.asType),
+           let exact = try exactAggregate(
+            array, aggregateFunc: aggregateFunc, field: field) {
+            return exact
+        }
+
         // Extract numeric values from array
         let values: [Double] = array.compactMap { item -> Double? in
             if let field = field, let dict = item as? [String: any Sendable] {
@@ -366,6 +381,55 @@ public struct ReduceAction: ActionImplementation {
 
         default:
             return array.count
+        }
+    }
+
+    /// `sum`, `avg`, `min` and `max` over a column of amounts, in exact
+    /// base 10 (GitLab #906).
+    ///
+    /// Returns `nil` for an aggregation this cannot answer exactly — `count`,
+    /// `first`, `last` — so the caller falls through to the ordinary path.
+    /// A non-numeric element is also `nil` rather than an error: the Double
+    /// path below reports that in the shape it always has.
+    private func exactAggregate(
+        _ array: [any Sendable], aggregateFunc: String, field: String?
+    ) throws -> (any Sendable)? {
+        guard ["sum", "avg", "average", "min", "max"].contains(aggregateFunc) else {
+            return nil
+        }
+        var amounts: [AROCurrency] = []
+        amounts.reserveCapacity(array.count)
+        for item in array {
+            let raw: (any Sendable)?
+            if let field, let dict = item as? [String: any Sendable] {
+                raw = dict[field]
+            } else {
+                raw = item
+            }
+            guard let raw, let amount = AROCurrency.from(raw) else { return nil }
+            amounts.append(amount)
+        }
+        guard !amounts.isEmpty else {
+            // `sum` of nothing is 0 (ARO-0019 §3.2); the others have no
+            // defensible answer and the Double path already says so.
+            return aggregateFunc == "sum" ? AROCurrency(0) : nil
+        }
+
+        do {
+            switch aggregateFunc {
+            case "min": return amounts.min()
+            case "max": return amounts.max()
+            default:
+                var total = AROCurrency(0)
+                for amount in amounts { total = try total.adding(amount) }
+                if aggregateFunc == "sum" { return total }
+                // The mean is not generally representable at the operands'
+                // scale, so it follows `Currency`'s stated division rule —
+                // six places, half-up — rather than a silent rounding.
+                return try total.divided(by: AROCurrency(amounts.count))
+            }
+        } catch let error as AROCurrencyError {
+            throw ActionError.runtimeError(error.description)
         }
     }
 

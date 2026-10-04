@@ -42,7 +42,7 @@ server's `StdioTransport` — not LSP's `Content-Length`.
 
 | `type` | Fields | Answer |
 |--------|--------|--------|
-| `execute` | `code`, optional `cellId`, optional `allowStdin` | `status: ok` with optional `display`, or `status: error` |
+| `execute` | `code`, optional `cellId`, optional `baseDir`, optional `allowStdin` | `status: ok` with optional `display`, or `status: error` |
 | `is_complete` | `code` | `status: complete` / `incomplete` (+`indent`) / `invalid` |
 | `complete` | `code`, `cursor` | `matches`, `items`, `cursorStart`, `cursorEnd` |
 | `inspect` | `code`, `cursor` | `found`, `text` |
@@ -64,6 +64,28 @@ the session's program) keeps the session-wide rule. A cell that binds
 fewer names on its second run leaves nothing behind: the names it no
 longer binds are released with it, so the session reflects the cells as
 they are now.
+
+**`baseDir` — where a relative path points.** A front-end sends the directory
+the cell's relative paths resolve against, and it is the *notebook's own
+folder*, not the session's.
+
+The two are not the same thing, and the gap is what made this a field rather
+than a working directory. A kernel process has one working directory for its
+whole life, chosen when it starts — Solaro launches it in the project root — but
+a project holds notebooks in several folders, and a reader looking at
+`Learning/22-git-and-devops.repl` means that file's folder when the cell says
+`<git: "..">`. Without the field that cell discovered whatever repository sits
+above the project root, or none, and answered `Cannot retrieve the status from
+the git: ..` — while the same notebook passed under `Learning/validate.py`,
+which runs with `cwd=Learning/` (GitLab #909).
+
+So the directory travels per request. The server applies it for that cell and
+restores the previous default afterwards, which also means a front-end may run
+cells from notebooks in different folders against one session.
+
+Absent means the session's own default: the project directory for
+`aro repl <dir>`, otherwise the process's working directory. A client that does
+not know where its cell came from therefore behaves exactly as before.
 
 Every request carries an `id`. Every request gets exactly one `result` message
 with the same `id` — `input_reply` excepted, because it is an answer rather than
@@ -344,6 +366,38 @@ A `KeyPress Handler` stays **undelivered** in a session (see *Handler
 families*), and this is where the line falls: this channel answers a question
 the program asked — one line, on request — while a `KeyPress` handler wants
 unsolicited keystrokes from a raw keyboard, which no front-end offers.
+## The project a session stands in
+
+A session takes an optional project directory, and wires in what `aro run`
+discovers for it:
+
+```
+aro repl ./MyApp
+aro repl --json ./MyApp
+aro kernel --connection-file … --project ./MyApp
+```
+
+| What | Effect in a cell |
+|---|---|
+| `openapi.yaml` | the contract is registered, so route-shaped work and status names behave as they do under `aro run` |
+| `*.store` | seed rows are in the repositories a cell `Retrieve`s from |
+| `templates/` | `Transform the <page> from the <template: hi.tpl>.` finds the file — with a template executor set, since a service without one answers "Template executor not configured" |
+| `Plugins/` | the project's plugin actions and qualifiers resolve (`Greeting.Hello the <h> with …`) |
+| the project's `.aro` files | its feature sets are added through the same `addFeatureSet` a `:load` or a cell definition uses, so handler families register through the one classifier above and `Application.<Name>` calls resolve |
+
+**`Application-Start` and `Application-End` are discovered and not executed.** A
+session is a place to try statements, not a process that boots an application:
+binding ports and starting watchers because a notebook window opened would be a
+surprise, and Solaro opens a project as soon as one does. The count of skipped
+lifecycle feature sets is reported, so it is visible rather than silent.
+
+Each item is wired in independently and a failure in one is a warning, not a
+refusal: a project with a malformed contract still gives you its templates. A
+session is a tool for finding out why something is broken, which it cannot be if
+the breakage stops it from starting.
+
+Without a directory nothing changes — a bare `aro repl` is the session it always
+was (GitLab #691).
 
 ## Output capture
 
