@@ -26,6 +26,8 @@ Sources/
 ├── SOLARO/                       ← desktop app (macOS, this directory)
 │   ├── SOLAROApp.swift           ← @main, WindowGroup, .onOpenURL launcher path
 │   ├── Theme.swift               ← SolaroColor / SolaroFont / SolaroSpace / SolaroRadius
+│   ├── SolaroThemeFile.swift     ← JSON theme format: tokens, hex, merge-over-defaults
+│   ├── SolaroThemeStore.swift    ← Themes folder, curated presets, live palette (#269)
 │   ├── WorkspaceState.swift      ← welcome ↔ open routing
 │   ├── Welcome.swift             ← welcome (NSOpenPanel + recents tiles)
 │   ├── LearningNotebooks.swift   ← first-run offer + Learning/ downloader
@@ -189,7 +191,7 @@ export SOLARO_APP="$(pwd)/.build/SOLARO.app"
 | Phase | Status | Notes |
 |---|---|---|
 | 1 — Platform pivot | ✅ shipped | SwiftCrossUI removed; SwiftUI/AppKit foundation in place |
-| 2 — Theme | ✅ shipped | SolaroColor / SolaroFont / spacing / radius tokens |
+| 2 — Theme | ✅ shipped | SolaroColor / SolaroFont / spacing / radius tokens; colours come from a palette a JSON theme file can override (#269) |
 | 3 — Welcome | ✅ shipped | NSOpenPanel folder picker, create-project scaffold, recents |
 | 4 — Workspace shell | ✅ shipped | NavigationSplitView + .inspector + native toolbar |
 | 5 — Sidebar | ✅ shipped | Files / Features / Plugins, native sidebar list selection |

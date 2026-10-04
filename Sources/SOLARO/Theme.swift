@@ -14,6 +14,15 @@
 // the chosen NSAppearance to NSApp.appearance; the dynamic
 // colors below pick up the swap automatically the next time
 // SwiftUI evaluates a view body.
+//
+// The *values* no longer live here. Every token below reads from
+// `SolaroPalette.shared`, which starts as the shipping palette
+// (`SolaroThemeTokens.builtIn`, same numbers these statics used to
+// hold) and can be overridden by a JSON theme file — see
+// `SolaroThemeFile.swift` for the format and `SolaroThemeStore.swift`
+// for where a theme comes from (GitLab #269). The accessor names and
+// types are unchanged, which is the point: ~1300 call sites across
+// the app did not have to learn about themes.
 
 import SwiftUI
 import AppKit
@@ -26,90 +35,83 @@ enum SolaroColor {
 
     /// Deepest layer behind everything. Slight blue tilt so the
     /// canvas doesn't feel like a flat blackboard.
-    static let backdrop = dynamic(
-        light: NSColor(srgbRed: 0.961, green: 0.965, blue: 0.973, alpha: 1),
-        dark:  NSColor(srgbRed: 0.062, green: 0.075, blue: 0.094, alpha: 1)
-    )
+    static var backdrop: Color { token(.backdrop) }
 
     /// Sidebars, inspector panels, status bar. One shade lighter
     /// than `backdrop` so the layout reads.
-    static let surface = dynamic(
-        light: NSColor(srgbRed: 1.000, green: 1.000, blue: 1.000, alpha: 1),
-        dark:  NSColor(srgbRed: 0.097, green: 0.115, blue: 0.142, alpha: 1)
-    )
+    static var surface: Color { token(.surface) }
 
     /// Cards / nodes / popovers sitting on top of surfaces.
-    static let surfaceRaised = dynamic(
-        light: NSColor(srgbRed: 0.945, green: 0.949, blue: 0.957, alpha: 1),
-        dark:  NSColor(srgbRed: 0.137, green: 0.157, blue: 0.187, alpha: 1)
-    )
+    static var surfaceRaised: Color { token(.surfaceRaised) }
 
     /// Hairline dividers between zones.
-    static let divider = dynamic(
-        light: NSColor.black.withAlphaComponent(0.10),
-        dark:  NSColor.white.withAlphaComponent(0.06)
-    )
+    static var divider: Color { token(.divider) }
 
     /// Selected-row tint for sidebar lists.
-    static let selection = dynamic(
-        light: NSColor(srgbRed: 0.30, green: 0.42, blue: 0.78, alpha: 0.20),
-        dark:  NSColor(srgbRed: 0.30, green: 0.42, blue: 0.78, alpha: 0.35)
-    )
+    static var selection: Color { token(.selection) }
 
     // --- Foreground ---
 
     /// Primary body text.
-    static let textPrimary = dynamic(
-        light: NSColor.black.withAlphaComponent(0.92),
-        dark:  NSColor.white.withAlphaComponent(0.92)
-    )
+    static var textPrimary: Color { token(.textPrimary) }
     /// Secondary labels (path metadata, hints).
-    static let textSecondary = dynamic(
-        light: NSColor.black.withAlphaComponent(0.62),
-        dark:  NSColor.white.withAlphaComponent(0.55)
-    )
+    static var textSecondary: Color { token(.textSecondary) }
     /// Tertiary labels (empty-state hints, footnotes).
-    static let textTertiary = dynamic(
-        light: NSColor.black.withAlphaComponent(0.42),
-        dark:  NSColor.white.withAlphaComponent(0.35)
-    )
+    static var textTertiary: Color { token(.textTertiary) }
 
-    /// Helper: build a SwiftUI Color from a name-less dynamic NSColor.
-    /// `appearance.bestMatch` returns nil for unknown appearances
-    /// (HighContrast, etc.); fall back to the light variant.
-    private static func dynamic(light: NSColor, dark: NSColor) -> Color {
-        Color(nsColor: NSColor(name: nil, dynamicProvider: { appearance in
-            let match = appearance.bestMatch(from: [.aqua, .darkAqua])
-            return match == .darkAqua ? dark : light
-        }))
+    /// One token out of the live palette.
+    ///
+    /// The palette memoises, so repeated reads of the same token hand
+    /// back the same `Color` — which matters because call sites
+    /// compare colours for equality (`SyntaxHighlighter` decides
+    /// whether an identifier was a verb that way) and SwiftUI colour
+    /// equality compares the backing providers, not the components.
+    private static func token(_ token: SolaroColorToken) -> Color {
+        SolaroPalette.shared.color(token)
     }
 
     // --- Brand / accent ---
 
     /// SOLARO accent used in the wordmark + focus rings.
-    static let accent        = Color(red: 0.30, green: 0.62, blue: 0.95)
+    static var accent: Color { token(.accent) }
 
     /// Status pips. Run-state indicator on the toolbar.
-    static let stateOK       = Color(red: 0.27, green: 0.78, blue: 0.42)
-    static let stateWarn     = Color(red: 0.95, green: 0.70, blue: 0.20)
-    static let stateError    = Color(red: 0.90, green: 0.32, blue: 0.32)
+    static var stateOK: Color    { token(.stateOK) }
+    static var stateWarn: Color  { token(.stateWarn) }
+    static var stateError: Color { token(.stateError) }
 
     // --- Action role tints (wireframe note 8467 figure 4) ---
 
     /// REQUEST (Extract, Retrieve, Parse, Fetch, Pull, Clone) —
     /// data flowing into the program.
-    static let roleRequest   = Color(red: 0.34, green: 0.62, blue: 0.95)
+    static var roleRequest: Color { token(.roleRequest) }
 
     /// OWN (Compute, Validate, Compare, Create, Transform, Stage,
     /// Checkout) — internal transformations.
-    static let roleOwn       = Color(red: 0.73, green: 0.47, blue: 0.95)
+    static var roleOwn: Color { token(.roleOwn) }
 
     /// RESPONSE (Return, Throw) — data flowing out the way it came in.
-    static let roleResponse  = Color(red: 0.39, green: 0.81, blue: 0.55)
+    static var roleResponse: Color { token(.roleResponse) }
 
     /// EXPORT (Publish, Store, Log, Send, Emit, Commit, Push, Tag) —
     /// effects on the outside world.
-    static let roleExport    = Color(red: 0.96, green: 0.65, blue: 0.25)
+    static var roleExport: Color { token(.roleExport) }
+
+    // --- Editor syntax ---
+    //
+    // Keywords use `accent`, articles `textTertiary` and prepositions
+    // the wire colours, so only three syntax categories need tokens of
+    // their own. They were inline `Color(red:green:blue:)` literals in
+    // `SyntaxHighlighter`, which made the one claim the book makes
+    // about themes — that they change syntax colours — untrue for
+    // strings and numbers.
+
+    /// String literals and string segments.
+    static var syntaxString: Color { token(.syntaxString) }
+    /// Int and float literals.
+    static var syntaxNumber: Color { token(.syntaxNumber) }
+    /// `true` / `false` / `nil`.
+    static var syntaxLiteral: Color { token(.syntaxLiteral) }
 
     /// Lookup helper for verbs. Primary source is the live
     /// `aro actions` registry (same data the left-pane Actions
@@ -158,20 +160,17 @@ enum SolaroColor {
     /// legend documented in the wireframe.
     /// Neutral wire color used when a preposition is missing or
     /// unknown. Centralised so callers / tests share one value.
-    static let wireNeutral = dynamic(
-        light: NSColor.black.withAlphaComponent(0.30),
-        dark:  NSColor.white.withAlphaComponent(0.35)
-    )
+    static var wireNeutral: Color { token(.wireNeutral) }
 
     static func wireColor(forPreposition preposition: String?) -> Color {
         guard let preposition else { return wireNeutral }
         switch preposition.lowercased() {
-        case "from":    return Color(red: 0.34, green: 0.62, blue: 0.95) // blue
-        case "to":      return Color(red: 0.96, green: 0.78, blue: 0.32) // amber
-        case "with":    return Color(red: 0.73, green: 0.47, blue: 0.95) // purple
-        case "into":    return Color(red: 0.39, green: 0.81, blue: 0.55) // green
-        case "against": return Color(red: 0.90, green: 0.32, blue: 0.32) // red
-        case "via":     return Color(red: 0.34, green: 0.62, blue: 0.95) // blue
+        case "from":    return token(.wireFrom)      // blue
+        case "to":      return token(.wireTo)        // amber
+        case "with":    return token(.wireWith)      // purple
+        case "into":    return token(.wireInto)      // green
+        case "against": return token(.wireAgainst)   // red
+        case "via":     return token(.wireVia)       // blue
         case "for", "at", "by", "on": return wireNeutral
         default: return wireNeutral
         }
