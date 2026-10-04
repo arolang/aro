@@ -247,7 +247,9 @@ aro check ./MyApp         # Errors, warnings, per-route request-body analysis
 aro diff --graph a..b     # Compare feature-set graphs between two revisions
 aro test ./MyApp          # Run colocated test feature sets (interpreter)
 aro test --compiled ./MyApp   # Run the same tests through a native binary (ARO-0015 §3.4)
-aro repl                  # Interactive REPL (--json for a machine-readable one)
+aro repl [./MyApp]        # Interactive REPL (--json for a machine-readable one);
+                          # a project directory wires in its contract, stores,
+                          # templates, plugins and feature sets (ARO-0091)
 aro kernel install        # Register the native Jupyter kernel (ZMQ, no Python)
 aro new plugin <name> --lang swift   # Scaffold a plugin
 aro add <package>         # Install a plugin from a Git repository

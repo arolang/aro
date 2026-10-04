@@ -220,6 +220,39 @@ alone reads as "parked". The classification is one function
 `aro kernel`, piped stdin and Solaro alike, so no two front-ends can disagree
 about which family is which.
 
+## The project a session stands in
+
+A session takes an optional project directory, and wires in what `aro run`
+discovers for it:
+
+```
+aro repl ./MyApp
+aro repl --json ./MyApp
+aro kernel --connection-file … --project ./MyApp
+```
+
+| What | Effect in a cell |
+|---|---|
+| `openapi.yaml` | the contract is registered, so route-shaped work and status names behave as they do under `aro run` |
+| `*.store` | seed rows are in the repositories a cell `Retrieve`s from |
+| `templates/` | `Transform the <page> from the <template: hi.tpl>.` finds the file — with a template executor set, since a service without one answers "Template executor not configured" |
+| `Plugins/` | the project's plugin actions and qualifiers resolve (`Greeting.Hello the <h> with …`) |
+| the project's `.aro` files | its feature sets are added through the same `addFeatureSet` a `:load` or a cell definition uses, so handler families register through the one classifier above and `Application.<Name>` calls resolve |
+
+**`Application-Start` and `Application-End` are discovered and not executed.** A
+session is a place to try statements, not a process that boots an application:
+binding ports and starting watchers because a notebook window opened would be a
+surprise, and Solaro opens a project as soon as one does. The count of skipped
+lifecycle feature sets is reported, so it is visible rather than silent.
+
+Each item is wired in independently and a failure in one is a warning, not a
+refusal: a project with a malformed contract still gives you its templates. A
+session is a tool for finding out why something is broken, which it cannot be if
+the breakage stops it from starting.
+
+Without a directory nothing changes — a bare `aro repl` is the session it always
+was (GitLab #691).
+
 ## Output capture
 
 `Log` writes to stdout directly, as do assorted warnings and `print`s in the
