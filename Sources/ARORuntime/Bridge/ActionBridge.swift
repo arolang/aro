@@ -571,12 +571,27 @@ public func aro_action_emit(
     _ resultPtr: UnsafeRawPointer?,
     _ objectPtr: UnsafeRawPointer?
 ) -> UnsafeMutableRawPointer? {
-    // Synchronous emit: wait for all handlers to complete before returning.
-    // This matches interpreter-mode EmitAction which uses publishAndTrack (waits for handlers).
-    // Required for correct sequential semantics: e.g., LoadTimeline emits PostReceived events
-    // and must wait for each Store handler to complete before updating totalPosts in UIState,
-    // so the timeline observer renders with all posts already in the repository.
+    // `Emit` hands the event over and continues; it does not wait for handlers
+    // (ARO-0088 §7, GitLab #905). The waiting it used to do lives in `Deliver`.
+    //
+    // The comment here used to justify the waiting with a program that needed
+    // it — a timeline emitting `PostReceived` and relying on each `Store`
+    // handler having finished before it read the total. That program is
+    // exactly what `Deliver` is for, and saying so in one verb is better than
+    // every emitter paying for it.
     return executeAction(verb: "emit", contextPtr: contextPtr, resultPtr: resultPtr, objectPtr: objectPtr)
+}
+
+@_cdecl("aro_action_deliver")
+public func aro_action_deliver(
+    _ contextPtr: UnsafeMutableRawPointer?,
+    _ resultPtr: UnsafeRawPointer?,
+    _ objectPtr: UnsafeRawPointer?
+) -> UnsafeMutableRawPointer? {
+    // The awaited delivery (GitLab #905). Both verbs reach the same action
+    // table as the interpreter, so neither mode can drift from the other
+    // about which of the two waits.
+    return executeAction(verb: "deliver", contextPtr: contextPtr, resultPtr: resultPtr, objectPtr: objectPtr)
 }
 
 @_cdecl("aro_action_send")

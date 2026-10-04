@@ -36,7 +36,7 @@ public enum ActionVerbCatalog {
         "combine", "commit", "compare", "compute", "configure", "connect",
         "construct", "convert", "copy", "create", "createdirectory", "debug",
         "delay", "delete", "derive", "destroy", "disconnect", "dispatch",
-        "embed", "emit", "exec", "execute", "exists", "export", "expose",
+        "deliver", "embed", "emit", "exec", "execute", "exists", "export", "expose",
         "extract", "fail", "fetch", "filter", "find", "flip", "get", "given",
         "group", "http", "include", "insert", "invoke", "join", "keepalive",
         "list", "listen", "load", "log", "make", "map", "match", "merge",
