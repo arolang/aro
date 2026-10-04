@@ -395,6 +395,15 @@ train:unit:
   script:
     - pip install --no-cache-dir --quiet pytest PyYAML
     - python3 -m pytest Train/script/tests -q
+    # The held-out benchmark's freeze and its leakage gate, as named steps
+    # rather than only as test cases (GitLab #785). `--verify` checks the
+    # sha256 in MANIFEST.json, the structure of all 301 prompts, and
+    # character-3-gram overlap against every mineable corpus file; `--stub`
+    # proves the pass@k reporting with no model and no `aro`. Both exit
+    # non-zero on failure, so "the benchmark leaked" reads as its own red
+    # step instead of as one assertion inside a 45-test file.
+    - python3 Train/script/held_out_benchmark.py --verify
+    - python3 Train/script/held_out_benchmark.py --stub
     # Train/ is Apple-Silicon-only where it touches mlx, but everything that
     # decides what the pipeline PRODUCES — the shared helpers, the
     # hyper-parameter table, the stall watchdog, the sandbox, the run archive —

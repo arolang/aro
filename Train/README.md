@@ -19,8 +19,22 @@ Train/
 │   ├── 28_diagnostic_repairs.py … 35_preference_pairs.py
 │   │                        # Standalone generators, run any time
 │   ├── config.py            # Shared paths, model IDs, helpers
+│   ├── leakage.py           # Held-out management + the benchmark leakage gate
+│   ├── held_out_benchmark.py # Scores the frozen benchmark (GitLab #785)
 │   ├── tests/               # Unit tests for the pure-python config helpers
 │   └── run/outputs/         # Executed notebook copies + per-notebook logs
+├── eval/
+│   ├── benchmark/           # THE FROZEN HELD-OUT BENCHMARK — never mined.
+│   │                        # 301 prompts across six strata, versioned by
+│   │                        # sha256, with 0 near-duplicates at character
+│   │                        # 3-gram Jaccard 0.85 against all 23,931
+│   │                        # mineable corpus instructions (GitLab #785).
+│   │                        # The `.never-mine` marker and the `.benchmark.`
+│   │                        # filename are both load-bearing: leakage.py's
+│   │                        # corpus_files() excludes either one, and a test
+│   │                        # fails if a prompt here reaches a corpus file.
+│   ├── functional/          # tasks.json for functional_eval (GitLab #813)
+│   └── human/               # RUBRIC.md for human scoring
 ├── data/                    # All generated training artifacts
 │   ├── 02_knowledge/        # knowledge.json + knowledge_pairs.jsonl
 │   ├── 03_raw_generated/    # LLM-generated drafts
