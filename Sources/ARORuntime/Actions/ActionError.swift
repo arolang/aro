@@ -130,6 +130,20 @@ extension AROError {
            case .indexOutOfBounds = actionError {
             return actionError.description + "."
         }
+        // A failed test expectation (ARO-0015 §2.3, §2.4). `Cannot then the
+        // <difference> with the 15.` reads perfectly well and says nothing
+        // about the 20 that was actually there — and the comparison is the
+        // entire content of the failure.
+        //
+        // It matters most compiled. `TestRunner` catches the `AssertionError`
+        // itself and reads `.message` off it, but a compiled binary has no
+        // executor to catch anything: the bridge turns the thrown error into a
+        // message string and the type is gone by the time `aro test --compiled`
+        // reports it (GitLab #694). Curating it here is what keeps the two
+        // modes' failure text the same sentence.
+        if let assertion = error as? AssertionError {
+            return assertion.message + "."
+        }
         return nil
     }
 }

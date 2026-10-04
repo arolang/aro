@@ -77,6 +77,10 @@ struct CompilationStrategy: Sendable {
         var verbose: Bool
         var keepIntermediate: Bool
         var emitLLVM: Bool
+        /// Build a test-harness binary rather than the application's
+        /// (`aro build --tests`, GitLab #694): test feature sets are kept and
+        /// `main` drives them instead of calling `Application-Start`.
+        var testHarness: Bool = false
 
         #if os(macOS)
         var sign: String? = nil
@@ -132,7 +136,8 @@ struct CompilationStrategy: Sendable {
                 linkMode: request.linkMode.recordedName,
                 sourceFilename: request.entryFilename,
                 sourceDirectory: request.sourceDirectory,
-                sourceFileMap: request.sourceFileMap
+                sourceFileMap: request.sourceFileMap,
+                testHarness: request.testHarness
             )
             AROLogger.debug("LLVM IR generated successfully", subsystem: "build")
         } catch {

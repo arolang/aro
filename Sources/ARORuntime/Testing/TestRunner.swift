@@ -26,9 +26,12 @@ public struct TestRunner: Sendable {
     // MARK: - Test Discovery
 
     /// Check if a feature set is a test
+    ///
+    /// The rule lives in `AROParser.TestFeatureSetNaming` because the compiler
+    /// decides the exact complement of it — which feature sets to strip from a
+    /// shipped binary, and which to drive in a test harness (GitLab #694).
     public static func isTestFeatureSet(_ featureSet: FeatureSet) -> Bool {
-        let activity = featureSet.businessActivity
-        return activity.hasSuffix("Test") || activity.hasSuffix("Tests")
+        TestFeatureSetNaming.isTest(activity: featureSet.businessActivity)
     }
 
     /// Filter test feature sets from a program

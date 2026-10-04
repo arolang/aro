@@ -55,6 +55,7 @@ aro build [options] <path>
 | `-v, --verbose` | Verbose logging |
 | `--keep-intermediate` | Keep `.ll` and `.o` |
 | `--emit-llvm` | Emit LLVM IR text instead of a binary |
+| `--tests` | Build a **test-harness** binary: keep the test feature sets and run them instead of `Application-Start` (ARO-0015 §3.4). This is what `aro test --compiled` builds |
 | `--sign <identity>` | Code-signing identity, or `-` for ad-hoc |
 | `--hardened-runtime` | Enable hardened runtime (needed for notarization) |
 
@@ -85,8 +86,15 @@ qualifier does.
 ## `aro test` — run colocated tests
 
 ```
-aro test <path> [-v] [--filter <pattern>] [--no-color] [--record <file>]
+aro test <path> [-v] [--filter <pattern>] [--no-color] [--record <file>] [--compiled]
 ```
+
+`--compiled` builds a test-harness binary (`aro build --tests`) and runs the
+same test feature sets through it, instead of the interpreter (ARO-0015 §3.4).
+The interpreter is the default; `--compiled` is what tells you whether the
+binary you ship behaves like the program you tested. `--record` is
+interpreter-only, and `--compiled` needs `aro build`, so it is unavailable on
+Windows.
 
 ## `aro diff` — compare feature graphs
 
