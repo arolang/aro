@@ -108,4 +108,17 @@ enum JSONREPLEncoder {
     static func stream(id: Int, name: String, text: String) -> String {
         line(["type": "stream", "id": id, "name": name, "text": text])
     }
+
+    /// Output produced while no cell was executing.
+    ///
+    /// Carries **no** `id`, because there is no cell it belongs to, and an
+    /// `origin` so a front-end can render it somewhere of its own rather than
+    /// guess. A `File Event Handler` woken by a file dropped while the session
+    /// idles is the case this exists for: attributing its output to the last
+    /// cell that happened to run says something false about causation, and a
+    /// front-end that had already finalised that cell would misplace or drop
+    /// it (GitLab #913).
+    static func backgroundStream(name: String, text: String) -> String {
+        line(["type": "stream", "origin": "background", "name": name, "text": text])
+    }
 }
