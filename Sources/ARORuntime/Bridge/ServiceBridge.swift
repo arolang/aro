@@ -1533,38 +1533,30 @@ public func aro_native_http_server_start(_ port: Int32, _ contextPtr: UnsafeMuta
                     // flatten into dot-notation keys, collections go in as
                     // collections. It used to read the flattened dictionary
                     // and parse each collection's JSON text back so it could
-                    // re-serialise it below (GitLab #711). Same renderer the
+                    // re-serialise it below (GitLab #711), and it used to hand
+                    // `JSONSerialization` a Swift-native graph to bridge
+                    // element by element (GitLab #904). Same renderer the
                     // interpreter uses, so the two modes cannot drift.
-                    var jsonDict: [String: Any] = ResponsePayload.jsonObject(response.payload)
-
-                    // If no data, include status as fallback
-                    if jsonDict.isEmpty {
-                        jsonDict["status"] = response.status
-                    }
-
-                    // Serialize the response body. A failure here means the
-                    // handler produced a value JSONSerialization can't encode
-                    // (e.g. a non-JSON object slipped into response.data) — the
-                    // client would get a bare {"status":"ok"} with the real data
-                    // silently dropped, so surface it.
-                    // GitLab #906: same rule as the interpreter
-                    // (`Application.buildHTTPResponse`) — a payload holding an
-                    // exact amount is written by ARO's own JSON writer, so a
-                    // money field reads identically in both modes.
-                    if ResponseFormatter.containsExactAmount(jsonDict) {
-                        let body = FormatSerializer.serializeExactJSON(jsonDict)
-                        return (statusCode, ["Content-Type": "application/json"], body.data(using: .utf8))
-                    }
-                    // `try?` justified: a throw here means the handler produced
-                    // something `JSONSerialization` cannot encode, and the
-                    // warning below is the report. Re-stated next to the call
-                    // because the exact-amount branch above now sits between it
-                    // and the paragraph that used to carry this reason — which
-                    // is exactly what `lint-unjustified-try` noticed.
-                    if let jsonData = try? JSONSerialization.data(withJSONObject: jsonDict, options: [.sortedKeys]) {
+                    //
+                    // A failure here means the handler produced a value
+                    // JSONSerialization can't encode (e.g. a non-JSON object
+                    // slipped into response.data) — the client would get a bare
+                    // {"status":"ok"} with the real data silently dropped, so
+                    // surface it.
+                    // try? is acceptable: the warning below is the report, and
+                    // the status-only body is the pre-existing answer.
+                    //
+                    // `jsonBody` also picks the writer: a payload carrying an
+                    // exact `Currency` amount is written by ARO's own
+                    // (GitLab #906). That decision used to sit here and in
+                    // `Application.buildHTTPResponse`, duplicated; it moved
+                    // inside, where the serialiser now lives, so the two modes
+                    // cannot disagree about which writer a money response got.
+                    if let jsonData = try? ResponsePayload.jsonBody(
+                        response.payload, whenEmpty: [("status", response.status)]) {
                         return (statusCode, ["Content-Type": "application/json"], jsonData)
                     }
-                    FileHandle.standardError.write(Data("[ServiceBridge] Warning: response data not JSON-serializable, returning status-only body: keys=\(Array(jsonDict.keys))\n".utf8))
+                    FileHandle.standardError.write(Data("[ServiceBridge] Warning: response data not JSON-serializable, returning status-only body: keys=\(Array(response.payload.keys))\n".utf8))
                 }
                 return (200, ["Content-Type": "application/json"], "{\"status\":\"ok\"}".data(using: .utf8))
             }

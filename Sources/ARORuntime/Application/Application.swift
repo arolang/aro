@@ -860,27 +860,28 @@ public final class Application: @unchecked Sendable {
         // in as collections. This used to read the flattened dictionary and
         // parse each collection's JSON text back into a JSON value so it could
         // re-serialise it below — encode → string → decode → encode on every
-        // response containing a list (GitLab #711).
-        var jsonBody: [String: Any] = ResponsePayload.jsonObject(response.payload)
-
-        // If no data, include status info
-        if jsonBody.isEmpty {
-            jsonBody["status"] = response.status
-            if !response.reason.isEmpty {
-                jsonBody["reason"] = response.reason
-            }
+        // response containing a list (GitLab #711). The graph it hands
+        // `JSONSerialization` is Foundation containers, so the serialiser no
+        // longer bridges every element on the way in (GitLab #904).
+        //
+        // A response that carries no values answers with its status rather
+        // than with `{}`.
+        var extras: [(key: String, value: String)] = [("status", response.status)]
+        if !response.reason.isEmpty {
+            extras.append(("reason", response.reason))
         }
 
         let bodyData: Data?
-        if ResponseFormatter.containsExactAmount(jsonBody) {
-            // GitLab #906: an exact `Currency` amount is written by ARO's own
-            // JSON writer, which spells it at its own scale. `JSONSerialization`
-            // cannot carry the type at all, and widening it to Double first is
-            // the precision loss the format exists to prevent. The compiled
-            // path (`ServiceBridge.getContextResponse`) does the same, so a
-            // money field reads identically in both modes.
-            bodyData = FormatSerializer.serializeExactJSON(jsonBody).data(using: .utf8)
-        } else if let jsonData = try? JSONSerialization.data(withJSONObject: jsonBody, options: [.sortedKeys]) {
+        // try? is acceptable: a failure here means the handler produced a
+        // value JSONSerialization refuses — a non-finite Double, in practice.
+        // The status-only body below is the pre-existing answer to that, kept
+        // so a single bad field cannot take down the route.
+        //
+        // `jsonBody` also picks the writer: a payload carrying an exact
+        // `Currency` amount is written by ARO's own (GitLab #906). That
+        // decision moved inside, because it has to be made before the graph
+        // is built — see the note there.
+        if let jsonData = try? ResponsePayload.jsonBody(response.payload, whenEmpty: extras) {
             bodyData = jsonData
         } else {
             bodyData = "{\"status\":\"\(response.status)\"}".data(using: .utf8)

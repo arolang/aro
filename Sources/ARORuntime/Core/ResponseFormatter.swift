@@ -371,7 +371,7 @@ public struct ResponseFormatter: Sendable {
         // significant digits while file JSON renders them shortest-round-trip
         // — that inconsistency is GitLab #908, and is deliberately not
         // touched here.
-        if containsExactAmount(value) {
+        if ResponsePayload.containsExactAmount(value) {
             return FormatSerializer.serializeExactJSON(value)
         }
         do {
@@ -379,24 +379,6 @@ public struct ResponseFormatter: Sendable {
             return String(data: data, encoding: .utf8) ?? "{}"
         } catch {
             return "{\"error\": \"serialization failed\"}"
-        }
-    }
-
-    /// Whether `value`, or anything nested in it, is an exact amount.
-    static func containsExactAmount(_ value: Any) -> Bool {
-        switch value {
-        case is AROCurrency:
-            return true
-        case let array as [Any]:
-            return array.contains { containsExactAmount($0) }
-        case let dict as [String: Any]:
-            return dict.values.contains { containsExactAmount($0) }
-        case let array as [any Sendable]:
-            return array.contains { containsExactAmount($0) }
-        case let dict as [String: any Sendable]:
-            return dict.values.contains { containsExactAmount($0) }
-        default:
-            return false
         }
     }
 }

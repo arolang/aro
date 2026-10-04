@@ -232,8 +232,83 @@ struct CurrencyNumberFormatTests {
         // holding one goes through ARO's own writer. GitLab #908 (plain
         // Doubles on this path) is deliberately untouched.
         let payload: [String: Any] = ["revenue": try exactNinetyNine()]
-        #expect(ResponseFormatter.containsExactAmount(payload))
+        #expect(ResponsePayload.containsExactAmount(payload))
         #expect(FormatSerializer.serializeExactJSON(payload) == "{\"revenue\":99.95}")
+    }
+
+    /// The ordering `ResponsePayload.jsonBody` depends on (GitLab #906 × #904).
+    ///
+    /// `jsonBody` owns the `JSONSerialization` call since #904, so the
+    /// exact-amount route has to be chosen from the *payload*, before the
+    /// Foundation graph is built. Let an `AROCurrency` into that graph and
+    /// `JSONSerialization` refuses it, `jsonBody` throws, every caller's
+    /// `try?` yields the status-only fallback — and the client gets
+    /// `{"status":"ok"}` with the money silently dropped. This test is that
+    /// failure, written down: a body, with the amount in it.
+    @Test("a money payload still gets a body, written exactly")
+    func moneyPayloadIsNotDropped() throws {
+        let payload: [String: any Sendable] = ["revenue": try exactNinetyNine()]
+        let data = try ResponsePayload.jsonBody(
+            payload, whenEmpty: [("status", "ok")])
+        let text = try #require(String(data: data, encoding: .utf8))
+        #expect(text == "{\"revenue\":99.95}")
+        // Not the fallback, and not a quoted string.
+        #expect(!text.contains("status"))
+        #expect(!text.contains("\"99.95\""))
+    }
+
+    @Test("a payload with no amount is untouched by #906")
+    func plainPayloadTakesTheFoundationRoute() throws {
+        // #904's route, byte for byte — the hot path must not have moved.
+        let payload: [String: any Sendable] = ["revenue": 99.95, "region": "EMEA"]
+        #expect(!ResponsePayload.containsExactAmount(payload))
+        let data = try ResponsePayload.jsonBody(payload)
+        let text = try #require(String(data: data, encoding: .utf8))
+        let expected = try JSONSerialization.data(
+            withJSONObject: ["revenue": 99.95, "region": "EMEA"] as [String: Any],
+            options: [.sortedKeys])
+        #expect(text == String(data: expected, encoding: .utf8))
+    }
+
+    @Test("the two routes agree about everything that is not an amount")
+    func routesAgree() throws {
+        // The exact route has its own walk, so this is what keeps the two in
+        // step. Compared as parsed values rather than bytes: `.sortedKeys` is
+        // a *collation* order and ARO's writer sorts by bytes, so the two
+        // spell the same object with keys in a different order — which is a
+        // difference between two payloads, never between two execution modes.
+        let shared: [String: any Sendable] = [
+            "region": "EMEA",
+            "orders": 2,
+            "ok": true,
+            "ratio": 0.5,
+            "tags": ["a", "b"] as [any Sendable],
+            "nested": ["x": 1] as [String: any Sendable],
+        ]
+        var withAmount = shared
+        withAmount["amount"] = try exactNinetyNine()
+
+        let plain = try ResponsePayload.jsonBody(shared)
+        let exact = try ResponsePayload.jsonBody(withAmount)
+
+        let plainObject = try #require(
+            try JSONSerialization.jsonObject(with: plain) as? [String: Any])
+        let exactObject = try #require(
+            try JSONSerialization.jsonObject(with: exact) as? [String: Any])
+
+        for key in plainObject.keys {
+            let fromFoundation = String(describing: plainObject[key]!)
+            let fromExact = String(describing: exactObject[key] ?? "nothing")
+            #expect(
+                fromFoundation == fromExact,
+                Comment(rawValue: "\(key): foundation route gave \(fromFoundation), "
+                        + "exact route gave \(fromExact)")
+            )
+        }
+        // And a bridged boolean is still a boolean on the exact route, which
+        // is the leaf #904's own corpus test exists to protect.
+        #expect(exactObject["ok"] as? Bool == true)
+        #expect(String(data: exact, encoding: .utf8)?.contains("\"ok\":true") == true)
     }
 
     // MARK: - Both execution modes, operator by operator
