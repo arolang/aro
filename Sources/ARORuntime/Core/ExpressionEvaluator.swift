@@ -137,7 +137,16 @@ public struct ExpressionEvaluator: Sendable {
                 return value
             }
 
-            guard var value = context.resolveAny(varRef.noun.base) else {
+            // Every `with`, `to`, `where`, `against`, `default` and sink clause,
+            // and every `when` guard, reads its variables through here — so this
+            // is where `Return an <OK: status> with <users>.` waits for the
+            // `Retrieve` that produced `<users>`. `resolveAny` did that wait by
+            // parking the calling pthread on a `DispatchGroup`, and this function
+            // is `async`: the thread it parked was a cooperative-pool thread, of
+            // which there are only as many as cores (GitLab #707). Same walk,
+            // same value, same failure attribution — only the wait moves off the
+            // pthread.
+            guard var value = await context.resolveAnyAwaitingDeferred(varRef.noun.base) else {
                 throw ExpressionError.undefinedVariable(varRef.noun.base)
             }
             // Handle specifiers as qualifiers or property access

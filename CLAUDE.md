@@ -56,6 +56,10 @@ swift build --product ARORuntime && swift build --product aro
 #   the binary was built against the release you have installed.
 
 aro repl                 # Start the interactive ARO REPL
+aro repl ./MyApp         # …inside a project: its contract, .store seed rows,
+                         # templates/, plugins and feature sets are wired in,
+                         # WITHOUT running Application-Start (GitLab #691).
+                         # `aro kernel --project ./MyApp` does the same.
 aro repl --json          # REPL over line-delimited JSON on stdio (ARO-0091);
                          # the Python shim kernel in Editor/jupyter-aro speaks this
 aro kernel install       # Register the native Jupyter kernel (ZMQ, no Python);

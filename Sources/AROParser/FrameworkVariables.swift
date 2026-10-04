@@ -56,6 +56,14 @@ public enum FrameworkVariables {
     /// list at the top of every statement. Add a modifier variable here and
     /// both modes pick it up; add it to only one of them and
     /// `FrameworkVariableParityTests` fails.
+    /// The noun the parser puts in the object slot when the object is a
+    /// compound expression, and the framework variable its value arrives in.
+    ///
+    /// Named because three different places test for it by hand and one of
+    /// them is the difference between arithmetic and a set operation
+    /// (GitLab #903).
+    public static let expressionValue = "_expression_"
+
     public static let transientKeys: [String] = [
         // Value sources — literal, evaluated expression, sink expression
         "_literal_",

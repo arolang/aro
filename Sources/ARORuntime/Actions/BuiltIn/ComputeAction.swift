@@ -22,6 +22,7 @@ import Crypto
 /// - Returns: The operation name to use
 private func resolveOperationName(
     from result: ResultDescriptor,
+    object: ObjectDescriptor,
     knownOperations: Set<String>,
     fallback: String
 ) -> String {
@@ -32,7 +33,29 @@ private func resolveOperationName(
     }
 
     // Priority 2: Base name if it's a known operation (legacy syntax: <operation>)
-    if knownOperations.contains(result.base.lowercased()) {
+    //
+    // Only when the object is something to *apply* an operation to. Where the
+    // object slot holds an expression, the user has written arithmetic and the
+    // result's name is a name:
+    //
+    //     Compute the <difference> from <x> - <y>.
+    //
+    // `difference` is also a set operation (ARO-0042), and reading it as one
+    // made that statement mean subtraction interpreted and a set difference
+    // compiled — which then failed for want of a `with` clause while the
+    // binary still exited `[OK]` (GitLab #903).
+    //
+    // The interpreter never saw it: `FeatureSetExecutor`'s fast path binds an
+    // expression and skips the action when the result carries no qualifier, so
+    // only the compiled path reached here. Fixing it in the action rather than
+    // in that fast path is what makes the two modes agree by construction —
+    // whoever dispatches, the answer is the same.
+    //
+    // `Compute the <length> from <text>.` is unaffected: a bare variable
+    // reference is not an expression object, so the legacy spelling still
+    // resolves its operation from the name.
+    if !object.isExpressionValue,
+       knownOperations.contains(result.base.lowercased()) {
         return result.base
     }
 
@@ -283,6 +306,7 @@ public struct ComputeAction: SynchronousAction {
         // result identifier.
         let computationName = resolveOperationName(
             from: result,
+            object: object,
             knownOperations: Self.knownComputationNames,
             fallback: "identity"
         )
@@ -1262,6 +1286,7 @@ public struct ComputeAction: SynchronousAction {
         // the other side, and the body's size never becomes the process's.
         let asyncComputationName = resolveOperationName(
             from: result,
+            object: object,
             knownOperations: Self.knownComputationNames,
             fallback: "identity"
         )
@@ -1652,7 +1677,7 @@ public struct ValidateAction: ActionImplementation {
 
         // Validation rule from result specifiers or base (for backward compatibility)
         let knownRules: Set<String> = ["required", "exists", "nonempty", "email", "numeric"]
-        let ruleName = resolveOperationName(from: result, knownOperations: knownRules, fallback: "required")
+        let ruleName = resolveOperationName(from: result, object: object, knownOperations: knownRules, fallback: "required")
 
         // Built-in validations
         let isValid: Bool
@@ -1844,7 +1869,7 @@ public struct TransformAction: ActionImplementation {
 
         // Transformation type from result specifiers or base (for backward compatibility)
         let knownTransforms: Set<String> = ["string", "int", "integer", "double", "float", "bool", "boolean", "json", "identity"]
-        let transformType = resolveOperationName(from: result, knownOperations: knownTransforms, fallback: "identity")
+        let transformType = resolveOperationName(from: result, object: object, knownOperations: knownTransforms, fallback: "identity")
 
         switch transformType.lowercased() {
         case "string":
@@ -2121,7 +2146,7 @@ public struct SortAction: ActionImplementation {
         // §Ordering) wins over the result qualifier form
         // `<sorted: descending>`; both default ascending.
         let knownOrders: Set<String> = ["ascending", "descending"]
-        let qualifierOrder = resolveOperationName(from: result, knownOperations: knownOrders, fallback: "ascending")
+        let qualifierOrder = resolveOperationName(from: result, object: object, knownOperations: knownOrders, fallback: "ascending")
         let order = (context.resolveAny("_by_order_") as? String) ?? qualifierOrder
         let ascending = order.lowercased() != "descending"
 
