@@ -1555,6 +1555,12 @@ public func aro_native_http_server_start(_ port: Int32, _ contextPtr: UnsafeMuta
                         let body = FormatSerializer.serializeExactJSON(jsonDict)
                         return (statusCode, ["Content-Type": "application/json"], body.data(using: .utf8))
                     }
+                    // `try?` justified: a throw here means the handler produced
+                    // something `JSONSerialization` cannot encode, and the
+                    // warning below is the report. Re-stated next to the call
+                    // because the exact-amount branch above now sits between it
+                    // and the paragraph that used to carry this reason — which
+                    // is exactly what `lint-unjustified-try` noticed.
                     if let jsonData = try? JSONSerialization.data(withJSONObject: jsonDict, options: [.sortedKeys]) {
                         return (statusCode, ["Content-Type": "application/json"], jsonData)
                     }
