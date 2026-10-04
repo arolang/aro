@@ -71,6 +71,14 @@ public enum FrameworkVariables {
         "_expression_name_",
         "_result_expression_",
 
+        // The statement's `as <Type>` annotation (GitLab #906). The
+        // interpreter reads it off the AST, but a compiled binary has no AST:
+        // the C result descriptor carries base + specifiers and nothing else,
+        // so `as Float` had no way to reach `aro_evaluate_expression` and was
+        // dropped on that path entirely. Carried as a modifier instead, which
+        // is what every other per-statement clause already does.
+        "_as_type_",
+
         // ARO-0018 aggregation
         "_aggregation_type_",
         "_aggregation_field_",

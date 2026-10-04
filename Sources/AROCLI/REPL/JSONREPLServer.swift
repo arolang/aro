@@ -213,7 +213,8 @@ final class JSONREPLServer: @unchecked Sendable {
 
         switch request.type {
         case "execute":
-            await execute(id: request.id, code: request.code ?? "", cellID: request.cellId)
+            await execute(id: request.id, code: request.code ?? "",
+                          cellID: request.cellId, baseDir: request.baseDir)
         case "is_complete":
             isComplete(id: request.id, code: request.code ?? "")
         case "complete":
@@ -251,6 +252,25 @@ final class JSONREPLServer: @unchecked Sendable {
     }
 
     // MARK: - Execute
+
+    /// Run a cell, with relative paths resolving against the notebook's own
+    /// folder when the front-end said which one it is (GitLab #909).
+    ///
+    /// `AROWorkingDirectory.setProcessDefault` rather than its task-local:
+    /// binding an ARORuntime `@TaskLocal` from AROCLI segfaults on Linux
+    /// inside `swift_task_localValuePush` (GitLab #490, the same reason the
+    /// console sink is not bound here). The process default is safe because
+    /// this server executes one cell at a time, and it is restored after.
+    private func execute(id: Int, code: String, cellID: String? = nil,
+                         baseDir: String?) async {
+        guard let baseDir, !baseDir.isEmpty else {
+            await execute(id: id, code: code, cellID: cellID)
+            return
+        }
+        let previous = AROWorkingDirectory.setProcessDefault(baseDir)
+        defer { AROWorkingDirectory.setProcessDefault(previous) }
+        await execute(id: id, code: code, cellID: cellID)
+    }
 
     private func execute(id: Int, code: String, cellID: String? = nil) async {
         #if os(Windows)

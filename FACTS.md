@@ -104,12 +104,13 @@ Source-of-truth order: `Proposals/` > `Sources/` > Wiki/`OVERVIEW.md` > `Website
 
 ## 8. Types
 
-- Primitives: String, Integer, Float, Boolean (ARO-0003) plus DateTime (ARO-0019); collections `List<T>`, `Map<K,V>`; Bytes/Binary for unknown file formats.
+- Primitives: String, Integer, Float, Currency, Boolean (ARO-0003) plus DateTime (ARO-0019); collections `List<T>`, `Map<K,V>`; Bytes/Binary for unknown file formats.
 - All complex types come from `openapi.yaml` `components.schemas`; no `type`/`enum` keywords. A contract without `paths` supplies types only.
-- Annotations: `<name: String>`, `<items: List<String>>`, `<user: User>`, result `as` clause (`Compute the <n> as Float …`, `Compute … as Money`). `as` is a separate AST slot (GitLab #475).
+- Annotations: `<name: String>`, `<items: List<String>>`, `<user: User>`, result `as` clause (`Compute the <n> as Float …`, `Compute … as Currency`, `Compute … as Money`). `as` is a separate AST slot (GitLab #475).
 - Typed extraction (ARO-0046): a PascalCase, letters-and-digits qualifier on the result (`<data: OrderCreated>`) validates against the schema (required properties, types, formats); errors list available schemas.
 - Widening Integer → Float is silent; narrowing warns. No optional types: absence fails the statement ("Cannot …") or is handled with `default`/`exists`.
-- Value display: console renders Doubles with 15 significant digits; `Write`/HTTP serialise full precision (JSON writer emits up to 17 digits).
+- `Currency` (GitLab #906): exact base-10, no literal of its own, requested with `as Currency` on a computed result; `as Decimal` is the same format (it was a silent alias for Float before). Scale comes from the operands — `+`/`-`/`%` the wider, `*` the sum of the two with trailing zeros dropped to the wider; division is computed at 6 places, half-up, then trimmed the same way. Rescaling (`fixed` included) is half-up away from zero. Exactness is contagious: a statement reading an exact amount stays exact, so `sum`/`min`/`max` and `where`/`when` comparisons over an exact column are exact. Max 18 decimal places, scaled value a 64-bit Int; overflow is a runtime error naming the operation. No currency *code* — that is ARO-0014 `Money` (`{ amount, currency }`), which composes with it. Integer minor units remain the stricter ledger choice.
+- Value display: console renders Doubles with 15 significant digits; `Write`/HTTP serialise full precision (the JSON writer renders the shortest decimal that round-trips, GitLab #517 follow-up, and an exact `Currency` amount as a number at its own scale). `aro run` and an `aro build` binary agree.
 
 ## 9. Actions
 
@@ -143,10 +144,10 @@ Source-of-truth order: `Proposals/` > `Sources/` > Wiki/`OVERVIEW.md` > `Website
 
 - `Compute the <r[: qualifier]> from <x> [with …]`; also arithmetic expressions `Compute the <t> from <a> * <b>`.
 - The qualifier namespace is closed (ARO-0019 §3.3, GitLab #486): built-in, plugin `handle.qualifier`, chain `a|b|c` (left to right, `with` shared), or a date offset `-7d|+24h`; anything else is a check-time error naming the closest match. Names live in `ComputeQualifierCatalog` (parser) and `ComputeAction.builtInQualifiers` (runtime); a test keeps them equal; `aro actions --qualifiers` prints the live set.
-- 34 built-ins: `average`, `avg`, `base64-decode`, `base64-encode`, `base64url-decode`, `base64url-encode`, `clip` (`with N`), `count`, `date` (parse ISO-8601), `difference`, `distance` (`to <date>`), `fixed` (N places, default 2; stays numeric), `format` (date pattern; the pattern argument is ignored, GitLab #577), `hash` (SHA-256 hex, unsalted), `html-escape`, `identity`, `intersect`, `join` (`with { separator }`), `json-escape`, `length`, `lines`, `lowercase`, `markdown` (Markdown → HTML), `random` (element, or Int below a bound), `replace` (`with { find, replace }`), `sha256`, `sum`, `take` (`with N`), `trim`, `union`, `unique`, `uppercase`, `url-decode`, `url-encode`.
+- 34 built-ins: `average`, `avg`, `base64-decode`, `base64-encode`, `base64url-decode`, `base64url-encode`, `clip` (`with N`), `count`, `date` (parse ISO-8601), `difference`, `distance` (`to <date>`), `fixed` (`with { places: N }` or bare `with N`, default 2, range 0…15; stays numeric; a repair on a Float, a rescale on a Currency), `format` (date pattern; the pattern argument is ignored, GitLab #577), `hash` (SHA-256 hex, unsalted), `html-escape`, `identity`, `intersect`, `join` (`with { separator }`), `json-escape`, `length`, `lines`, `lowercase`, `markdown` (Markdown → HTML), `random` (element, or Int below a bound), `replace` (`with { find, replace }`), `sha256`, `sum`, `take` (`with N`), `trim`, `union`, `unique`, `uppercase`, `url-decode`, `url-encode`.
 - Set qualifiers: lists are multisets (intersect keeps duplicates up to the minimum count; difference subtracts; union = A then unique B); strings work per character; objects recurse (A wins on union).
 - Streaming folds (ARO-0090): `sha256|hash`, `length|count|size` (bytes), `lines` fold a request body chunk-wise; chains fold only if every stage folds.
-- Not qualifiers: `sort`, `reverse`, `first` (actions/specifiers), `round|money|currency|precision` (redirect to `fixed`), types (`as`). `date|+1d` as a written chain does not parse.
+- Not qualifiers: `sort`, `reverse`, `first` (actions/specifiers), `round|rounded|precision` (redirect to `fixed`), `money|currency|decimal|exact` (redirect to `as Currency`; PascalCase `Money` redirects to `as Money`, `Currency` to `as Currency`), types (`as`). `date|+1d` as a written chain does not parse.
 
 ## 11. Queries, pipelines, streams
 

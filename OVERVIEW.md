@@ -139,7 +139,7 @@ below. Every `ARO-NNNN` reference in the repository must resolve to a file there
 |---|----------|-------------|
 | 0001 | Language Fundamentals | Core syntax, literals, expressions, scoping |
 | 0002 | Control Flow | `when` guards, `match`, iteration, `while` |
-| 0003 | Type System | Types, OpenAPI integration, schemas |
+| 0003 | Type System | Primitives (`String`, `Integer`, `Float`, `Currency`, `Boolean`), OpenAPI integration, schemas |
 | 0004 | Actions | Action roles, built-in actions, extensions |
 | 0005 | Application Architecture | App structure, lifecycle (concurrency: see 0088) |
 | 0006 | Error Philosophy | "Code is the error message" |

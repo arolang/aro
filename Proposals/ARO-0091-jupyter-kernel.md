@@ -42,7 +42,7 @@ server's `StdioTransport` — not LSP's `Content-Length`.
 
 | `type` | Fields | Answer |
 |--------|--------|--------|
-| `execute` | `code`, optional `cellId` | `status: ok` with optional `display`, or `status: error` |
+| `execute` | `code`, optional `cellId`, optional `baseDir` | `status: ok` with optional `display`, or `status: error` |
 | `is_complete` | `code` | `status: complete` / `incomplete` (+`indent`) / `invalid` |
 | `complete` | `code`, `cursor` | `matches`, `items`, `cursorStart`, `cursorEnd` |
 | `inspect` | `code`, `cursor` | `found`, `text` |
@@ -63,6 +63,28 @@ the session's program) keeps the session-wide rule. A cell that binds
 fewer names on its second run leaves nothing behind: the names it no
 longer binds are released with it, so the session reflects the cells as
 they are now.
+
+**`baseDir` — where a relative path points.** A front-end sends the directory
+the cell's relative paths resolve against, and it is the *notebook's own
+folder*, not the session's.
+
+The two are not the same thing, and the gap is what made this a field rather
+than a working directory. A kernel process has one working directory for its
+whole life, chosen when it starts — Solaro launches it in the project root — but
+a project holds notebooks in several folders, and a reader looking at
+`Learning/22-git-and-devops.repl` means that file's folder when the cell says
+`<git: "..">`. Without the field that cell discovered whatever repository sits
+above the project root, or none, and answered `Cannot retrieve the status from
+the git: ..` — while the same notebook passed under `Learning/validate.py`,
+which runs with `cwd=Learning/` (GitLab #909).
+
+So the directory travels per request. The server applies it for that cell and
+restores the previous default afterwards, which also means a front-end may run
+cells from notebooks in different folders against one session.
+
+Absent means the session's own default: the project directory for
+`aro repl <dir>`, otherwise the process's working directory. A client that does
+not know where its cell came from therefore behaves exactly as before.
 
 Every request carries an `id`. Every request gets exactly one `result` message
 with the same `id`.
