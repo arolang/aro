@@ -18,8 +18,8 @@ import Foundation
 /// The payload is now the only stored representation and these are the
 /// renderings of it:
 ///
-///   - `jsonObject` goes straight to the JSON value an HTTP body is
-///     serialised from. A list stays a list, so the round trip is gone.
+///   - `jsonBody` goes straight to the bytes of an HTTP body. A list stays a
+///     list, so the round trip is gone.
 ///   - `flatten` reproduces the old transport dictionary byte for byte, on
 ///     demand, for the CLI printer, `aro test` and `Response`'s identity.
 ///   - `soleFlatValue` answers the "exactly one value, and is it text?"
@@ -90,7 +90,7 @@ public enum ResponsePayload {
     /// refuses — a non-finite `Double`, in practice, since
     /// `SendableConverter.toJSON` maps everything else onto a JSON type.
     public static func jsonText(for array: [any Sendable]) -> String? {
-        let jsonArray = array.map { SendableConverter.toJSON($0) }
+        let jsonArray = foundationArray(array)
         // try? is acceptable: a collection that cannot be serialised is
         // reported by the caller, which knows what it was rendering. The old
         // code logged `[ReturnAction] Warning:` here and substituted "[]";
@@ -108,41 +108,137 @@ public enum ResponsePayload {
 
     // MARK: - JSON body (the HTTP renderers)
 
-    /// Render a payload into the JSON value an HTTP body is serialised from.
+    /// The bytes of a response's JSON body.
     ///
-    /// Same shape the flattened dictionary produced once the renderer had
+    /// Shape: the one the flattened dictionary produced once the renderer had
     /// parsed its strings back — dotted keys for nested records, real JSON
-    /// arrays for collections — but reached without the intermediate text.
-    public static func jsonObject(_ payload: [String: any Sendable]) -> [String: Any] {
-        var json: [String: Any] = [:]
-        json.reserveCapacity(payload.count)
+    /// arrays for collections — reached without the intermediate text
+    /// (GitLab #711).
+    ///
+    /// `whenEmpty` is appended, in order, when the payload renders to no keys
+    /// at all: a response that carries no values answers with its status
+    /// rather than with `{}`. The callers differ in what they put there, which
+    /// is why it is a parameter and not a rule here.
+    ///
+    /// ## Why the graph is Foundation containers (GitLab #904)
+    ///
+    /// `JSONSerialization` is an Objective-C API. Handed a Swift-native
+    /// `[String: Any]` / `[Any]` graph it bridges every container and every
+    /// leaf individually on the way in, and that bridge was 1.67 ms of the
+    /// 4.37 ms it took to serialise a 70 KB, 500-record body — 38% of the
+    /// step, spent on nothing the client can see.
+    ///
+    /// So the graph is built as `NSMutableDictionary` / `NSMutableArray` with
+    /// `NSString` / `NSNumber` leaves in the *same* walk that used to build
+    /// the Swift one, and the serialiser gets a graph it already understands.
+    /// Building it costs about 0.77 ms more than building the Swift graph did
+    /// — bridging the leaves is now our line item rather than Foundation's —
+    /// against 1.67 ms saved, so the step is ~15% cheaper overall.
+    ///
+    /// What this gives up: nothing about the *output*. `JSONSerialization`
+    /// remains the only thing that formats a number, escapes a string or
+    /// orders keys, which is the whole reason the graph was changed instead of
+    /// the serialiser. Hand-writing JSON would have been faster still (3.75 ms
+    /// against 5.86 ms for the whole step, measured) and was rejected: Darwin's
+    /// `.sortedKeys` is a *collation* order rather than a byte order — it puts
+    /// `item2` before `item10` and `a_b` before `a-b` — and corelibs-foundation
+    /// collates differently again, so no single hand-rolled comparator can be
+    /// byte-identical on both platforms. Number formatting has the same split
+    /// (see `FormatSerializer.renderDouble`, GitLab #517).
+    ///
+    /// What it does *not* give up but cannot prove from a Mac: the bridge is a
+    /// Darwin concept, and under corelibs-foundation `NSNumber` is a different
+    /// implementation. A bridged `Bool` arriving as `1` instead of `true` is
+    /// exactly the kind of difference that ships silently, so
+    /// `ResponsePayloadRenderingTests` renders this route and the Swift-native
+    /// one over a wide corpus and compares the bytes. That test is the Linux
+    /// evidence; it runs in CI.
+    ///
+    /// Throws what `JSONSerialization` throws: a payload holding a value it
+    /// refuses — a non-finite `Double`, in practice — is the caller's to
+    /// report, since only the caller knows what it was rendering.
+    public static func jsonBody(
+        _ payload: [String: any Sendable],
+        whenEmpty extras: [(key: String, value: String)] = []
+    ) throws -> Data {
+        let json = NSMutableDictionary(capacity: payload.count)
         for (key, value) in payload {
-            insert(value, as: key, into: &json)
+            insert(value, as: key, into: json)
         }
-        return json
+        if json.count == 0 {
+            for extra in extras {
+                json[extra.key] = extra.value as NSString
+            }
+        }
+        return try JSONSerialization.data(withJSONObject: json, options: [.sortedKeys])
     }
 
-    private static func insert(_ value: any Sendable, as key: String, into json: inout [String: Any]) {
+    private static func insert(_ value: any Sendable, as key: String, into json: NSMutableDictionary) {
         switch value {
         case let str as String:
             json[key] = inlineJSON(str)
         case let int as Int:
-            json[key] = int
+            json[key] = int as NSNumber
         case let double as Double:
-            json[key] = double
+            json[key] = double as NSNumber
         case let bool as Bool:
-            json[key] = bool
+            json[key] = bool as NSNumber
         case let dict as [String: any Sendable]:
             for (nestedKey, nested) in dict {
-                insert(nested, as: "\(key).\(nestedKey)", into: &json)
+                insert(nested, as: "\(key).\(nestedKey)", into: json)
             }
         case let array as [any Sendable]:
             // The point of GitLab #711: the array goes into the body as an
             // array. It used to be serialised to text here and parsed back one
             // step later.
-            json[key] = array.map { SendableConverter.toJSON($0) }
+            json[key] = foundationArray(array)
         default:
             json[key] = inlineJSON(String(describing: value))
+        }
+    }
+
+    /// A collection as the `NSArray` `JSONSerialization` wants, built in one
+    /// walk (GitLab #904). Was `array.map { SendableConverter.toJSON($0) }`,
+    /// which produced a Swift array for Foundation to bridge element by
+    /// element.
+    private static func foundationArray(_ array: [any Sendable]) -> NSMutableArray {
+        let out = NSMutableArray(capacity: array.count)
+        for element in array {
+            out.add(foundationValue(element))
+        }
+        return out
+    }
+
+    /// One value of a collection, as a Foundation object.
+    ///
+    /// Mirrors `SendableConverter.toJSON` case for case — it is the same
+    /// mapping onto JSON types, landing on Foundation objects rather than on
+    /// Swift ones. The leaves `toJSON` reaches by a rule rather than by a type
+    /// (`Date`, `Data`, and `String(describing:)` for everything else) are
+    /// delegated to it, so that rule keeps a single definition.
+    private static func foundationValue(_ value: any Sendable) -> Any {
+        switch value {
+        case let str as String:
+            return str as NSString
+        case let int as Int:
+            return int as NSNumber
+        case let double as Double:
+            return double as NSNumber
+        case let bool as Bool:
+            return bool as NSNumber
+        case let dict as [String: any Sendable]:
+            let out = NSMutableDictionary(capacity: dict.count)
+            for (key, nested) in dict {
+                out[key] = foundationValue(nested)
+            }
+            return out
+        case let array as [any Sendable]:
+            return foundationArray(array)
+        default:
+            // NSNull, Date, Data and the `String(describing:)` fallback. Each
+            // lands on a JSON scalar, which bridges to its Foundation object
+            // on the way in.
+            return SendableConverter.toJSON(value) as AnyObject
         }
     }
 
@@ -152,13 +248,17 @@ public enum ResponsePayload {
     /// text it built or parsed itself (`Render`, `Transform`, a plugin) still
     /// has it inlined rather than escaped into a JSON string. A plain string
     /// pays one prefix check.
+    ///
+    /// The parsed form already *is* Foundation containers — it came out of
+    /// `JSONSerialization` — so this case needed no change for GitLab #904;
+    /// only the unparsed string is bridged here instead of later.
     private static func inlineJSON(_ str: String) -> Any {
-        guard str.hasPrefix("{") || str.hasPrefix("[") else { return str }
+        guard str.hasPrefix("{") || str.hasPrefix("[") else { return str as NSString }
         // try? is acceptable: this is a probe. A string that merely starts
         // with "{" or "[" need not be JSON, and the string is returned
         // unchanged when it is not, so nothing is lost.
         guard let data = str.data(using: .utf8),
-              let parsed = try? JSONSerialization.jsonObject(with: data) else { return str }
+              let parsed = try? JSONSerialization.jsonObject(with: data) else { return str as NSString }
         return parsed
     }
 

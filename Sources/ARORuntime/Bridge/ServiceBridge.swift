@@ -1533,24 +1533,23 @@ public func aro_native_http_server_start(_ port: Int32, _ contextPtr: UnsafeMuta
                     // flatten into dot-notation keys, collections go in as
                     // collections. It used to read the flattened dictionary
                     // and parse each collection's JSON text back so it could
-                    // re-serialise it below (GitLab #711). Same renderer the
+                    // re-serialise it below (GitLab #711), and it used to hand
+                    // `JSONSerialization` a Swift-native graph to bridge
+                    // element by element (GitLab #904). Same renderer the
                     // interpreter uses, so the two modes cannot drift.
-                    var jsonDict: [String: Any] = ResponsePayload.jsonObject(response.payload)
-
-                    // If no data, include status as fallback
-                    if jsonDict.isEmpty {
-                        jsonDict["status"] = response.status
-                    }
-
-                    // Serialize the response body. A failure here means the
-                    // handler produced a value JSONSerialization can't encode
-                    // (e.g. a non-JSON object slipped into response.data) — the
-                    // client would get a bare {"status":"ok"} with the real data
-                    // silently dropped, so surface it.
-                    if let jsonData = try? JSONSerialization.data(withJSONObject: jsonDict, options: [.sortedKeys]) {
+                    //
+                    // A failure here means the handler produced a value
+                    // JSONSerialization can't encode (e.g. a non-JSON object
+                    // slipped into response.data) — the client would get a bare
+                    // {"status":"ok"} with the real data silently dropped, so
+                    // surface it.
+                    // try? is acceptable: the warning below is the report, and
+                    // the status-only body is the pre-existing answer.
+                    if let jsonData = try? ResponsePayload.jsonBody(
+                        response.payload, whenEmpty: [("status", response.status)]) {
                         return (statusCode, ["Content-Type": "application/json"], jsonData)
                     }
-                    FileHandle.standardError.write(Data("[ServiceBridge] Warning: response data not JSON-serializable, returning status-only body: keys=\(Array(jsonDict.keys))\n".utf8))
+                    FileHandle.standardError.write(Data("[ServiceBridge] Warning: response data not JSON-serializable, returning status-only body: keys=\(Array(response.payload.keys))\n".utf8))
                 }
                 return (200, ["Content-Type": "application/json"], "{\"status\":\"ok\"}".data(using: .utf8))
             }
