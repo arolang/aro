@@ -342,7 +342,7 @@ table and ARO-0004 §11 is generated from it — prefer either over this summary
 - **REQUEST** (Extract, Parse, Retrieve, Fetch, Probe, Pull, Clone): External → Internal
 - **OWN** (Compute, Validate, Compare, Create, Transform, Stage, Checkout): Internal → Internal
 - **RESPONSE** (Return, Throw, **Store, Log, Send, Write**, Render): Internal → External
-- **EXPORT** (Publish, Emit, Commit, Push, Tag, Schedule): Makes symbols globally accessible or exports data
+- **EXPORT** (Publish, Emit, Deliver, Commit, Push, Tag, Schedule): Makes symbols globally accessible or exports data
 - **SERVER** (Start, Stop, Listen, Connect, Close, WaitForEvents): Service lifecycle
 
 `Store`, `Log`, `Send` and `Write` read as exports and declare `.response`. That
@@ -362,7 +362,10 @@ in one feature set take ~2.1s interpreted (~2.8s compiled), not 4.2s.
 
 Effects (`Log`, `Store`, `Emit`, `Send`, `Publish`, `Return`, …) never defer —
 they run at their own statement and force what they read first, so observable
-output stays in source order. Deferral is an allowlist of value-producing verbs
+output stays in source order. `Emit` does not wait for its handlers; `Deliver`
+is the same statement awaited, for when the next statement depends on what a
+handler did (ARO-0088 §7, GitLab #905). Shutdown drains the cascade either
+way. Deferral is an allowlist of value-producing verbs
 (`LazyActionPolicy.deferrableVerbs`); `Sleep` is deliberately excluded because
 the delay *is* the effect.
 

@@ -87,6 +87,7 @@ public enum PrepositionCatalog {
         "disconnect": [.from, .with],
         "dispatch": [.to, .via, .with],
         "embed": [.from],   // not .with — see IncludeAction (GitLab #563)
+        "deliver": [.to, .with],
         "emit": [.to, .with],
         "exec": [.`for`, .on, .with],
         "execute": [.`for`, .on, .with],

@@ -130,7 +130,9 @@ breakpoint set on event UserCreated
 
 The intent is that when any statement publishes a `UserCreated` event, the runtime pauses just before the event bus fans out to subscribers.
 
-That is what happens, and the pause is a strict happens-before: on the `Emit` path the event bus already awaits its handlers, so the program stops before any subscriber runs (GitLab #557).
+That is what happens on the awaited path — a `Deliver`, or a repository observer — where the bus awaits its handlers, so the program stops before any subscriber runs (GitLab #557).
+
+On an `Emit` the pause is ordered before the fan-out in practice but is not a guarantee the runtime carries: `Emit` is fire-and-forget (GitLab #905), and both the checkpoint and the fan-out run inside the task it spawns. For a strict happens-before on a domain event, breakpoint a `Deliver` (GitLab #230 covers the remaining gap).
 
 ```
 (aro-dbg) be NumberTriggered

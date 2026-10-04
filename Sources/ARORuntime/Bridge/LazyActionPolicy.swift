@@ -44,6 +44,9 @@ public enum LazyActionPolicy {
         "log",
         "publish",
         "emit",
+        // `Deliver` is an awaited `Emit` (GitLab #905). Deferring the verb
+        // whose entire purpose is to have waited would be a contradiction.
+        "deliver",
         // Phase 3 — branch consumers
         "compare",
         "validate",

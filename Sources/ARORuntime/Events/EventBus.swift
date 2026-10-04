@@ -607,7 +607,8 @@ public actor EventBus {
     }
 
     /// Publish an event, wait for handlers to complete, and track in-flight status
-    /// This is used by EmitAction to ensure proper event sequencing
+    ///
+    /// This is what `Deliver` takes (GitLab #905); `Emit` takes `publish`.
     public func publishAndTrack(_ event: any RuntimeEvent) async {
         // Strictly happens-before the fan-out: this path is already async and
         // already awaits its handlers, so the ordering caveat documented on

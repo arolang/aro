@@ -60,12 +60,18 @@ public enum StreamConsumptionPolicy {
     ///     that could stream; that is a later refinement, not a default.
     public static let elementWiseVerbs: Set<String> = [
         "write", "append", "send", "return", "broadcast", "respond",
-        // `emit` and `publish` hand the value to something that outlives the
-        // statement, so the runtime anchors it — drains it to a file one chunk
-        // at a time and passes on something any number of readers can open.
-        // That consumes element by element too, so the route still needs no
-        // buffer; what it needs is disk, which is the sink's business.
-        "emit", "publish",
+        // `emit`, `deliver` and `publish` hand the value to something that
+        // outlives the statement, so the runtime anchors it — drains it to a
+        // file one chunk at a time and passes on something any number of
+        // readers can open. That consumes element by element too, so the route
+        // still needs no buffer; what it needs is disk, which is the sink's
+        // business.
+        //
+        // `deliver` is here because it is `emit` with the emitter waiting
+        // (GitLab #905): same event, same anchoring, same consumption. Leaving
+        // it out would have made a route that delivers its body analyse as
+        // whole-value and answer 413 where the same route emitting it streams.
+        "emit", "deliver", "publish",
     ]
 
     /// Verbs that move a binding without reading it. `extract` qualifies only

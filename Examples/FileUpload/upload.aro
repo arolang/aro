@@ -26,7 +26,12 @@
 (* Hands the body to an event. A handler outlives the request, so the runtime
    anchors the body on the way out — drained to a file one chunk at a time,
    readable afterwards by every handler, and deleted when the last one is done.
-   Still no size limit: nothing is ever built in memory. *)
+   Still no size limit: nothing is ever built in memory.
+
+   `Emit` does not wait for the handler, which is why the answer is
+   <Accepted: status> and not <Created: status>: the caller is told the body
+   was taken, not that it has been archived. `Deliver` is the verb that waits
+   — and using it here would remove the reason anchoring exists. *)
 (archiveDocument: File Upload) {
     Extract the <name> from the <pathParameters: name>.
     Extract the <upload> from the <request: body>.
