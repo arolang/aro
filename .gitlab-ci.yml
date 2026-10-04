@@ -462,6 +462,59 @@ train:oracle:
     - python3 -m pytest Train/script/tests -q -m needs_binary -rs
 
 # =============================================================================
+# How much of the Learning course actually reaches the dataset (GitLab #907)
+# =============================================================================
+# `train:oracle` mines a fixed two-notebook subset on every MR, which answers
+# "does the course contribute pairs at all". It deliberately does not answer
+# "how much of the course", because that question costs 29 `aro repl --json`
+# sessions run twice over and depends on notebooks an MR never touched — a
+# per-MR job that goes red because a date notebook drifted is a job people
+# learn to ignore.
+#
+# So the whole course runs here instead: main, tags, release branches and
+# schedules. `--dry-run` because the corpus itself is generated on the training
+# machine, not in CI; the point is the coverage figure and the floor.
+#
+# The floor is 85% of ELIGIBLE cells — cells that are not marked
+# `(* expect-error *)`, which exist in order to fail and are not misses.
+# Measured 91.8%–92.7% over five runs (201–203 of 219 eligible, 228 present),
+# so the floor leaves about fifteen cells of headroom. That is deliberate and
+# not laziness: the twice-and-agree gate is itself stochastic at the margin —
+# a timing-dependent cell can agree twice by luck — so the figure moves by a
+# cell or two between runs, and a floor pinned at the measurement would go red
+# on noise. Fifteen cells is roughly one notebook going dark, which is the
+# event worth a red pipeline.
+#
+# Five of the 228 are already dark: all of `22-git-and-devops.repl` except one,
+# because its cells read `<git: "..">` and the miner's sandboxed working copy
+# has no repository there (GitLab #909). Fixing that would take the figure to
+# roughly 95%; this floor does not assume it will be fixed.
+train:notebook-coverage:
+  stage: integration
+  image: $CI_REGISTRY_IMAGE/aro-ci:latest
+  rules:
+    - if: $CI_COMMIT_TAG
+    - if: $CI_COMMIT_BRANCH == "main"
+    - if: $CI_COMMIT_BRANCH =~ /^release\/.*/
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+  needs:
+    - job: build:linux
+      artifacts: true
+  variables:
+    ARO_BIN: $CI_PROJECT_DIR/aro-dist/aro
+  script:
+    - chmod +x aro-dist/aro
+    - ./aro-dist/aro --version
+    - python3 -m pip install --quiet --break-system-packages pytest PyYAML
+      || python3 -m pip install --quiet pytest PyYAML
+    - python3 Train/script/32_notebook_pairs.py --dry-run --min-coverage 0.85
+  artifacts:
+    when: always
+    expire_in: 1 month
+    paths:
+      - Train/data/32_notebooks/coverage.json
+
+# =============================================================================
 # Fenced ARO blocks in the documentation must parse (GitLab #834)
 # =============================================================================
 # The proposals and the examples are the reference *and* the corpus `aro ask`

@@ -1,0 +1,62 @@
+(* ARO-0003 §Primitive Types, ARO-0019 §3.2.1 — the `Currency` number format.
+
+   Money is exact where it is produced. `Compute the <t> from <qty> * <price>.`
+   is binary floating point and says 7.199999999999999; the same statement
+   written `as Currency` is base 10 and says 7.2, which is the amount. *)
+
+(Application-Start: Currency Amounts) {
+    Create the <qty> with 3.
+    Create the <price> with 2.40.
+
+    (* The float answer, kept for the contrast. *)
+    Compute the <float-total> from <qty> * <price>.
+    Log "float      ${<float-total>}" to the <console>.
+
+    (* The amount. *)
+    Compute the <line-total> as Currency from <qty> * <price>.
+    Log "currency   ${<line-total>}" to the <console>.
+
+    (* `Decimal` is the same format; it is the word people reach for when they
+       want exactness and do not have money in mind. *)
+    Compute the <same> as Decimal from <qty> * <price>.
+    Log "decimal    ${<same>}" to the <console>.
+
+    (* Contagion: no annotation here, and the result is still exact, because
+       one operand already is. This is what lets an amount be computed once. *)
+    Compute the <with-fee> from <line-total> + 1.05.
+    Log "plus fee   ${<with-fee>}" to the <console>.
+
+    (* Division is the one operation that cannot be exact, so the rule is
+       stated: six places, half-up, trailing zeros dropped to the wider
+       operand's scale. *)
+    Compute the <share> as Currency from 10.00 / 3.
+    Log "10.00 / 3  ${<share>}" to the <console>.
+
+    Compute the <half> as Currency from 6.00 / 2.
+    Log "6.00 / 2   ${<half>}" to the <console>.
+
+    (* An order of five at 19.99 — the GitLab #517 revenue column. *)
+    Compute the <unit> as Currency from 19.99.
+    Compute the <revenue> as Currency from <unit> * 5.
+    Log "revenue    ${<revenue>}" to the <console>.
+
+    (* `fixed` keeps its job: settle on a presentation scale. On an exact
+       amount it rescales rather than repairs. *)
+    Compute the <shown: fixed> from the <line-total>.
+    Log "fixed      ${<shown>}" to the <console>.
+
+    (* And it serialises as a number, at full precision, in every sink. *)
+    Create the <row> with { region: "EMEA", orders: 5, revenue: <revenue> }.
+    Create the <rows> with [<row>].
+
+    Write the <rows> to the <file: "./out/revenue.csv">.
+    Write the <row> to the <file: "./out/revenue.json">.
+
+    Read the <csv-text: raw> from "./out/revenue.csv".
+    Log <csv-text> to the <console>.
+
+    Read the <json-text: raw> from "./out/revenue.json".
+    Log <json-text> to the <console>.
+
+    Return an <OK: status> for the <startup>.
+}
