@@ -235,6 +235,18 @@
   ],
   "source": "Sources/ARORuntime/Actions/BuiltIn/ComputeAction.swift"
  },
+ "deliver": {
+  "role": "export",
+  "role_label": "EXPORT (makes symbols global / exports data)",
+  "prepositions": [
+   "to",
+   "with"
+  ],
+  "aliases": [
+   "deliver"
+  ],
+  "source": "Sources/ARORuntime/Actions/BuiltIn/EmitAction.swift"
+ },
  "emit": {
   "role": "export",
   "role_label": "EXPORT (makes symbols global / exports data)",
