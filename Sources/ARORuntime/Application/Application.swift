@@ -860,19 +860,23 @@ public final class Application: @unchecked Sendable {
         // in as collections. This used to read the flattened dictionary and
         // parse each collection's JSON text back into a JSON value so it could
         // re-serialise it below — encode → string → decode → encode on every
-        // response containing a list (GitLab #711).
-        var jsonBody: [String: Any] = ResponsePayload.jsonObject(response.payload)
-
-        // If no data, include status info
-        if jsonBody.isEmpty {
-            jsonBody["status"] = response.status
-            if !response.reason.isEmpty {
-                jsonBody["reason"] = response.reason
-            }
+        // response containing a list (GitLab #711). The graph it hands
+        // `JSONSerialization` is Foundation containers, so the serialiser no
+        // longer bridges every element on the way in (GitLab #904).
+        //
+        // A response that carries no values answers with its status rather
+        // than with `{}`.
+        var extras: [(key: String, value: String)] = [("status", response.status)]
+        if !response.reason.isEmpty {
+            extras.append(("reason", response.reason))
         }
 
         let bodyData: Data?
-        if let jsonData = try? JSONSerialization.data(withJSONObject: jsonBody, options: [.sortedKeys]) {
+        // try? is acceptable: a failure here means the handler produced a
+        // value JSONSerialization refuses — a non-finite Double, in practice.
+        // The status-only body below is the pre-existing answer to that, kept
+        // so a single bad field cannot take down the route.
+        if let jsonData = try? ResponsePayload.jsonBody(response.payload, whenEmpty: extras) {
             bodyData = jsonData
         } else {
             bodyData = "{\"status\":\"\(response.status)\"}".data(using: .utf8)
