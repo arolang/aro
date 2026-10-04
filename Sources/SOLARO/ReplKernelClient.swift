@@ -46,6 +46,7 @@ protocol ReplKernelDriving: AnyObject {
     func ensureStarted(project: Project) async
     func execute(code: String,
                  cellID: String?,
+                 baseDir: String?,
                  onStream: @escaping @MainActor (String, String) -> Void)
         async -> ReplKernelClient.ExecOutcome
     func info() async -> ReplKernelClient.KernelInfo?
@@ -457,8 +458,16 @@ final class ReplKernelClient: ReplKernelDriving {
 
     /// Execute one cell. Streams arrive on `onStream` (name, text)
     /// in server order, all before the returned outcome.
+    ///
+    /// `baseDir` is the directory relative paths in the cell resolve against,
+    /// and it is the notebook's own directory rather than this one's — the
+    /// kernel process runs with the *project root* as its working directory,
+    /// so without it `Retrieve the <status> from the <git: "..">.` in
+    /// `Learning/22-git-and-devops.repl` discovered whatever sits above the
+    /// repository instead of the repository (GitLab #909).
     func execute(code: String,
                  cellID: String? = nil,
+                 baseDir: String? = nil,
                  onStream: @escaping @MainActor (String, String) -> Void) async -> ExecOutcome {
         guard await waitUntilReady() else {
             let reason = deadReason ?? "Kernel is not running."
@@ -475,6 +484,7 @@ final class ReplKernelClient: ReplKernelDriving {
         // Cell identity lets the kernel tell a re-run from a second
         // statement binding the same name (GitLab #544).
         if let cellID { payload["cellId"] = cellID }
+        if let baseDir, !baseDir.isEmpty { payload["baseDir"] = baseDir }
         let reply = await request(payload, onStream: onStream)
         if state == .busy { state = .ready }
 

@@ -579,7 +579,14 @@ final class ReplNotebookController {
             streamBudgets[id] = NotebookStreamBudget()
 
             let source = cells[idx].source
-            let outcome = await kernel.execute(code: source, cellID: id) { [weak self] name, text in
+            let outcome = await kernel.execute(
+                code: source,
+                cellID: id,
+                // The notebook's own folder, not the project root the kernel
+                // was launched in — a cell's relative paths mean what they
+                // mean to someone reading the file (GitLab #909).
+                baseDir: url.deletingLastPathComponent().path
+            ) { [weak self] name, text in
                 self?.appendStream(name: name, text: text, to: id)
             }
             applyOutcome(outcome, to: id)

@@ -36,6 +36,18 @@ struct JSONREPLRequest: Decodable {
     /// (GitLab #544). Absent for a plain REPL line, which keeps the
     /// session-wide immutability rule.
     let cellId: String?
+    /// Directory a relative path in this cell resolves against.
+    ///
+    /// A notebook's own folder, which is what a reader means by `"./data.csv"`
+    /// or `<git: "..">` when they are looking at the file — and what
+    /// `Learning/validate.py` has always used (it runs with `cwd=Learning/`).
+    /// A front-end that serves several notebooks from one session cannot
+    /// express that with the process's working directory, because they are in
+    /// different folders (GitLab #909).
+    ///
+    /// Absent means the session's own default: the project directory for
+    /// `aro repl <dir>`, otherwise the process's working directory.
+    let baseDir: String?
 }
 
 // MARK: - Responses
