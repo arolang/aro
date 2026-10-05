@@ -209,6 +209,7 @@ Most of ARO works everywhere. This table is the contract; please keep it current
 | Git actions (ARO-0080) | ✅ | ✅ | ❌ ⁵ |
 | `.store` write-back | ✅ opt-in | ✅ opt-in | ✅ opt-in ⁶ |
 | Terminal UI | ✅ | ✅ | ✅ ⁷ |
+| Notebook interactive input | ✅ | ✅ | ⚠️ shim only ¹³ |
 | Metrics | ✅ | ✅ | ✅ ⁸ |
 | **Tools** ||||
 | `aro lsp`, `mcp`, `ask`, `kernel` | ✅ | ✅ | ❌ ¹⁰ |
@@ -236,6 +237,12 @@ Most of ARO works everywhere. This table is the contract; please keep it current
 ¹² HTTP sessions and socket promotion work — the Windows server goes through
    the same request handler and publishes the same connection events — but a
    session cannot reach a WebSocket there, because there is no WebSocket (²)
+¹³ `Prompt`, `Select` and `Ask` in a notebook cell: the native kernel serves
+   Jupyter's stdin channel, and `aro repl --json` the matching `input_request`
+   message, so Windows gets it through the Python shim (which speaks that
+   protocol) but not through `aro kernel`, which is not built there (¹⁰).
+   Where nobody can answer, the statement fails with the reason rather than
+   waiting — ARO-0091 §Interactive input, GitLab #690
 
 `MISSING.md` is the fuller list of what is absent, and why.
 

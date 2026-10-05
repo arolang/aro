@@ -41,13 +41,15 @@ public struct PromptAction: ActionImplementation {
         // Check for hidden specifier (password mode)
         let hidden = result.specifiers.contains { $0.lowercased() == "hidden" }
 
-        // Get terminal service from context
-        guard let terminalService = context.service(TerminalService.self) else {
-            throw ActionError.missingService("TerminalService")
+        // Whoever can answer: the real terminal under `aro run`, the
+        // front-end's input channel in a notebook (GitLab #690). A
+        // front-end that cannot answer fails the statement here with the
+        // reason, rather than binding "" or waiting for a reply nobody
+        // will send.
+        let answerer = try InteractiveInput.require(in: context, action: "Prompt")
+        let input = try await InteractiveInput.answer(action: "Prompt") {
+            try await answerer.requestLine(prompt: message, hidden: hidden)
         }
-
-        // Prompt for input
-        let input = await terminalService.prompt(message: message, hidden: hidden)
 
         // Bind result to context
         context.bind(result.base, value: input)
@@ -109,17 +111,18 @@ public struct SelectAction: ActionImplementation {
         // Check for multi-select specifier
         let multiSelect = result.specifiers.contains { $0.lowercased().contains("multi") }
 
-        // Get terminal service from context
-        guard let terminalService = context.service(TerminalService.self) else {
-            throw ActionError.missingService("TerminalService")
+        // Same answerer as `Prompt` (GitLab #690). A front-end with no
+        // picker of its own gets the numbered menu from
+        // `InteractiveInputService.requestChoice`'s default
+        // implementation, which is what the terminal shows too.
+        let answerer = try InteractiveInput.require(in: context, action: "Select")
+        let selected = try await InteractiveInput.answer(action: "Select") {
+            try await answerer.requestChoice(
+                prompt: message,
+                options: options,
+                multiple: multiSelect
+            )
         }
-
-        // Display selection menu
-        let selected = await terminalService.select(
-            options: options,
-            message: message,
-            multiSelect: multiSelect
-        )
 
         // Bind result to context
         if multiSelect {

@@ -82,8 +82,23 @@ class AROKernel(Kernel):
                 {"name": "stderr" if name == "stderr" else "stdout", "text": text},
             )
 
+        def on_input(prompt: str, password: bool) -> str:
+            # ipykernel's own channel: `input_request` on stdin, which is
+            # what `input()` uses in IPython. The ARO protocol's message
+            # is shaped the same way, so this is a relay (GitLab #690).
+            return self.getpass(prompt) if password else self.raw_input(prompt)
+
         try:
-            result = self.backend.request("execute", on_stream=on_stream, code=code)
+            result = self.backend.request(
+                "execute",
+                on_stream=on_stream,
+                # Only pass the answerer when the front-end promised to
+                # answer; otherwise the ARO side fails the statement with
+                # the reason rather than waiting on nobody.
+                on_input=on_input if allow_stdin else None,
+                code=code,
+                allowStdin=bool(allow_stdin),
+            )
         except KeyboardInterrupt:
             # The cell is blocked inside the ARO runtime, which cannot be
             # unwound from here. Replace the process and say so — a silently

@@ -64,6 +64,22 @@ public actor TerminalService: Sendable {
 }
 ```
 
+**The interactive half is a capability, not this type.** `Prompt`, `Select` and
+`Ask` ask whoever can answer, which `TerminalService` is only when the process
+has a terminal:
+
+```swift
+public protocol InteractiveInputService: Sendable {
+    func requestLine(prompt: String, hidden: Bool) async throws -> String
+    func requestChoice(prompt: String, options: [String], multiple: Bool) async throws -> [String]
+}
+```
+
+`TerminalService` conforms to it and reads the TTY. A notebook front-end
+registers its own, which round-trips the question over the protocol it already
+speaks — see §5.4 and ARO-0091 §Interactive input. `requestChoice` has a default
+implementation (the numbered menu), so a front-end implements one method.
+
 ### 2.2 Capability Detection
 
 The system detects terminal capabilities at runtime:
@@ -392,6 +408,15 @@ Prompt the <password: hidden> from the <terminal>.
 - Unix: Uses `termios` to disable echo
 - Restores terminal state after input
 - Prints newline after hidden input
+- Behind a front-end channel, `hidden` travels as the request's `password`
+  flag, so the front-end masks its own field
+
+**The message is the object.** `Prompt the <name> with "Your name: ".` puts its
+message in expression position, which is why `prompt`, `ask`, `select` and
+`choose` are in `VerbSets.requestVerbs`: the executor's expression fast path
+would otherwise bind the *message* to the result and never run the action
+(GitLab #690). They cannot be in `mustRunForEffect` instead — that list is for
+verbs which bind no result, and the result is the point here.
 
 ### 5.3 Select Action
 
@@ -421,6 +446,36 @@ Select the <choices: multi-select> from <options> from the <terminal>.
 - Arrow key navigation
 - Visual cursor
 - Space to toggle (multi-select)
+
+### 5.4 Interactive input without a terminal
+
+`Prompt`, `Select` and `Ask` need an *answerer*. A terminal is the obvious one
+and used to be the only one, so behind a pipe — the JSON REPL, a Jupyter kernel,
+SOLARO's notebooks — `TerminalService` was absent and the statement failed with
+the name of a missing Swift type (GitLab #690).
+
+They now resolve `InteractiveInputService` (§2.1) and ask whoever is registered:
+
+| Registered | Who answers |
+|------------|-------------|
+| a front-end channel | the front-end's user, over its own protocol |
+| only `TerminalService` | the process's TTY, exactly as before |
+| neither | **nobody — the statement fails** |
+
+A front-end channel wins over the terminal, because `aro repl --json` started
+from a terminal has both and the client driving the session is the one whose
+user is looking at the question.
+
+**Nobody to ask is a failure, never a wait.** The error names which front-end
+could have answered and how to get one; a cell that hangs on a question nobody
+will answer cannot be told from a slow one. Every wait has a way out: the
+answer, a refusal, the channel closing, or `ARO_INPUT_TIMEOUT_SECONDS` (300s by
+default; `0` waits indefinitely). The protocol messages and the per-request
+opt-in are specified in ARO-0091 §Interactive input.
+
+A `KeyPress Handler` is a different question and still needs a terminal: this
+channel answers something the program asked for, and a key press is
+unsolicited.
 
 ## 6. ANSI Renderer
 
@@ -553,7 +608,10 @@ public static func mainScreen() -> String {
 
 **No TTY**:
 - Capability detection returns safe defaults
-- Interactive actions may fail (return empty/default)
+- `Render`, `Clear`, `Show` and `Repaint` degrade to plain output or no-ops
+- `Prompt`, `Select` and `Ask` ask the front-end's input channel if one is
+  registered (§5.4); with no answerer at all they **fail**, naming the reason —
+  they never bind an empty value and never wait
 - Templates render without ANSI codes
 
 **ASCII-Only Terminals**:

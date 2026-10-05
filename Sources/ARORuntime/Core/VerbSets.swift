@@ -15,7 +15,18 @@ public enum VerbSets {
     /// `exists` is here because `Exists the <flag> for "./path"` puts its path in
     /// expression position; skipping execution bound the path string to <flag>
     /// instead of the boolean the action computes (GitLab #494).
-    public static let requestVerbs: Set<String> = ["call", "invoke", "request", "probe", "fetch", "retrieve", "listen", "parse", "exists"]
+    /// `prompt` / `ask` / `select` / `choose` are here for the third instance of
+    /// that same shape (GitLab #690). `Prompt the <name> with "Your name: ".`
+    /// puts its *message* in expression position, so the fast path bound the
+    /// message to `<name>` and never ran the action: the program printed
+    /// nothing, asked nobody, and answered OK with the prompt text as the
+    /// user's name. They cannot go in `mustRunForEffect` instead — that list is
+    /// for verbs which bind no result, and the whole point of `Prompt` is the
+    /// result it binds.
+    public static let requestVerbs: Set<String> = [
+        "call", "invoke", "request", "probe", "fetch", "retrieve", "listen", "parse", "exists",
+        "prompt", "ask", "select", "choose",
+    ]
 
     /// Mutation verbs — always execute so they can handle rebinding internally
     public static let updateVerbs: Set<String> = ["update", "modify", "change", "set", "configure"]

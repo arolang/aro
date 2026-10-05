@@ -61,6 +61,15 @@ final class JSONREPLServer: @unchecked Sendable {
     /// (GitLab #913).
     private var requestInFlight = false
     private var drainToken = 0
+    /// Whether the `execute` in flight may ask the client a question
+    /// (GitLab #690). Per request, because `allow_stdin` is per request
+    /// in Jupyter and for the same reason: "Run All" and a headless test
+    /// harness have nobody at the keyboard.
+    private var allowStdin = false
+
+    /// One reader for stdin, shared by the request loop and by an open
+    /// `input_request` — see `StdinLineReader`.
+    private let stdin = StdinLineReader()
 
     init(session: REPLSession) {
         self.session = session
@@ -71,11 +80,16 @@ final class JSONREPLServer: @unchecked Sendable {
         engine.note = { [weak self] text in
             self?.note(text)
         }
+        session.useInteractiveInput(FrontEndInputChannel { [weak self] prompt, hidden in
+            guard let self else { throw InteractiveInputError.closed(action: "Prompt") }
+            return try await self.askClient(prompt: prompt, hidden: hidden)
+        })
     }
 
     // MARK: - Lifecycle
 
     func run() async {
+        stdin.start()
         #if !os(Windows)
         // Before installCaptures(): it replaces fd 2 with a pipe, and a
         // duplicate taken after that points at the process's own reader
@@ -192,12 +206,103 @@ final class JSONREPLServer: @unchecked Sendable {
     }
 
     /// Read one line from stdin off the cooperative pool, as the MCP
-    /// transport does — `readLine` blocks, and blocking a task executor
+    /// transport does — the read blocks, and blocking a task executor
     /// thread would stall the runtime work the REPL itself depends on.
+    ///
+    /// The read goes through `StdinLineReader` rather than `readLine`
+    /// directly, because an open `input_request` reads the same
+    /// descriptor and needs a *bounded* wait (GitLab #690).
     private func nextLine() async -> String? {
-        await withCheckedContinuation { continuation in
-            DispatchQueue.global().async {
-                continuation.resume(returning: readLine(strippingNewline: true))
+        switch await stdin.nextOffPool(timeoutSeconds: nil) {
+        case .line(let line): return line
+        case .endOfInput, .timedOut: return nil
+        }
+    }
+
+    // MARK: - Interactive input (GitLab #690)
+
+    /// Ask the client a question and wait for its `input_reply`.
+    ///
+    /// Only reachable from inside an `execute`, which is what makes
+    /// reading stdin here safe: the request loop is parked in
+    /// `handle(_:)` until the cell finishes, so this is the only reader
+    /// at this moment — and `StdinLineReader` makes that structural
+    /// rather than merely true.
+    ///
+    /// Three ways out, so no cell can wait forever:
+    /// the reply, EOF (the client is gone), and the timeout.
+    private func askClient(prompt: String, hidden: Bool) async throws -> String {
+        let (id, allowed) = stateLock.withLock { (currentRequestId, allowStdin) }
+
+        guard allowed else {
+            throw InteractiveInputError.declined(
+                action: "Prompt",
+                detail: #"the client did not set "allowStdin": true on this execute request"#)
+        }
+
+        // The question's own context — a `Select` menu, a `Log` line
+        // above it — is on the captured descriptors. Flush it first, or
+        // the client renders an input box for a question whose text is
+        // still in a pipe (the same ordering rule results already obey).
+        drainCaptures()
+        send(JSONREPLEncoder.inputRequest(id: id, prompt: prompt, password: hidden))
+
+        let timeout = InteractiveInput.timeoutSeconds
+        let deadline = timeout == 0 ? nil : timeout
+
+        while true {
+            switch await stdin.nextOffPool(timeoutSeconds: deadline) {
+            case .timedOut:
+                throw InteractiveInputError.timedOut(action: "Prompt", seconds: timeout)
+
+            case .endOfInput:
+                throw InteractiveInputError.closed(action: "Prompt")
+
+            case .line(let line):
+                let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+                if trimmed.isEmpty { continue }
+                guard
+                    let data = trimmed.data(using: .utf8),
+                    let message = try? JSONDecoder().decode(JSONREPLRequest.self, from: data)
+                else {
+                    send(JSONREPLEncoder.result(id: -1, status: .error, extra: [
+                        "error": JSONREPLError(
+                            name: "ProtocolError",
+                            message: "malformed request: \(trimmed)").payload
+                    ]))
+                    continue
+                }
+
+                if message.type == "shutdown" {
+                    // The front-end is leaving. That is an answer of a
+                    // kind: the statement fails, and the request loop
+                    // gets the message back so the server still exits.
+                    stdin.unread(line)
+                    throw InteractiveInputError.closed(action: "Prompt")
+                }
+
+                guard message.type == "input_reply" else {
+                    // A request sent while a question is open. Answering
+                    // it would run a second cell inside the first, on a
+                    // session that is explicitly one-request-at-a-time
+                    // (ARO-0091 §Limits). Refuse it by name and keep
+                    // waiting for the answer.
+                    send(JSONREPLEncoder.result(id: message.id, status: .error, extra: [
+                        "error": JSONREPLError(
+                            name: "ProtocolError",
+                            message: "an input_request for request \(id) is open — "
+                                   + "answer it with an input_reply before sending a "
+                                   + "'\(message.type)'").payload
+                    ]))
+                    continue
+                }
+
+                if message.status == "error" {
+                    throw InteractiveInputError.declined(
+                        action: "Prompt",
+                        detail: "the client answered the input_request with an error")
+                }
+                return message.value ?? ""
             }
         }
     }
@@ -213,8 +318,21 @@ final class JSONREPLServer: @unchecked Sendable {
 
         switch request.type {
         case "execute":
+            // Per request, and false unless asked for (GitLab #690).
+            stateLock.withLock { allowStdin = request.allowStdin ?? false }
             await execute(id: request.id, code: request.code ?? "",
                           cellID: request.cellId, baseDir: request.baseDir)
+            stateLock.withLock { allowStdin = false }
+        case "input_reply":
+            // Only meaningful while a question is open, and then it is
+            // read by `askClient`, not here. Reaching the dispatch loop
+            // means there was nothing to answer — say so, rather than
+            // report it as an unknown message type.
+            send(JSONREPLEncoder.result(id: request.id, status: .error, extra: [
+                "error": JSONREPLError(
+                    name: "ProtocolError",
+                    message: "no input_request is open").payload
+            ]))
         case "is_complete":
             isComplete(id: request.id, code: request.code ?? "")
         case "complete":

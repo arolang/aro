@@ -134,6 +134,12 @@ Project: MyApp
 
 ARO-0049 lists other flags that were never implemented.
 
+A `--json` client that wants `Prompt`, `Select` or `Ask` to work sends
+`"allowStdin": true` with its `execute` and answers the server's
+`input_request` with an `input_reply`. Without it those statements fail with an
+explanation rather than waiting — see ARO-0091 §Interactive input, and
+`ARO_INPUT_TIMEOUT_SECONDS` for the bound on a wait.
+
 ## `aro kernel` — Jupyter
 
 ```
@@ -145,6 +151,11 @@ aro kernel install
 front end then launches `aro kernel --connection-file …`. Native ZMQ, no Python
 needed. `--project` is the same project wiring `aro repl` takes, for a notebook
 that belongs to an application.
+
+`Prompt`, `Select` and `Ask` work in a cell: the kernel serves Jupyter's
+`input_request` / `input_reply` on the stdin channel, the same mechanism behind
+`input()` in IPython. A cell run with `allow_stdin: false` — "Run All Cells",
+`nbconvert` — gets a failed statement naming the reason instead of a hang.
 
 ## `aro debug` — step-debug
 
