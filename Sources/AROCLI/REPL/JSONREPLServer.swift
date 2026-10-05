@@ -50,6 +50,16 @@ final class JSONREPLServer: @unchecked Sendable {
 
     private let stateLock = NSLock()
     private var currentRequestId = 0
+
+    /// Whether a request is executing right now.
+    ///
+    /// `currentRequestId` is the *last* request seen, which is the right
+    /// stamp for output a cell produced and the wrong one for output that
+    /// arrives between cells. A `File Event Handler` woken by a file dropped
+    /// while the session idles was being reported under whichever cell ran
+    /// last — three seconds after it finished, in the case that found this
+    /// (GitLab #913).
+    private var requestInFlight = false
     private var drainToken = 0
 
     init(session: REPLSession) {
@@ -87,7 +97,7 @@ final class JSONREPLServer: @unchecked Sendable {
                 let data = trimmed.data(using: .utf8),
                 let request = try? JSONDecoder().decode(JSONREPLRequest.self, from: data)
             else {
-                send(JSONREPLEncoder.result(id: -1, status: .error, extra: [
+                sendResult(JSONREPLEncoder.result(id: -1, status: .error, extra: [
                     "error": JSONREPLError(name: "ProtocolError", message: "malformed request: \(trimmed)").payload
                 ]))
                 continue
@@ -112,8 +122,19 @@ final class JSONREPLServer: @unchecked Sendable {
         #if !os(Windows)
         let emit: @Sendable (String, String) -> Void = { [weak self] name, text in
             guard let self else { return }
-            let id = self.stateLock.withLock { self.currentRequestId }
-            self.send(JSONREPLEncoder.stream(id: id, name: name, text: text))
+            let (id, inFlight) = self.stateLock.withLock {
+                (self.currentRequestId, self.requestInFlight)
+            }
+            // Output that arrives while nothing is executing belongs to no
+            // cell. It is said so explicitly rather than attributed to the
+            // last one, which is a claim about causation that is simply false
+            // — and which a front-end that has already finalised that cell
+            // would either misplace or drop (GitLab #913).
+            if inFlight {
+                self.send(JSONREPLEncoder.stream(id: id, name: name, text: text))
+            } else {
+                self.send(JSONREPLEncoder.backgroundStream(name: name, text: text))
+            }
         }
 
         if let out = OutputCapture(name: "stdout", targetFD: STDOUT_FILENO, emit: emit) {
@@ -138,6 +159,17 @@ final class JSONREPLServer: @unchecked Sendable {
             capture.drain(token: token)
         }
         #endif
+    }
+
+    /// Send a `result`, which is also what ends a request.
+    ///
+    /// The flag has to drop here rather than at the end of `handle`, because
+    /// a handler woken by the cell can still be running when the result goes
+    /// out — and from that moment its output is background output, not the
+    /// cell's (GitLab #913).
+    private func sendResult(_ line: String) {
+        stateLock.withLock { requestInFlight = false }
+        send(line)
     }
 
     private func send(_ line: String) {
@@ -174,7 +206,10 @@ final class JSONREPLServer: @unchecked Sendable {
 
     /// Handle one request. Returns true when the server should stop.
     private func handle(_ request: JSONREPLRequest) async -> Bool {
-        stateLock.withLock { currentRequestId = request.id }
+        stateLock.withLock {
+            currentRequestId = request.id
+            requestInFlight = true
+        }
 
         switch request.type {
         case "execute":
@@ -187,7 +222,7 @@ final class JSONREPLServer: @unchecked Sendable {
         case "inspect":
             inspect(id: request.id, code: request.code ?? "", cursor: request.cursor ?? 0)
         case "info":
-            send(JSONREPLEncoder.result(id: request.id, status: .ok, extra: [
+            sendResult(JSONREPLEncoder.result(id: request.id, status: .ok, extra: [
                 "info": [
                     "implementation": "aro",
                     "version": AROVersion.shortVersion,
@@ -197,12 +232,12 @@ final class JSONREPLServer: @unchecked Sendable {
             ]))
         case "reset":
             reset()
-            send(JSONREPLEncoder.result(id: request.id, status: .ok))
+            sendResult(JSONREPLEncoder.result(id: request.id, status: .ok))
         case "shutdown":
-            send(JSONREPLEncoder.result(id: request.id, status: .ok))
+            sendResult(JSONREPLEncoder.result(id: request.id, status: .ok))
             return true
         default:
-            send(JSONREPLEncoder.result(id: request.id, status: .error, extra: [
+            sendResult(JSONREPLEncoder.result(id: request.id, status: .error, extra: [
                 "error": JSONREPLError(
                     name: "ProtocolError",
                     message: "unknown request type '\(request.type)'"
@@ -219,7 +254,7 @@ final class JSONREPLServer: @unchecked Sendable {
     // MARK: - Execute
 
     /// Run a cell, with relative paths resolving against the notebook's own
-    /// folder when the front-end said which one it is (GitLab #909).
+    /// folder when the front-end said which one it is (GitLab #915).
     ///
     /// `AROWorkingDirectory.setProcessDefault` rather than its task-local:
     /// binding an ARORuntime `@TaskLocal` from AROCLI segfaults on Linux
@@ -274,7 +309,7 @@ final class JSONREPLServer: @unchecked Sendable {
     private func executeUnits(id: Int, code: String, cellID: String? = nil) async {
         let start = Date()
         guard !REPLCellSplitter.split(code).isEmpty else {
-            send(JSONREPLEncoder.result(id: id, status: .ok, extra: ["durationMs": 0]))
+            sendResult(JSONREPLEncoder.result(id: id, status: .ok, extra: ["durationMs": 0]))
             return
         }
         let outcome = await engine.executeCell(code, cellID: cellID)
@@ -286,7 +321,7 @@ final class JSONREPLServer: @unchecked Sendable {
         let durationMs = Date().timeIntervalSince(start) * 1000
 
         if let error {
-            send(JSONREPLEncoder.result(id: id, status: .error, extra: [
+            sendResult(JSONREPLEncoder.result(id: id, status: .error, extra: [
                 "error": error.payload,
                 "durationMs": durationMs
             ]))
@@ -297,7 +332,7 @@ final class JSONREPLServer: @unchecked Sendable {
         if let display, !display.isEmpty {
             extra["display"] = display
         }
-        send(JSONREPLEncoder.result(id: id, status: .ok, extra: extra))
+        sendResult(JSONREPLEncoder.result(id: id, status: .ok, extra: extra))
     }
 
     // MARK: - Completion & inspection
@@ -315,7 +350,7 @@ final class JSONREPLServer: @unchecked Sendable {
         case .error:
             status = .invalid
         }
-        send(JSONREPLEncoder.result(id: id, status: status, extra: extra))
+        sendResult(JSONREPLEncoder.result(id: id, status: status, extra: extra))
     }
 
     /// LSP-backed completion (ARO-0091): the shared `REPLIntel` engine
@@ -330,7 +365,7 @@ final class JSONREPLServer: @unchecked Sendable {
             session: session,
             definitions: engine.companionSources
         )
-        send(JSONREPLEncoder.result(id: id, status: .ok, extra: [
+        sendResult(JSONREPLEncoder.result(id: id, status: .ok, extra: [
             "matches": answer.matches,
             "items": answer.items,
             "cursorStart": answer.cursorStart,
@@ -349,9 +384,9 @@ final class JSONREPLServer: @unchecked Sendable {
             definitions: engine.companionSources
         )
         if answer.found, let text = answer.text {
-            send(JSONREPLEncoder.result(id: id, status: .ok, extra: ["found": true, "text": text]))
+            sendResult(JSONREPLEncoder.result(id: id, status: .ok, extra: ["found": true, "text": text]))
         } else {
-            send(JSONREPLEncoder.result(id: id, status: .ok, extra: ["found": false]))
+            sendResult(JSONREPLEncoder.result(id: id, status: .ok, extra: ["found": false]))
         }
     }
 

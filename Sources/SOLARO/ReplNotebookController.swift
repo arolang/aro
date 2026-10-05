@@ -584,7 +584,7 @@ final class ReplNotebookController {
                 cellID: id,
                 // The notebook's own folder, not the project root the kernel
                 // was launched in — a cell's relative paths mean what they
-                // mean to someone reading the file (GitLab #909).
+                // mean to someone reading the file (GitLab #915).
                 baseDir: url.deletingLastPathComponent().path
             ) { [weak self] name, text in
                 self?.appendStream(name: name, text: text, to: id)
