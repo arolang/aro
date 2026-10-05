@@ -154,8 +154,8 @@
         },
         {
           "name": "keyword.action.export.aro",
-          "match": "\\b(Commit|Emit|Export|Expose|Publish|Push|Schedule|Share|Tag)\\b",
-          "comment": "EXPORT actions - persistence/external (9 verbs, generated)"
+          "match": "\\b(Commit|Deliver|Emit|Export|Expose|Publish|Push|Schedule|Share|Tag)\\b",
+          "comment": "EXPORT actions - persistence/external (10 verbs, generated)"
         },
         {
           "name": "keyword.action.lifecycle.aro",

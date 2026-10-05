@@ -66,6 +66,13 @@ final class EmitPayloadMemoizationTests: XCTestCase {
         let object = ObjectDescriptor(preposition: .with, base: "user", specifiers: [], span: span)
         _ = try await emit.execute(result: result, object: object, context: ctx)
 
+        // `Emit` hands the event over and continues (GitLab #905), so the
+        // subscriber runs in a task of its own. What is under test is that the
+        // payload reaching the bus is a *value* rather than a handle — not when
+        // it arrives — so wait for the delivery the runtime itself waits for at
+        // shutdown.
+        _ = await bus.awaitPendingEvents(timeout: 5)
+
         let event = captured.value
         XCTAssertNotNil(event, "DomainEvent must reach the subscriber")
         XCTAssertFalse(
@@ -117,7 +124,12 @@ final class EmitPayloadMemoizationTests: XCTestCase {
         let object = ObjectDescriptor(preposition: .with, base: "user", specifiers: [], span: span)
         _ = try await emit.execute(result: result, object: object, context: ctx)
 
-        // publishAndTrack waits for handlers, so all forces have happened.
+        // `Emit` no longer waits for its handlers (GitLab #905), so the forces
+        // have not all happened when it returns. The memoisation under test is
+        // about the producer running once across the whole fan-out, whenever
+        // that fan-out completes — so wait for it the way shutdown does.
+        _ = await bus.awaitPendingEvents(timeout: 5)
+
         XCTAssertEqual(observed.value, totalHandlers, "Every handler should have observed the payload")
         XCTAssertEqual(runCount.value, 1, "Producer must run exactly once for the whole fan-out")
     }
@@ -147,6 +159,13 @@ final class EmitPayloadMemoizationTests: XCTestCase {
         let result = ResultDescriptor(base: "OperationDone", specifiers: ["event"], span: span)
         let object = ObjectDescriptor(preposition: .with, base: "_expression_", specifiers: [], span: span)
         _ = try await emit.execute(result: result, object: object, context: ctx)
+
+        // `Emit` hands the event over and continues (GitLab #905), so the
+        // subscriber runs in a task of its own. What is under test is that the
+        // payload reaching the bus is a *value* rather than a handle — not when
+        // it arrives — so wait for the delivery the runtime itself waits for at
+        // shutdown.
+        _ = await bus.awaitPendingEvents(timeout: 5)
 
         let event = captured.value
         XCTAssertEqual(event?.payload["status"] as? String, "ok")

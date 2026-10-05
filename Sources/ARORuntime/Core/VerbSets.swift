@@ -64,7 +64,8 @@ public enum VerbSets {
     /// Response/export verbs — result must not be rebound to the expression value
     public static let responseVerbs: Set<String> = [
         "write", "read", "store", "save", "persist",
-        "log", "print", "send", "emit", "notify", "alert", "signal", "broadcast"
+        "log", "print", "send", "emit", "deliver", "notify", "alert", "signal",
+        "broadcast"
     ]
 
     /// Server/service lifecycle verbs — always execute for side effects

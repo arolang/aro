@@ -193,7 +193,8 @@ Let us write a simple two-handler pipeline to see this in action. Create a file 
 (Application-Start: Event Demo) {
     Log "Starting event demo..." to the <console>.
 
-    (* Emit first event - blocks until the entire chain completes *)
+    (* Emit hands the event over; the chain runs on its own and
+       shutdown drains it before the process exits *)
     Emit a <Greet: event> with { name: "World" }.
 
     Log "All events processed!" to the <console>.
@@ -244,7 +245,7 @@ All events processed!
 [OK] startup
 ```
 
-Notice the flow: Start → Greet event → Hello handler → Farewell event → Goodbye handler → back to Start. The `<Emit>` blocks until the entire chain completes, so "All events processed!" appears last.
+Notice the flow: Start → Greet event → Hello handler → Farewell event → Goodbye handler. `<Emit>` does not block, so "All events processed!" appears *before* the handlers' output rather than after it — the emitter is finished the moment it has spoken, and the runtime drains the cascade at shutdown. Swap `<Emit>` for `<Deliver>` in Start and the ordering reverses, because then the emitter waits.
 
 ---
 

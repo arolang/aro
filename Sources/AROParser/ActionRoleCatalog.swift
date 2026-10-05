@@ -51,8 +51,8 @@ public enum ActionRoleCatalog {
             "throw", "write")
 
         add(.export,
-            "commit", "emit", "export", "expose", "publish", "push", "schedule",
-            "share", "tag")
+            "commit", "deliver", "emit", "export", "expose", "publish", "push",
+            "schedule", "share", "tag")
 
         add(.server,
             "await", "block", "close", "connect", "copy", "createdirectory",
@@ -105,7 +105,7 @@ public enum ActionRoleCatalog {
     /// fails. `configure` is here too, and carries repository scope since
     /// GitLab #886 folded `Declare` into it.
     public static let mustRunForEffect: Set<String> = [
-        "return", "throw", "send", "emit", "respond", "output", "write",
+        "return", "throw", "send", "emit", "deliver", "respond", "output", "write",
         "store", "save", "persist", "log", "print", "debug", "notify",
         "alert", "signal", "broadcast", "render", "repaint", "patch",
         "attach",

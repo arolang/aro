@@ -464,7 +464,7 @@ final class ReplKernelClient: ReplKernelDriving {
     /// kernel process runs with the *project root* as its working directory,
     /// so without it `Retrieve the <status> from the <git: "..">.` in
     /// `Learning/22-git-and-devops.repl` discovered whatever sits above the
-    /// repository instead of the repository (GitLab #909).
+    /// repository instead of the repository (GitLab #915).
     func execute(code: String,
                  cellID: String? = nil,
                  baseDir: String? = nil,

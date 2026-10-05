@@ -87,12 +87,7 @@ final class StdinLineReader: @unchecked Sendable {
         condition.unlock()
 
         let thread = Thread { [self] in
-            while let line = readLine(strippingNewline: true) {
-                condition.lock()
-                pending.append(line)
-                condition.signal()
-                condition.unlock()
-            }
+            readDescriptorIntoQueue()
             condition.lock()
             atEnd = true
             condition.broadcast()
@@ -100,6 +95,67 @@ final class StdinLineReader: @unchecked Sendable {
         }
         thread.name = "aro.repl.stdin"
         thread.start()
+    }
+
+    /// Split fd 0 into lines with `read(2)`, deliberately **not** through
+    /// `readLine`.
+    ///
+    /// `readLine` goes through stdio, so it takes `stdin`'s `FILE` lock and
+    /// then sits in `read()` holding it until a line arrives. This thread
+    /// exists to wait indefinitely, so it would hold that lock essentially
+    /// forever — and `OutputCapture.drain` ends every cell with `fflush(nil)`,
+    /// which `_fwalk`s *every* stream, `stdin` included, and blocks on exactly
+    /// that lock.
+    ///
+    /// The result was a deadlock with no bad line of its own: a cell's result
+    /// was never sent, the next request was never read, and the session
+    /// unjammed only when the front-end closed stdin — so `aro repl --json`
+    /// hung behind a pipe that stayed open, which is every notebook
+    /// (`integration:jupyter` ran into its 3h ceiling instead of ~210s).
+    ///
+    /// `fflush(nil)` is not the thing to change: it is deliberate, because
+    /// naming `stdout` on Linux touches a mutable Glibc global. Reading the
+    /// descriptor directly takes no stdio lock at all, so neither side can
+    /// wait on the other.
+    private func readDescriptorIntoQueue() {
+        var carry: [UInt8] = []
+        var buffer = [UInt8](repeating: 0, count: 4096)
+
+        while true {
+            let count = buffer.withUnsafeMutableBytes { raw in
+                read(0, raw.baseAddress, raw.count)
+            }
+            if count == 0 { break }                       // EOF
+            if count < 0 {
+                if errno == EINTR { continue }            // a signal, not an end
+                break
+            }
+
+            var lines: [String] = []
+            for byte in buffer[0..<count] {
+                if byte == UInt8(ascii: "\n") {
+                    // A line may be framed CRLF by a Windows front-end.
+                    if carry.last == UInt8(ascii: "\r") { carry.removeLast() }
+                    lines.append(String(decoding: carry, as: UTF8.self))
+                    carry.removeAll(keepingCapacity: true)
+                } else {
+                    carry.append(byte)
+                }
+            }
+            guard !lines.isEmpty else { continue }
+
+            condition.lock()
+            pending.append(contentsOf: lines)
+            condition.signal()
+            condition.unlock()
+        }
+
+        // A final line with no newline is still a line the client sent.
+        guard !carry.isEmpty else { return }
+        condition.lock()
+        pending.append(String(decoding: carry, as: UTF8.self))
+        condition.signal()
+        condition.unlock()
     }
 
     /// Put a line back at the head of the queue.

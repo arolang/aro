@@ -64,7 +64,7 @@ final class FakeKernel: ReplKernelDriving {
     var executedCellIDs: [String?] = []
 
     /// Base directories the notebook sent — the notebook's own folder, so a
-    /// cell's relative paths mean what they mean on disk (GitLab #909).
+    /// cell's relative paths mean what they mean on disk (GitLab #915).
     var executedBaseDirs: [String?] = []
 
     func execute(code: String,
@@ -176,7 +176,7 @@ struct ReplNotebookControllerTests {
         // directory, so a relative path in a cell used to resolve against the
         // root however deep the notebook sat. `Learning/22-git-and-devops.repl`
         // asking `<git: "..">` therefore discovered whatever is above the
-        // repository rather than the repository (GitLab #909).
+        // repository rather than the repository (GitLab #915).
         let root = tmpDir()
         let folder = root.appendingPathComponent("Learning")
         try FileManager.default.createDirectory(

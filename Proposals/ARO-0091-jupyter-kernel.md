@@ -77,7 +77,7 @@ a project holds notebooks in several folders, and a reader looking at
 `<git: "..">`. Without the field that cell discovered whatever repository sits
 above the project root, or none, and answered `Cannot retrieve the status from
 the git: ..` — while the same notebook passed under `Learning/validate.py`,
-which runs with `cwd=Learning/` (GitLab #909).
+which runs with `cwd=Learning/` (GitLab #915).
 
 So the directory travels per request. The server applies it for that cell and
 restores the previous default afterwards, which also means a front-end may run
@@ -398,6 +398,33 @@ the breakage stops it from starting.
 
 Without a directory nothing changes — a bare `aro repl` is the session it always
 was (GitLab #691).
+
+## Output with no cell
+
+A handler runs when something outside the notebook says so. A `File Event
+Handler` woken by a file dropped into a watched directory may fire between two
+cells, or while nobody is typing — and its output belongs to no cell at all.
+
+Such output is sent as a `stream` message carrying **no `id`** and an
+`origin`:
+
+```json
+{"type":"stream","origin":"background","name":"stdout","text":"New export landed: harbor.csv\n"}
+```
+
+The alternative — stamping it with whichever request was last seen — says
+something false about causation, and a front-end that has already finalised
+that cell either renders the line under a finished cell or drops it. Neither is
+visible to the user as a mistake, which is what makes it worth a distinct
+message rather than a best guess (GitLab #913).
+
+A front-end should render background output somewhere of its own: a log pane, a
+status area, or appended to the notebook with its origin shown. What it must
+not do is attribute it to a cell.
+
+Output produced *while* a cell is executing still carries that cell's `id`,
+including a handler the cell itself woke — the cell is running, so it is the
+honest owner even when it is not the cause.
 
 ## Output capture
 

@@ -73,9 +73,20 @@ run_suite() {
         || fail "streamed digest is wrong: $digest (expected $EXPECTED_DIGEST)"
 
     # 6. A body handed to an event handler is anchored and still arrives whole.
+    #
+    #    The 202 does NOT mean the handler has finished: `Emit` hands the event
+    #    over and returns (ARO-0088 §3, GitLab #905). That is the whole point of
+    #    anchoring — the handler outlives the request and reads the body after
+    #    the response has gone out — so the check waits for the write instead of
+    #    assuming the response implies it. `Deliver` is the verb that would wait,
+    #    and using it here would delete what this example demonstrates.
     status=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE/archive/x" \
         --data-binary @"$WORK/upload.bin")
     [ "$status" = "202" ] || fail "archive should be 202, got $status"
+    for _ in $(seq 1 100); do
+        cmp -s "$WORK/upload.bin" /tmp/aro-uploads/archived.bin && break
+        sleep 0.2
+    done
     cmp "$WORK/upload.bin" /tmp/aro-uploads/archived.bin || fail "anchored body differs from what was sent"
 
     echo "FileUpload [$MODE]: all checks passed"
