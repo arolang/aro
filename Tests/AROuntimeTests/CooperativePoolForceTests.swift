@@ -48,18 +48,42 @@ struct CooperativePoolForceTests {
     /// timeout cannot fire while every pool thread is parked, which is precisely
     /// the condition under test — so a regression would hang the suite rather
     /// than fail it (confirmed: the first draft of this file, run against the
-    /// blocking read, never returned). A semaphore is observed from the calling
-    /// thread and reports `.timedOut` whatever the pool is doing.
+    /// blocking read, never returned). A semaphore reports `.timedOut` whatever
+    /// the pool is doing.
+    ///
+    /// Nor may the *test* park a pool thread waiting on it. Swift Testing runs
+    /// tests on the cooperative pool, so a synchronous `wait` here took a thread
+    /// away from the very work being timed. On a 4-core GitHub runner these two
+    /// tests and the rest of the parallel suite left none, both hit the 30 s
+    /// deadline, and every timing-sensitive test in the process failed with them
+    /// — while GitLab's wider runner never noticed. The wait therefore runs on a
+    /// GCD thread and the test suspends.
+    ///
+    /// Suspending reintroduces one hazard: if the pool really is wedged, the
+    /// test cannot resume to report `false`. A watchdog covers that — no
+    /// acknowledgement shortly after a timeout means the pool is gone, and the
+    /// process stops with the reason rather than hanging.
     private func finishesWithin(
         seconds: Double,
         _ body: @escaping @Sendable () async -> Void
-    ) -> Bool {
+    ) async -> Bool {
         let done = DispatchSemaphore(value: 0)
+        let resumed = DispatchSemaphore(value: 0)
         Task.detached {
             await body()
             done.signal()
         }
-        return done.wait(timeout: .now() + seconds) == .success
+        let finished = await withCheckedContinuation { (continuation: CheckedContinuation<Bool, Never>) in
+            DispatchQueue.global().async {
+                let finished = done.wait(timeout: .now() + seconds) == .success
+                continuation.resume(returning: finished)
+                if !finished, resumed.wait(timeout: .now() + 10) == .timedOut {
+                    fatalError("The cooperative pool is wedged: a test could not resume 10s after its deadline (GitLab #707)")
+                }
+            }
+        }
+        resumed.signal()
+        return finished
     }
 
     /// Somewhere for a detached body to put its answer. `#expect` inside a
@@ -73,13 +97,13 @@ struct CooperativePoolForceTests {
     }
 
     @Test("More concurrent reads than cores still finish")
-    func concurrentReadsDoNotExhaustThePool() {
+    func concurrentReadsDoNotExhaustThePool() async {
         // Four times the pool width. Under a blocking force this cannot drain:
         // every parked thread waits for work that needs a thread.
         let readers = ProcessInfo.processInfo.activeProcessorCount * 4
         let outcome = Outcome()
 
-        let finished = finishesWithin(seconds: 30) {
+        let finished = await finishesWithin(seconds: 30) {
             await withTaskGroup(of: Int?.self) { group in
                 for i in 0..<readers {
                     group.addTask {
@@ -103,13 +127,13 @@ struct CooperativePoolForceTests {
     }
 
     @Test("Feature-set exit drains the same way")
-    func concurrentDrainsDoNotExhaustThePool() {
+    func concurrentDrainsDoNotExhaustThePool() async {
         // The same hazard at the other end: exit drains what nobody read, so a
         // loaded server reaches it from many handlers at once.
         let drainers = ProcessInfo.processInfo.activeProcessorCount * 4
         let outcome = Outcome()
 
-        let finished = finishesWithin(seconds: 30) {
+        let finished = await finishesWithin(seconds: 30) {
             await withTaskGroup(of: Void.self) { group in
                 for i in 0..<drainers {
                     group.addTask {
