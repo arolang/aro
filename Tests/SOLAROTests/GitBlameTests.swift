@@ -17,7 +17,19 @@ import Foundation
 struct GitBlameTests {
 
     /// A real repository with one committed file.
-    private func repository() throws -> (Project, URL)? {
+    ///
+    /// Every step is a `git` subprocess. This suite is main-actor isolated,
+    /// so waiting for them here held the main thread — the one every other
+    /// main-actor test, notebook saves included, needs — and the setup
+    /// runs on a thread of its own instead (see `offThePool`).
+    private func repository() async throws -> (Project, URL)? {
+        guard let (root, file) = try await offThePool({ try Self.repositoryBlocking() }) else {
+            return nil
+        }
+        return (Project(rootPath: root), file)
+    }
+
+    nonisolated private static func repositoryBlocking() throws -> (URL, URL)? {
         let root = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("solaro-blame-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: root,
@@ -45,11 +57,11 @@ struct GitBlameTests {
         _ = try git(["config", "user.name", "Test"])
         _ = try git(["add", "main.aro"])
         _ = try git(["commit", "-q", "-m", "first"])
-        return (Project(rootPath: root), file)
+        return (root, file)
     }
 
     @Test func blamingATrackedFileReturnsItsLines() async throws {
-        guard let (project, file) = try repository() else { return }
+        guard let (project, file) = try await repository() else { return }
         defer { try? FileManager.default.removeItem(at: project.rootPath) }
 
         let monitor = GitStatusMonitor()
@@ -59,7 +71,7 @@ struct GitBlameTests {
     }
 
     @Test func blamingSomethingGitCannotExplainSaysWhy() async throws {
-        guard let (project, _) = try repository() else { return }
+        guard let (project, _) = try await repository() else { return }
         defer { try? FileManager.default.removeItem(at: project.rootPath) }
 
         let monitor = GitStatusMonitor()

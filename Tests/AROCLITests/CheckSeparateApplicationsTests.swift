@@ -51,20 +51,24 @@ struct CheckSeparateApplicationsTests {
     }
 
     /// Run `aro check` with `arguments` and return its exit code and output.
-    private func check(_ arguments: [String]) throws -> (status: Int32, output: String) {
-        let process = Process()
-        process.executableURL = try findAroBinary()
-        process.arguments = ["check"] + arguments
+    /// The subprocess is waited for off the cooperative pool (see `offThePool`).
+    private func check(_ arguments: [String]) async throws -> (status: Int32, output: String) {
+        let binary = try findAroBinary()
+        return try await offThePool {
+            let process = Process()
+            process.executableURL = binary
+            process.arguments = ["check"] + arguments
 
-        let pipe = Pipe()
-        process.standardOutput = pipe
-        process.standardError = pipe
+            let pipe = Pipe()
+            process.standardOutput = pipe
+            process.standardError = pipe
 
-        try process.run()
-        let data = pipe.fileHandleForReading.readDataToEndOfFile()
-        process.waitUntilExit()
+            try process.run()
+            let data = pipe.fileHandleForReading.readDataToEndOfFile()
+            process.waitUntilExit()
 
-        return (process.terminationStatus, String(data: data, encoding: .utf8) ?? "")
+            return (process.terminationStatus, String(data: data, encoding: .utf8) ?? "")
+        }
     }
 
     /// A directory holding `applications` subdirectories, each a valid
@@ -94,11 +98,11 @@ struct CheckSeparateApplicationsTests {
     // MARK: - The reported bug
 
     @Test("A directory of applications is an error, not a note")
-    func containerIsAnError() throws {
+    func containerIsAnError() async throws {
         let root = try makeContainer(["Alpha", "Beta", "Gamma"])
         defer { try? FileManager.default.removeItem(at: root) }
 
-        let result = try check([root.path])
+        let result = try await check([root.path])
 
         #expect(result.status == 1)
         #expect(result.output.contains("3 separate applications"))
@@ -106,22 +110,22 @@ struct CheckSeparateApplicationsTests {
     }
 
     @Test("The error names one application to check and offers --recursive")
-    func errorIsActionable() throws {
+    func errorIsActionable() async throws {
         let root = try makeContainer(["Alpha", "Beta"])
         defer { try? FileManager.default.removeItem(at: root) }
 
-        let result = try check([root.path])
+        let result = try await check([root.path])
 
         #expect(result.output.contains("aro check \(root.path)/Alpha"))
         #expect(result.output.contains("--recursive"))
     }
 
     @Test("One application inside the container still checks clean")
-    func oneApplicationIsFine() throws {
+    func oneApplicationIsFine() async throws {
         let root = try makeContainer(["Alpha", "Beta"])
         defer { try? FileManager.default.removeItem(at: root) }
 
-        let result = try check([root.appendingPathComponent("Alpha").path])
+        let result = try await check([root.appendingPathComponent("Alpha").path])
 
         #expect(result.status == 0)
         #expect(result.output.contains("No issues found"))
@@ -130,18 +134,18 @@ struct CheckSeparateApplicationsTests {
     // MARK: - --recursive
 
     @Test("--recursive checks each application and succeeds when all are clean")
-    func recursiveChecksEach() throws {
+    func recursiveChecksEach() async throws {
         let root = try makeContainer(["Alpha", "Beta", "Gamma"])
         defer { try? FileManager.default.removeItem(at: root) }
 
-        let result = try check(["--recursive", root.path])
+        let result = try await check(["--recursive", root.path])
 
         #expect(result.status == 0)
         #expect(result.output.contains("3 application(s) checked, no errors"))
     }
 
     @Test("--recursive fails when one application inside is broken")
-    func recursiveReportsTheBrokenOne() throws {
+    func recursiveReportsTheBrokenOne() async throws {
         let root = try makeContainer(["Alpha", "Beta"])
         defer { try? FileManager.default.removeItem(at: root) }
 
@@ -150,7 +154,7 @@ struct CheckSeparateApplicationsTests {
         try "(Handle Thing: Beta API) {\n    Return an <OK: status> for the <x>.\n}\n"
             .write(to: beta, atomically: true, encoding: .utf8)
 
-        let result = try check(["--recursive", root.path])
+        let result = try await check(["--recursive", root.path])
 
         #expect(result.status == 1)
         #expect(result.output.contains("Beta"))
@@ -159,7 +163,7 @@ struct CheckSeparateApplicationsTests {
     }
 
     @Test("--recursive reaches applications nested inside a container")
-    func recursiveExpandsNestedContainers() throws {
+    func recursiveExpandsNestedContainers() async throws {
         // `Examples/ModulesExample` shape: a container whose entries are
         // themselves a container of applications.
         let root = try makeContainer(["Alpha"])
@@ -178,7 +182,7 @@ struct CheckSeparateApplicationsTests {
                 )
         }
 
-        let result = try check(["--recursive", root.path])
+        let result = try await check(["--recursive", root.path])
 
         #expect(result.status == 0)
         // Alpha, Nested/One and Nested/Two — not Alpha and Nested.
@@ -186,23 +190,23 @@ struct CheckSeparateApplicationsTests {
     }
 
     @Test("--recursive on a plain application checks just that one")
-    func recursiveOnOneApplication() throws {
+    func recursiveOnOneApplication() async throws {
         let root = try makeContainer(["Alpha"])
         defer { try? FileManager.default.removeItem(at: root) }
 
-        let result = try check(["--recursive", root.appendingPathComponent("Alpha").path])
+        let result = try await check(["--recursive", root.appendingPathComponent("Alpha").path])
 
         #expect(result.status == 0)
         #expect(result.output.contains("No issues found"))
     }
 
     @Test("--recursive needs a directory")
-    func recursiveRejectsAFile() throws {
+    func recursiveRejectsAFile() async throws {
         let root = try makeContainer(["Alpha"])
         defer { try? FileManager.default.removeItem(at: root) }
 
         let file = root.appendingPathComponent("Alpha").appendingPathComponent("main.aro")
-        let result = try check(["--recursive", file.path])
+        let result = try await check(["--recursive", file.path])
 
         #expect(result.status != 0)
         #expect(result.output.contains("needs a directory"))

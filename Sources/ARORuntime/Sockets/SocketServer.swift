@@ -438,7 +438,7 @@ public final class AROSocketClient: @unchecked Sendable {
     deinit {
         stopReceiving()
         let fd = takeFd()
-        if fd >= 0 { _ = bsdClose(fd) }
+        if fd >= 0 { _ = Self.bsdClose(fd) }
     }
 
     // MARK: - Connection
@@ -446,74 +446,16 @@ public final class AROSocketClient: @unchecked Sendable {
     /// Connect to a server using non-blocking I/O with timeout.
     /// Resolves hostname, connects with a deadline, and starts the receive loop.
     public func connect(host: String, port: Int) async throws {
-        // SOCK_STREAM is Int32 on macOS but __socket_type on Linux
-        #if canImport(Darwin)
-        let fd = socket(AF_INET, SOCK_STREAM, 0)
-        #else
-        let fd = socket(AF_INET, Int32(SOCK_STREAM.rawValue), 0)
-        #endif
-        guard fd >= 0 else {
-            throw SocketError.connectionFailed("socket() failed (errno \(errno))")
-        }
-
-        // Set socket to non-blocking mode
-        let flags = fcntl(fd, F_GETFL)
-        guard flags >= 0, fcntl(fd, F_SETFL, flags | O_NONBLOCK) >= 0 else {
-            _ = bsdClose(fd)
-            throw SocketError.connectionFailed("fcntl() failed (errno \(errno))")
-        }
-
-        // Resolve host and port via getaddrinfo — handles both IPs and hostnames
-        var hints = addrinfo()
-        hints.ai_family = AF_INET
-        #if canImport(Darwin)
-        hints.ai_socktype = SOCK_STREAM
-        #else
-        hints.ai_socktype = Int32(SOCK_STREAM.rawValue)
-        #endif
-        var res: UnsafeMutablePointer<addrinfo>? = nil
-        let gaiStatus = getaddrinfo(host, "\(port)", &hints, &res)
-        guard gaiStatus == 0, let addrRes = res else {
-            _ = bsdClose(fd)
-            let msg = gai_strerror(gaiStatus).map { String(cString: $0) } ?? "\(gaiStatus)"
-            throw SocketError.connectionFailed("Cannot resolve \(host): \(msg)")
-        }
-        defer { freeaddrinfo(res) }
-
-        // Non-blocking connect — returns immediately with EINPROGRESS
-        let connectResult: Int32
-        #if canImport(Darwin)
-        connectResult = Darwin.connect(fd, addrRes.pointee.ai_addr, addrRes.pointee.ai_addrlen)
-        #else
-        connectResult = Glibc.connect(fd, addrRes.pointee.ai_addr, addrRes.pointee.ai_addrlen)
-        #endif
-
-        if connectResult != 0 {
-            guard errno == EINPROGRESS else {
-                _ = bsdClose(fd)
-                throw SocketError.connectionFailed("connect() to \(host):\(port) failed (errno \(errno))")
-            }
-
-            // Wait for connect to complete using poll() with timeout
-            var pfd = pollfd(fd: fd, events: Int16(POLLOUT), revents: 0)
-            let pollResult = poll(&pfd, 1, Int32(connectTimeout) * 1000)
-
-            if pollResult == 0 {
-                _ = bsdClose(fd)
-                throw SocketError.connectionTimeout(host: host, port: port)
-            } else if pollResult < 0 {
-                _ = bsdClose(fd)
-                throw SocketError.connectionFailed("poll() failed during connect (errno \(errno))")
-            }
-
-            // Check for connect error via SO_ERROR
-            var soError: Int32 = 0
-            var soLen = socklen_t(MemoryLayout<Int32>.size)
-            getsockopt(fd, SOL_SOCKET, SO_ERROR, &soError, &soLen)
-            if soError != 0 {
-                _ = bsdClose(fd)
-                throw SocketError.connectionFailed("connect() to \(host):\(port) failed (errno \(soError))")
-            }
+        // Resolving the host and waiting for the handshake both block — DNS for
+        // as long as the resolver takes, poll() for up to `connectTimeout` — so
+        // they run on a thread of its own rather than the caller's pool thread.
+        let timeout = connectTimeout
+        let fd = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Int32, any Error>) in
+            Thread {
+                continuation.resume(with: Result {
+                    try Self.openConnection(host: host, port: port, timeoutSeconds: timeout)
+                })
+            }.start()
         }
 
         withLock {
@@ -538,6 +480,81 @@ public final class AROSocketClient: @unchecked Sendable {
         }
         receiver.name = "aro.socket-client.receive"
         receiver.start()
+    }
+
+    /// Open a connected, non-blocking socket to `host:port`, or throw. Blocks.
+    private static func openConnection(host: String, port: Int, timeoutSeconds: Int) throws -> Int32 {
+        // SOCK_STREAM is Int32 on macOS but __socket_type on Linux
+        #if canImport(Darwin)
+        let fd = socket(AF_INET, SOCK_STREAM, 0)
+        #else
+        let fd = socket(AF_INET, Int32(SOCK_STREAM.rawValue), 0)
+        #endif
+        guard fd >= 0 else {
+            throw SocketError.connectionFailed("socket() failed (errno \(errno))")
+        }
+
+        // Set socket to non-blocking mode
+        let flags = fcntl(fd, F_GETFL)
+        guard flags >= 0, fcntl(fd, F_SETFL, flags | O_NONBLOCK) >= 0 else {
+            _ = Self.bsdClose(fd)
+            throw SocketError.connectionFailed("fcntl() failed (errno \(errno))")
+        }
+
+        // Resolve host and port via getaddrinfo — handles both IPs and hostnames
+        var hints = addrinfo()
+        hints.ai_family = AF_INET
+        #if canImport(Darwin)
+        hints.ai_socktype = SOCK_STREAM
+        #else
+        hints.ai_socktype = Int32(SOCK_STREAM.rawValue)
+        #endif
+        var res: UnsafeMutablePointer<addrinfo>? = nil
+        let gaiStatus = getaddrinfo(host, "\(port)", &hints, &res)
+        guard gaiStatus == 0, let addrRes = res else {
+            _ = Self.bsdClose(fd)
+            let msg = gai_strerror(gaiStatus).map { String(cString: $0) } ?? "\(gaiStatus)"
+            throw SocketError.connectionFailed("Cannot resolve \(host): \(msg)")
+        }
+        defer { freeaddrinfo(res) }
+
+        // Non-blocking connect — returns immediately with EINPROGRESS
+        let connectResult: Int32
+        #if canImport(Darwin)
+        connectResult = Darwin.connect(fd, addrRes.pointee.ai_addr, addrRes.pointee.ai_addrlen)
+        #else
+        connectResult = Glibc.connect(fd, addrRes.pointee.ai_addr, addrRes.pointee.ai_addrlen)
+        #endif
+
+        if connectResult != 0 {
+            guard errno == EINPROGRESS else {
+                _ = Self.bsdClose(fd)
+                throw SocketError.connectionFailed("connect() to \(host):\(port) failed (errno \(errno))")
+            }
+
+            // Wait for connect to complete using poll() with timeout
+            var pfd = pollfd(fd: fd, events: Int16(POLLOUT), revents: 0)
+            let pollResult = poll(&pfd, 1, Int32(timeoutSeconds) * 1000)
+
+            if pollResult == 0 {
+                _ = Self.bsdClose(fd)
+                throw SocketError.connectionTimeout(host: host, port: port)
+            } else if pollResult < 0 {
+                _ = Self.bsdClose(fd)
+                throw SocketError.connectionFailed("poll() failed during connect (errno \(errno))")
+            }
+
+            // Check for connect error via SO_ERROR
+            var soError: Int32 = 0
+            var soLen = socklen_t(MemoryLayout<Int32>.size)
+            getsockopt(fd, SOL_SOCKET, SO_ERROR, &soError, &soLen)
+            if soError != 0 {
+                _ = Self.bsdClose(fd)
+                throw SocketError.connectionFailed("connect() to \(host):\(port) failed (errno \(soError))")
+            }
+        }
+
+        return fd
     }
 
     private func receiveLoop(bufferSize: Int, timeoutSeconds: Int) {
@@ -579,7 +596,7 @@ public final class AROSocketClient: @unchecked Sendable {
         }
 
         let fd = takeFd()
-        if fd >= 0 { _ = bsdClose(fd) }
+        if fd >= 0 { _ = Self.bsdClose(fd) }
         eventBus.publish(ClientDisconnectedEvent(connectionId: connectionId, reason: "connection closed"))
         EventBus.shared.publish(DomainEvent(
             eventType: "socket.disconnected",
@@ -591,7 +608,7 @@ public final class AROSocketClient: @unchecked Sendable {
     public func disconnect() async throws {
         stopReceiving()
         let fd = takeFd()
-        if fd >= 0 { _ = bsdClose(fd) }
+        if fd >= 0 { _ = Self.bsdClose(fd) }
         eventBus.publish(ClientDisconnectedEvent(connectionId: connectionId, reason: "disconnect requested"))
         EventBus.shared.publish(DomainEvent(
             eventType: "socket.disconnected",
@@ -625,7 +642,7 @@ public final class AROSocketClient: @unchecked Sendable {
     // MARK: - Platform helpers
 
     @discardableResult
-    private func bsdClose(_ fd: Int32) -> Int32 {
+    private static func bsdClose(_ fd: Int32) -> Int32 {
         #if canImport(Darwin)
         return Darwin.close(fd)
         #else
