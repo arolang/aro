@@ -184,14 +184,23 @@ jobs:
           echo "PKG_CONFIG_PATH=$HOME/.pkgconfig" >> $GITHUB_ENV
 
       - name: Run tests
-        # Same invocation as the Linux `test` job, including the socket
-        # suites: `AROSocketClient Loopback Integration Tests` binds
-        # 127.0.0.1:0 and lets the kernel choose the port, so two jobs on one
-        # runner cannot collide, and the suite was measured green on macOS
-        # before this job was added (GitLab #687). If it ever does go flaky
-        # here, name the offending suite in a `--skip` with an issue beside
-        # it — never widen the skip to "Socket" and call the job green.
-        run: swift test --parallel --num-workers 2
+        # The whole suite, socket suites included: `AROSocketClient Loopback
+        # Integration Tests` binds 127.0.0.1:0 and lets the kernel choose the
+        # port, so two jobs on one runner cannot collide. If a suite ever goes
+        # flaky here, name it in a `--skip` with an issue beside it — never
+        # widen the skip to "Socket" and call the job green.
+        #
+        # Serialized, unlike the Linux `test` job. Swift Testing runs tests on
+        # the cooperative pool, and on Darwin that pool is capped at the core
+        # count — three on this runner — and never grows; Linux's grows when
+        # its threads block. Run concurrently, the tests that wait on a
+        # subprocess, a socket or a semaphore held all three threads, and the
+        # tests that measure time failed for their neighbours' waiting: the
+        # LSP debounce never fired in 10s, `Sleep 250ms` took 31s. Serialized,
+        # a test that blocks delays only itself. Measured: the suite passes
+        # serialized with LIBDISPATCH_COOPERATIVE_POOL_STRICT=1, a pool one
+        # thread wide, in about a minute.
+        run: swift test --no-parallel
 
   # ===========================================================================
   # Linux Build & Test
