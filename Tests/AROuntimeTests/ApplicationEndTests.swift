@@ -131,14 +131,18 @@ struct ApplicationEndTests {
 
         try process.run()
 
-        if readyMarker != nil {
-            // Signal only once the program says it is up. On timeout, signal
-            // anyway so the test fails on its own assertions rather than hanging.
-            _ = collector.waitForMarker(timeout: readyTimeout)
-            kill(process.processIdentifier, SIGINT)
-        }
+        // Both waits block, for as long as the program takes to start and
+        // stop, so they happen off the cooperative pool (see `offThePool`).
+        await offThePool {
+            if readyMarker != nil {
+                // Signal only once the program says it is up. On timeout, signal
+                // anyway so the test fails on its own assertions rather than hanging.
+                _ = collector.waitForMarker(timeout: readyTimeout)
+                kill(process.processIdentifier, SIGINT)
+            }
 
-        process.waitUntilExit()
+            process.waitUntilExit()
+        }
 
         // Give the readers a moment to drain what was written just before exit.
         try? await Task.sleep(nanoseconds: 200_000_000)

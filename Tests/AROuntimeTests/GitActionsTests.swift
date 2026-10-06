@@ -14,7 +14,30 @@ import Testing
 
 /// Creates a temporary git repo with a configurable number of commits.
 /// Returns the repo URL; caller must clean up via `defer`.
-private func makeTempRepo(commitCount: Int = 1) throws -> URL {
+///
+/// Every step is a `git` subprocess the caller waits for, so the whole setup
+/// runs off the cooperative pool (see `offThePool`).
+private func makeTempRepo(commitCount: Int = 1) async throws -> URL {
+    try await offThePool { try makeTempRepoBlocking(commitCount: commitCount) }
+}
+
+/// Run `git` with `args` in `directory` and wait for it — off the pool, for the
+/// same reason as `makeTempRepo`.
+private func runGit(_ args: [String], in directory: URL?) async throws -> Int32 {
+    try await offThePool {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
+        process.arguments = args
+        process.currentDirectoryURL = directory
+        process.standardOutput = FileHandle.nullDevice
+        process.standardError = FileHandle.nullDevice
+        try process.run()
+        process.waitUntilExit()
+        return process.terminationStatus
+    }
+}
+
+private func makeTempRepoBlocking(commitCount: Int) throws -> URL {
     let tmpDir = FileManager.default.temporaryDirectory
         .appendingPathComponent("aro-git-test-\(UUID().uuidString)")
     try FileManager.default.createDirectory(at: tmpDir, withIntermediateDirectories: true)
@@ -80,9 +103,9 @@ struct GitServiceTests {
     }
 
     @Test("discoverRepository finds the repo root from a nested subdirectory")
-    func testDiscoverFromSubdirectory() throws {
+    func testDiscoverFromSubdirectory() async throws {
         let git = GitService.shared
-        let repo = try makeTempRepo()
+        let repo = try await makeTempRepo()
         defer { try? FileManager.default.removeItem(at: repo) }
 
         let deep = repo.appendingPathComponent("sub").appendingPathComponent("deeper")
@@ -109,24 +132,17 @@ struct GitServiceTests {
     }
 
     @Test("discoverRepository resolves a linked worktree (.git file) from a subdirectory")
-    func testDiscoverLinkedWorktree() throws {
+    func testDiscoverLinkedWorktree() async throws {
         let git = GitService.shared
-        let repo = try makeTempRepo()
+        let repo = try await makeTempRepo()
         defer { try? FileManager.default.removeItem(at: repo) }
 
         let worktree = FileManager.default.temporaryDirectory
             .appendingPathComponent("aro-git-wt-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: worktree) }
 
-        let p = Process()
-        p.executableURL = URL(fileURLWithPath: "/usr/bin/git")
-        p.arguments = ["worktree", "add", "-b", "wt-branch", worktree.path]
-        p.currentDirectoryURL = repo
-        p.standardOutput = FileHandle.nullDevice
-        p.standardError = FileHandle.nullDevice
-        try p.run()
-        p.waitUntilExit()
-        guard p.terminationStatus == 0 else {
+        let status = try await runGit(["worktree", "add", "-b", "wt-branch", worktree.path], in: repo)
+        guard status == 0 else {
             throw GitServiceError.operationFailed(context: "test-setup", detail: "git worktree add failed")
         }
 
@@ -157,9 +173,9 @@ struct GitServiceTests {
     }
 
     @Test("status returns valid status")
-    func testStatus() throws {
+    func testStatus() async throws {
         let git = GitService.shared
-        let repo = try makeTempRepo()
+        let repo = try await makeTempRepo()
         defer { try? FileManager.default.removeItem(at: repo) }
 
         let status = try git.status(in: repo)
@@ -182,9 +198,9 @@ struct GitServiceTests {
     }
 
     @Test("currentBranch returns branch name")
-    func testCurrentBranch() throws {
+    func testCurrentBranch() async throws {
         let git = GitService.shared
-        let repo = try makeTempRepo()
+        let repo = try await makeTempRepo()
         defer { try? FileManager.default.removeItem(at: repo) }
 
         let branch = try git.currentBranch(in: repo)
@@ -193,9 +209,9 @@ struct GitServiceTests {
     }
 
     @Test("log returns entries with correct fields")
-    func testLog() throws {
+    func testLog() async throws {
         let git = GitService.shared
-        let repo = try makeTempRepo(commitCount: 3)
+        let repo = try await makeTempRepo(commitCount: 3)
         defer { try? FileManager.default.removeItem(at: repo) }
 
         let entries = try git.log(limit: 5, in: repo)
@@ -210,9 +226,9 @@ struct GitServiceTests {
     }
 
     @Test("log respects limit parameter")
-    func testLogLimit() throws {
+    func testLogLimit() async throws {
         let git = GitService.shared
-        let repo = try makeTempRepo(commitCount: 5)
+        let repo = try await makeTempRepo(commitCount: 5)
         defer { try? FileManager.default.removeItem(at: repo) }
 
         let one = try git.log(limit: 1, in: repo)
@@ -222,7 +238,7 @@ struct GitServiceTests {
     }
 
     @Test("log reads a shallow clone")
-    func testLogShallowClone() throws {
+    func testLogShallowClone() async throws {
         // A `--depth` clone is what CI checks out, and libgit2 1.1 — what the
         // Linux CI image ships — has no shallow support: `push_head` succeeds
         // and then the first `git_revwalk_next` returns ENOTFOUND, because
@@ -235,23 +251,15 @@ struct GitServiceTests {
         // supports shallow the revwalk does; on one that does not the
         // first-parent fallback does. What must hold either way is that a
         // repository with commits does not report none.
-        let source = try makeTempRepo(commitCount: 4)
+        let source = try await makeTempRepo(commitCount: 4)
         defer { try? FileManager.default.removeItem(at: source) }
 
         let clone = FileManager.default.temporaryDirectory
             .appendingPathComponent("aro-git-shallow-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: clone) }
 
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
-        process.arguments = [
-            "clone", "--depth", "2", "file://\(source.path)", clone.path,
-        ]
-        process.standardOutput = FileHandle.nullDevice
-        process.standardError = FileHandle.nullDevice
-        try process.run()
-        process.waitUntilExit()
-        try #require(process.terminationStatus == 0, "git clone --depth failed")
+        let cloned = try await runGit(["clone", "--depth", "2", "file://\(source.path)", clone.path], in: nil)
+        try #require(cloned == 0, "git clone --depth failed")
 
         let entries = try GitService.shared.log(limit: 10, in: clone)
         #expect(!entries.isEmpty, "a shallow clone has history; log must not report none")
@@ -261,32 +269,21 @@ struct GitServiceTests {
     }
 
     @Test("log reads a shallow clone with a detached HEAD")
-    func testLogShallowDetached() throws {
+    func testLogShallowDetached() async throws {
         // CI checks out a merge-request ref, so HEAD is detached as well as
         // shallow. The two are independent failure modes and both were in
         // play, so both are pinned.
-        let source = try makeTempRepo(commitCount: 3)
+        let source = try await makeTempRepo(commitCount: 3)
         defer { try? FileManager.default.removeItem(at: source) }
 
         let clone = FileManager.default.temporaryDirectory
             .appendingPathComponent("aro-git-detached-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: clone) }
 
-        func run(_ args: [String], in directory: URL?) throws -> Int32 {
-            let process = Process()
-            process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
-            process.arguments = args
-            process.currentDirectoryURL = directory
-            process.standardOutput = FileHandle.nullDevice
-            process.standardError = FileHandle.nullDevice
-            try process.run()
-            process.waitUntilExit()
-            return process.terminationStatus
-        }
-
-        try #require(run(["clone", "--depth", "2", "file://\(source.path)", clone.path],
-                         in: nil) == 0)
-        try #require(run(["checkout", "--detach", "HEAD"], in: clone) == 0)
+        let cloned = try await runGit(["clone", "--depth", "2", "file://\(source.path)", clone.path], in: nil)
+        try #require(cloned == 0)
+        let detached = try await runGit(["checkout", "--detach", "HEAD"], in: clone)
+        try #require(detached == 0)
 
         let entries = try GitService.shared.log(limit: 10, in: clone)
         #expect(!entries.isEmpty)
@@ -467,10 +464,10 @@ struct GitActionsModuleTests {
 struct GitStageCommitTests {
 
     @Test("Stage and commit in a temp repo")
-    func testStageAndCommit() throws {
+    func testStageAndCommit() async throws {
         let git = GitService.shared
         // makeTempRepo creates an initialized repo with user config and one commit
-        let repo = try makeTempRepo()
+        let repo = try await makeTempRepo()
         defer { try? FileManager.default.removeItem(at: repo) }
 
         // Create a new file
