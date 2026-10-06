@@ -326,6 +326,14 @@ public actor EventBus {
     /// This is nonisolated for compatibility with existing synchronous code
     /// - Parameter event: The event to publish
     nonisolated public func publish(_ event: any RuntimeEvent) {
+        publish(event, checkpointed: false)
+    }
+
+    /// `publish(_:)` for a caller that has already run the event-breakpoint
+    /// checkpoint itself, at the statement that produced the event — which is
+    /// what `Emit` does, so a pause happens before the emitter moves on
+    /// rather than whenever the hand-over Task gets scheduled.
+    nonisolated func publish(_ event: any RuntimeEvent, checkpointed: Bool) {
         // Nobody to deliver to and nobody to pause for: do nothing at all.
         //
         // Every feature-set execution publishes `FeatureSetStartedEvent`,
@@ -348,22 +356,22 @@ public actor EventBus {
         // cannot exit between publish() returning and publishInternal running.
         pendingFireAndForgetPublishes.increment()
         Task {
-            // **Ordering caveat, on this path only (#230 follow-up):** the
-            // checkpoint and `publishInternal` both run inside this detached
-            // Task, so a pause here is ordered before the fan-out in
-            // practice, but it is not a guarantee the type system carries —
-            // `publish` is fire-and-forget and returns before either runs.
+            // **Ordering caveat, for callers that did not checkpoint (#230
+            // follow-up):** here the checkpoint and `publishInternal` both run
+            // inside this detached Task, so a pause is ordered before the
+            // fan-out in practice, but `publish` has already returned and the
+            // caller has moved on.
             //
-            // `publishAndTrack` and `publishAndWait` do not share this
-            // caveat: both are async and both await their handlers, so the
-            // checkpoint at the top of each strictly precedes any subscriber
-            // (GitLab #557). An ARO `Emit` takes `publishAndTrack`, which is
-            // why the guarantee holds for the events users actually write,
-            // and why the debugging guide no longer sends them to a verb
-            // breakpoint on `Emit` for strict ordering. #230 remains open
-            // only for this path, and closing it means reshaping `publish`
-            // to await synchronously, which most callers don't want.
-            await Self.eventBreakpointCheckpoint(for: event)
+            // An ARO `Emit` is not such a caller. Since `Emit` stopped waiting
+            // for its handlers (GitLab #905) it takes this path rather than
+            // `publishAndTrack`, and it checkpoints at its own statement before
+            // handing the event over (`checkpointed: true`) — so the pause
+            // names the `Emit`'s line and stops the emitter there, as GitLab
+            // #557 requires. `publishAndTrack` (`Deliver`) and `publishAndWait`
+            // checkpoint at their top and await their handlers.
+            if !checkpointed {
+                await Self.eventBreakpointCheckpoint(for: event)
+            }
             await self.publishInternal(event)
             let drained = self.pendingFireAndForgetPublishes.decrement()
             if drained {

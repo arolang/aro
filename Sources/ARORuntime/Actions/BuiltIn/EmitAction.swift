@@ -159,8 +159,14 @@ public struct EmitAction: ActionImplementation {
         // visible counter before it spawns its Task, and `awaitPendingEvents`
         // waits on that counter as well as on `inFlightHandlers` — so a
         // program that emits and returns still drains before the process does.
+        //
+        // An event breakpoint pauses here, at the `Emit`, before the feature
+        // set moves on. Left to the hand-over Task it fired whenever that Task
+        // ran, and named whichever statement was current by then (GitLab
+        // #557). Without a debugger attached this is a nil check.
         if let eventBus = context.eventBus {
-            eventBus.publish(event)
+            await EventBus.eventBreakpointCheckpoint(for: event)
+            eventBus.publish(event, checkpointed: true)
         } else {
             context.emit(event)
         }

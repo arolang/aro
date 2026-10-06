@@ -139,7 +139,9 @@ struct EmitAndDeliverTests {
                 ?? source.startIndex)..<(source.range(of: "public struct DeliverAction")?.lowerBound
                 ?? source.endIndex)])
 
-        #expect(emitBody.contains("eventBus.publish(event)"),
+        // `checkpointed: true`: Emit runs the event-breakpoint checkpoint at its
+        // own statement first, then hands over (GitLab #557).
+        #expect(emitBody.contains("eventBus.publish(event, checkpointed: true)"),
                 "Emit must hand the event over and continue (ARO-0088 §7, #905)")
         #expect(!emitBody.contains("publishAndTrack"),
                 "Emit awaits its handlers again — that is what #905 reversed")
