@@ -113,6 +113,20 @@ class TestStallWatchdog(StageRunnerCase):
         self.assertEqual(result['status'], 'timeout')
         self.assertIn('600s hard cap', result['error'])
 
+    def test_stall_timeout_zero_never_kills(self):
+        """How a stage opts out of the watchdog entirely.
+
+        NB11 does: it generates with a 30B model and prints between repair
+        attempts, not during one, so a slow generation is indistinguishable
+        from a wedge. It was killed at 35h of a ~37h run, before its save step.
+        """
+        # Silent for a simulated 10 days (14_400 polls of 60s), then exits 0.
+        proc = FakeProc(alive_polls=14_400, returncode=0)
+        result = self._run(proc, stall_timeout=0)
+        self.assertEqual(result['status'], 'done')
+        self.assertFalse(proc.terminated)
+        self.assertGreater(result['duration'], 9 * 24 * 3600)
+
     def test_no_cap_by_default(self):
         """A stage that is still writing is still working."""
         import inspect

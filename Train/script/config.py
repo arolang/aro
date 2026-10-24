@@ -583,6 +583,31 @@ def local_model_path(model_id):
             return str(c)                        # cached snapshot dir
     return str(model_id)                         # not cached — let the caller fetch
 
+
+def complete_local_snapshot(model_id):
+    """The cached snapshot directory if every weight shard is on disk, else None.
+
+    `mlx_lm.load(<repo-id>)` asks the Hub about the snapshot on every load, even
+    when it is fully cached, and a download that stalls there sits silent inside
+    a stage until the stall watchdog kills it (NB14, after the HF cache was
+    wiped). Loading from the directory skips the Hub entirely; a partial snapshot
+    returns None so the caller still fetches the rest.
+    """
+    path = Path(local_model_path(model_id))
+    if not (path / 'config.json').exists():
+        return None
+    index = path / 'model.safetensors.index.json'
+    if index.exists():
+        try:
+            shards = set(json.loads(index.read_text())['weight_map'].values())
+        except (OSError, ValueError, KeyError):
+            return None
+    else:
+        shards = {p.name for p in path.glob('*.safetensors')}
+    if not shards or not all((path / s).is_file() for s in shards):
+        return None
+    return str(path)
+
 # ── Remote URLs ───────────────────────────────────────────────────────────────
 
 GITLAB_WIKI  = 'git@git.ausdertechnik.de:arolang/aro.wiki.git'
@@ -601,6 +626,85 @@ def ensure_mlx_lm():
         from mlx_lm import load, generate as mlx_generate
         from mlx_lm.sample_utils import make_sampler
         return load, mlx_generate, make_sampler
+
+
+# ── Generation heartbeat ─────────────────────────────────────────────────────
+#
+# The pipeline kills a stage that writes nothing for STALL_TIMEOUT. The data
+# notebooks (06-14, 21, ...) spend hours in loops of one LLM call per item and
+# print every N items, so a slow stretch of items looks exactly like a hang
+# and a working stage is killed (NB13, then NB14 after 58 min).
+#
+# Every notebook reaches the model through mlx_lm's `generate`, which looks up
+# `stream_generate` in its module on each call, so wrapping it here covers all
+# of them. The line is printed only while tokens are arriving: a generation
+# that really stalls still goes silent and the watchdog still fires.
+
+GENERATION_HEARTBEAT_SECONDS = int(os.environ.get('ARO_TRAIN_HEARTBEAT_SECONDS', '120'))
+
+
+def _install_generation_heartbeat():
+    if GENERATION_HEARTBEAT_SECONDS <= 0:
+        return
+    try:
+        import importlib
+        import time as _time
+        gen_mod = importlib.import_module('mlx_lm.generate')
+    except ImportError:
+        return
+    original = gen_mod.stream_generate
+    if getattr(original, '_aro_heartbeat', False):
+        return   # importlib.reload(config) in every notebook — install once
+    state = {'last': _time.monotonic(), 'calls': 0, 'tokens': 0}
+
+    def stream_generate(*args, **kwargs):
+        state['calls'] += 1
+        for response in original(*args, **kwargs):
+            state['tokens'] += 1
+            now = _time.monotonic()
+            if now - state['last'] >= GENERATION_HEARTBEAT_SECONDS:
+                print(f'    [llm] generating — {state["calls"]} calls, '
+                      f'{state["tokens"]} tokens since last report', flush=True)
+                state.update(last=now, calls=0, tokens=0)
+            yield response
+
+    stream_generate._aro_heartbeat = True
+    gen_mod.stream_generate = stream_generate
+
+
+_install_generation_heartbeat()
+
+
+# ── Releasing the in-kernel model before a training subprocess ───────────────
+#
+# `del model` drops the name, not the memory: MLX keeps freed buffers in its
+# own cache pool, so a kernel that generated with the 60 GB model still holds
+# it when it shells out to `mlx_lm lora`. The subprocess then loads a second
+# copy plus gradients and optimizer state, and Metal runs out of memory a few
+# dozen iterations in (NB21 round 0, after 15 hours of generation).
+
+def release_mlx_memory(label=''):
+    """Collect garbage and empty MLX's buffer cache. Returns GB still active.
+
+    Call after deleting every reference to a loaded model and before starting
+    a process that loads one. Anything still active afterwards is a reference
+    somebody kept, and it is printed so it shows up in the stage log.
+    """
+    import gc
+    gc.collect()
+    try:
+        import mlx.core as mx
+    except ImportError:
+        return 0.0
+    mx.clear_cache()
+    active_gb = mx.get_active_memory() / 1e9
+    print(f'  [mlx] released memory{" before " + label if label else ""}: '
+          f'{active_gb:.1f} GB still active', flush=True)
+    if active_gb > 10:
+        print(f'  [mlx] WARNING: {active_gb:.1f} GB is still referenced — a model '
+              f'object is being kept alive, and the next load may run out of '
+              f'GPU memory.', flush=True)
+    return active_gb
 
 
 # ── Knowledge base loader ─────────────────────────────────────────────────────
@@ -1188,20 +1292,21 @@ def load_model(with_adapter=True, kb=None):
     Returns (model, tokenizer, load_fn, generate_fn, make_sampler_fn).
     """
     load_fn, generate_fn, make_sampler_fn = ensure_mlx_lm()
+    source = complete_local_snapshot(MODEL_ID) or MODEL_ID
 
     # Fine-tuned model has knowledge baked in — no adapter needed or useful.
     if _MODEL_IS_FINETUNED:
         print(f'Loading fine-tuned model {MODEL_ID} (no adapter)...')
-        model, tokenizer = load_fn(MODEL_ID)
+        model, tokenizer = load_fn(source)
     else:
         adapter = resolve_warm_adapter(kb) if with_adapter else None
         if adapter:
             print(f'Loading {MODEL_ID} with warm-start adapter...')
-            model, tokenizer = load_fn(MODEL_ID, adapter_path=adapter)
+            model, tokenizer = load_fn(source, adapter_path=adapter)
             print(f'  Adapter: {adapter}')
         else:
             print(f'Loading {MODEL_ID} (base weights)...')
-            model, tokenizer = load_fn(MODEL_ID)
+            model, tokenizer = load_fn(source)
 
     print('Model ready.')
     return model, tokenizer, load_fn, generate_fn, make_sampler_fn
