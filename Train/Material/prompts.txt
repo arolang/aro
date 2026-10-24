@@ -226,3 +226,11 @@ How to use a store file for read-only seed data?
 How to publish a variable so other feature sets can read it?
 How to send a typed body to an HTTP POST endpoint?
 How can I build a timer that fires every minute?
+todo list API with create, list, complete, and delete
+customer orders API with status state machine
+inventory tracking API with low-stock email alerts
+API key management with rate limits
+UUID generator that creates batch UUIDs and writes them to a file
+JSON config merger that reads multiple config files and deep-merges them
+password generator that accepts length and charset options and outputs random strings
+file classifier that watches an inbox folder and moves files to subfolders by extension

@@ -11,6 +11,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import unittest.mock
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -204,6 +205,59 @@ class TestTimeoutPropagates(unittest.TestCase):
                 sandbox.sandboxed_run([sys.executable, '-c',
                                        'import time; time.sleep(5)'],
                                       Path(tmp), timeout=0.5)
+
+
+class TestOracleResolution(unittest.TestCase):
+    """Bare `aro` means the toolchain, however the host names it.
+
+    The aro-ci image knows the binary only through ARO_BIN; resolution at
+    the one spawn point is GitLab #900's sequel — see sandbox.resolve_oracle.
+    """
+
+    def test_a_bare_aro_resolves_to_the_oracle_binary(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            fake = Path(tmp) / 'aro'
+            fake.write_text('#!/bin/sh\nprintenv ARO_FAKE_MARKER\n')
+            fake.chmod(0o755)
+            argv_seen = {}
+
+            def fake_runner(argv, **kw):
+                argv_seen['argv'] = argv
+                return subprocess.run(argv, **kw)
+
+            with unittest.mock.patch.dict(
+                    os.environ, {'ARO_BIN': str(fake)}):
+                proc = sandbox.sandboxed_run(
+                    ['aro', 'run', 'X'], Path(tmp), _runner=fake_runner,
+                    env_extra={'ARO_FAKE_MARKER': 'resolved'}, timeout=30)
+        self.assertEqual(argv_seen['argv'][0], str(fake))
+        self.assertEqual(proc.stdout.strip(), 'resolved')
+
+    def test_an_explicit_path_keeps_its_own_word(self):
+        argv_seen = {}
+
+        def fake_runner(argv, **kw):
+            argv_seen['argv'] = argv
+            return 'result'
+
+        sandbox.sandboxed_run(['/opt/toolchains/aro', 'check', '.'],
+                              Path(tempfile.mkdtemp()), _runner=fake_runner)
+        self.assertEqual(argv_seen['argv'][0], '/opt/toolchains/aro')
+
+    def test_the_bare_name_survives_when_nothing_resolves_it(self):
+        import aro_oracle
+        argv_seen = {}
+
+        def fake_runner(argv, **kw):
+            argv_seen['argv'] = argv
+            return 'result'
+
+        with unittest.mock.patch.object(aro_oracle, 'aro_bin',
+                                        return_value=None):
+            sandbox.sandboxed_run(['aro', 'check', '.'],
+                                  Path(tempfile.mkdtemp()),
+                                  _runner=fake_runner)
+        self.assertEqual(argv_seen['argv'][0], 'aro')
 
 
 if __name__ == '__main__':

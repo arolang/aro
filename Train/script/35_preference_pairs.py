@@ -113,18 +113,11 @@ def build_pairs(source: Path, limit=0, seed=0, ratio_limit=LENGTH_RATIO_LIMIT):
             if broken.strip() == code:
                 continue
             stats['mutations_tried'] += 1
-            if oracle == 'catalog':
-                unknown = rc.hallucinated_verbs(broken, verbs)
-                if not unknown:
-                    stats['not_broken'] += 1
-                    continue
-                reason = f'`{unknown[0]}` is not a registered action verb'
-            else:
-                broken_ok, broken_error = aro_oracle.check_block(broken)
-                if broken_ok is not False:
-                    stats['not_broken'] += 1
-                    continue
-                reason = thinking.first_diagnostic(broken_error)
+            outcome = thinking.handle_oracle_outcome(
+                category, oracle, broken, explanation, stats, verbs=verbs)
+            if outcome is None:
+                continue
+            reason = outcome[1]
             chosen = f'```aro\n{code}\n```'
             rejected = f'```aro\n{broken.strip()}\n```'
             ratio = max(len(chosen), len(rejected)) / max(

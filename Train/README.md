@@ -598,9 +598,10 @@ Comparing two runs is then a diff of two directories under `Train/runs/`.
 
 Open `script/00_META_PIPELINE.ipynb` and run all cells. The meta notebook:
 
-- executes notebooks 01 → 23 in order (09 and 12 are skipped by default via
-  `ARO_TRAIN_SKIP`), each in its own kernel (so state never leaks between
-  stages);
+- executes notebooks 01 → 27 in order (no notebook is skipped by default;
+  stages 18 and 19 — teacher training — are skipped while the teacher is
+  inference-only, which is the default: `ARO_TRAIN_TRAIN_TEACHER=1` trains
+  the teacher), each in its own kernel (so state never leaks between stages);
 - writes executed copies to `script/run/outputs/<name>.ipynb`;
 - writes per-stage logs to `script/run/outputs/<name>.log`;
 - renders a live status table with elapsed time and the last error line on
@@ -667,10 +668,13 @@ so every notebook logs the resolved base.
 | `ARO_APPLICATION_PATH` | Path to the ARO-Application corpus. Falls back to `../ARO-Application` next to the checkout. `corpus_preflight()` (run by `01_corpus_collection`) fails loudly when a corpus root is missing. |
 | `ARO_APPLICATION_OPTIONAL` | Set to `1` to knowingly continue without ARO-Application (incomplete corpus). |
 | `ARO_TRAIN_SESSION` | Pin a single provenance session ID across all notebooks of one pipeline run. Defaults to a fresh ID per notebook execution. |
-| `ARO_TRAIN_SKIP` | Comma-separated notebook numbers the meta pipeline skips (default `09,12`). |
+| `ARO_TRAIN_SKIP` | Comma-separated notebook numbers the meta pipeline skips. Nothing is skipped by default except stages 18/19 while the teacher is inference-only. |
+| `ARO_TRAIN_TRAIN_TEACHER` | `1` trains the teacher after all (NB18/NB19): the inference-only default releases those two default skips and the stage guards pass. |
 | `ARO_TRAIN_FRESH` | `1` allows `01_init` to wipe stage directories that still hold output. Without it the wipe refuses and names what it would destroy. |
 | `ARO_TRAIN_RELEASE` | Release label used for `Train/runs/<release>/`. Defaults to `PIPELINE_VERSION`. |
+| `ARO_TRAIN_STUDENT_MODEL_ID` | Student base for NB22 distillation (default `mlx-community/Qwen3-8B-bf16`). The documented OOM fallback and A/B trial runs resolve from the environment instead of editing config.py. |
 | `ARO_TRAIN_SKIP_MLX_PREFLIGHT` | `1` starts a run even when `mlx_preflight.py` says this mlx build cannot train a MoE model. |
+| `ARO_TRAIN_SCOPE` | `language` drops rows that teach how ARO is implemented (Construction-Studies/Short-Studies provenance, plus internals narration matched by `scope_policy`) from NB17's assembled dataset; default `all` moves nothing. `Train/eval/benchmark/scope.internals.json` probes the model is on the right side of the line. |
 
 ### Running generated programs
 

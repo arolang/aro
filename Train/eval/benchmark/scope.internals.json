@@ -1,0 +1,240 @@
+{
+ "_doc": "The internals-scope panel: does the trained model answer at the user's level, or does it lecture about how ARO is implemented? Format and grading match the frozen explain stratum, but this file is deliberately outside prompts.benchmark.json's frozen digest — the release ruler is version-bumped, not appended to, while this diagnostic may grow between versions. It lives under the benchmark directory's .never-mine marker; train on it and the leakage gate (test_scope_internals.py) fails. Score with held_out_benchmark.load_benchmark(path=...), exactly like the frozen file. Produced by Train/eval/benchmark/authoring/s_scope.py.",
+ "version": "1.0.0",
+ "frozen_at": "2026-10-24",
+ "never_mine": true,
+ "prompts": [
+  {
+   "id": "scope-001",
+   "stratum": "explain",
+   "domain": "language",
+   "prompt": "What kind of parser does ARO use? Explain its machinery.",
+   "grade_by": "doc_qa",
+   "must_include": [
+    "aro check",
+    "aro run"
+   ],
+   "must_not_include": [
+    "pratt",
+    "recursive descent",
+    "dispatch table",
+    "hybrid parser",
+    "ast and"
+   ],
+   "reference": "That is a question about the implementation, and the implementation is not the language: how the checker parses is its own business, and nothing a `.aro` file can write depends on it. What a programmer needs are the contracts — `aro check` tells you a program is syntactically acceptable, `aro run` tells you it computes what you asked. The parser's design decisions live with the maintainers' book, not with the syntax a program may use."
+  },
+  {
+   "id": "scope-002",
+   "stratum": "explain",
+   "domain": "check",
+   "prompt": "Walk me through how `aro check` reaches its verdict.",
+   "grade_by": "doc_qa",
+   "must_include": [
+    "warnings",
+    "nonzero"
+   ],
+   "must_not_include": [
+    "pratt",
+    "recursive descent",
+    "dispatch table",
+    "the parser builds"
+   ],
+   "reference": "From the outside the checker is: read every `.aro` file in the application, report errors for what the language does not accept — an unknown Compute qualifier, a verb/preposition combination that does not exist — and warnings for what it accepts anyway, such as a Throw with a preposition the action does not take. Errors end with a nonzero exit code; warnings end with exit 0. That asymmetry is the trap to internalise: a green exit code is not a promise that every statement will run."
+  },
+  {
+   "id": "scope-003",
+   "stratum": "explain",
+   "domain": "run",
+   "prompt": "Why does a failed statement print its values?",
+   "grade_by": "doc_qa",
+   "must_include": [
+    "failed",
+    "values"
+   ],
+   "must_not_include": [
+    "feature-set executor",
+    "execution context",
+    "ast"
+   ],
+   "reference": "So the failure can be read against your data. The runtime reports the statement that failed together with the values it held, which is how you find the misbehaving input rather than a bare stack of verbs. Nothing after a failed statement runs — ARO has no catch, and the failure is the feature set's outcome."
+  },
+  {
+   "id": "scope-004",
+   "stratum": "explain",
+   "domain": "run",
+   "prompt": "When does a deferred statement finally run?",
+   "grade_by": "doc_qa",
+   "must_include": [
+    "deferred",
+    "ARO_NO_DEFER"
+   ],
+   "must_not_include": [
+    "feature-set executor",
+    "execution context",
+    "event bus design"
+   ],
+   "reference": "When the values it waits on exist. Statements whose inputs are not yet computed are deferred and are executed once those values arrive, so output can interleave; `ARO_NO_DEFER=1` turns that off when a run needs strict sequence, which is how ordering-sensitive expectations are kept deterministic. The deferral is observable behavior documented for the programmer, not a scheduling secret."
+  },
+  {
+   "id": "scope-005",
+   "stratum": "explain",
+   "domain": "build",
+   "prompt": "What does `aro build` produce, and what goes out the door?",
+   "grade_by": "doc_qa",
+   "must_include": [
+    "binary",
+    "embedded"
+   ],
+   "must_not_include": [
+    "irbuilder",
+    "swift-llvm",
+    "codegen pipeline",
+    "node hierarchy"
+   ],
+   "reference": "One standalone native binary. The OpenAPI contract, templates and plugins are embedded in it, so deployment ships the binary alone and runs anywhere the target platform does. Everything about how machine code came out of the toolchain is invisible to the operator: what matters is that `aro build` is the one supported way to get there and that compiled and interpreted execution agree."
+  },
+  {
+   "id": "scope-006",
+   "stratum": "explain",
+   "domain": "build",
+   "prompt": "In a compiled application, what actually invokes my feature sets?",
+   "grade_by": "doc_qa",
+   "must_include": [
+    "event",
+    "handler"
+   ],
+   "must_not_include": [
+    "@_cdecl bridge",
+    "entry point symbol",
+    "llv",
+    "two http servers"
+   ],
+   "reference": "The event loop. A feature set whose name matches a handler name is registered as a handler for that event, and Application-Start is simply the handler of the startup event. None of that changes between interpreted and compiled execution — the parity between the two modes is tested, and it is the contract a program is written against."
+  },
+  {
+   "id": "scope-007",
+   "stratum": "explain",
+   "domain": "language",
+   "prompt": "Is ARO written in Swift? Does that matter to me?",
+   "grade_by": "doc_qa",
+   "must_include": [
+    "swift",
+    "plugin"
+   ],
+   "must_not_include": [
+    "ast",
+    "pratt",
+    "actor model",
+    "reentranc"
+   ],
+   "reference": "The runtime and compiler are Swift, and that leaks into your work in exactly one supported way: custom actions and plugins are Swift code you supply against the documented plugin surface. Beyond that, the implementation language is not a language feature — a `.aro` file cannot observe it, so no answer, however deep, should end in it."
+  },
+  {
+   "id": "scope-008",
+   "stratum": "explain",
+   "domain": "language",
+   "prompt": "Where is the authoritative definition of the statement grammar?",
+   "grade_by": "doc_qa",
+   "must_include": [
+    "grammar",
+    "language guide"
+   ],
+   "must_not_include": [
+    "parser.swift",
+    "lexer.swift",
+    "semanticanalyzer",
+    "token stream"
+   ],
+   "reference": "The formal grammar appendix and the Language Guide define what a statement may look like, and `aro check` stands behind them: its messages are the specification made executable. Learning the syntax from the checker's own code is backwards — the rules are published so the code never has to be read, and where the two ever disagree, that is a bug to report rather than behavior to imitate."
+  },
+  {
+   "id": "scope-009",
+   "stratum": "explain",
+   "domain": "debug",
+   "prompt": "Do I need to understand the interpreter's structure to debug?",
+   "grade_by": "doc_qa",
+   "must_include": [
+    "aro debug",
+    "breakpoint"
+   ],
+   "must_not_include": [
+    "feature-set executor",
+    "execution context",
+    "interpreter walk",
+    "ast"
+   ],
+   "reference": "No. `aro debug` presents your program, not the interpreter: feature-set names in the stack, statement stepping, breakpoints on your events, watches on your values. What you steer is source and its observable output; the machinery underneath is the debugger's own concern, which is why the recommendation is short: debug from source, ship the compile."
+  },
+  {
+   "id": "scope-010",
+   "stratum": "explain",
+   "domain": "language",
+   "prompt": "Which parts of the runtime count as part of the language?",
+   "grade_by": "doc_qa",
+   "must_include": [
+    "prepositions",
+    "qualifiers"
+   ],
+   "must_not_include": [
+    "actionregistry",
+    "feature-set executor",
+    "execution context",
+    "@_cdecl bridge"
+   ],
+   "reference": "Everything a `.aro` file can name: the actions and their prepositions, the qualifiers, the control flow, the event model, and the built-in system objects. The runtime's internals — executors, registries, the compiler bridge — are not part of the language and cannot be reached from source; a program that feels like it needs one is describing a gap the language should close at its own level."
+  },
+  {
+   "id": "scope-011",
+   "stratum": "explain",
+   "domain": "plugins",
+   "prompt": "What does the runtime do with my plugins at call time?",
+   "grade_by": "doc_qa",
+   "must_include": [
+    "manifest",
+    "json"
+   ],
+   "must_not_include": [
+    "actionregistry",
+    "descriptor invocation",
+    "fastest path",
+    "handler registration table"
+   ],
+   "reference": "The documented handshake: manifest declares it, the runtime launches the declared host command, hands your plugin JSON over stdin and reads a JSON reply, then binds the named result fields into your flow as values. Every step of that is observable and covered by the plugin guide — the manifest format, the host file, the call site — and it is the only contract a plugin needs to satisfy."
+  },
+  {
+   "id": "scope-012",
+   "stratum": "explain",
+   "domain": "debug",
+   "prompt": "Why do backtraces name my feature sets in a compiled binary?",
+   "grade_by": "doc_qa",
+   "must_include": [
+    "debug info",
+    "source"
+   ],
+   "must_not_include": [
+    "irbuilder",
+    "codegen dance",
+    "swift calling convention"
+   ],
+   "reference": "Because `aro build` deliberately carries debug info that names each feature set and each statement's source position: a crash backtrace points at your `.aro` file instead of an address. That visibility is the supported part of the story; what stays invisible — the binary's own runtime code — is precisely what the debugger never needs you to read."
+  },
+  {
+   "id": "scope-013",
+   "stratum": "explain",
+   "domain": "build",
+   "prompt": "Is the compiler built from scratch or on existing tools?",
+   "grade_by": "doc_qa",
+   "must_include": [
+    "llvm",
+    "runtime library"
+   ],
+   "must_not_include": [
+    "swift-llvm",
+    "irbuilder",
+    "llvmc",
+    "calling convention"
+   ],
+   "reference": "It compiles through the LLVM toolchain, which users meet directly: the install instructions name the LLVM version needed for `aro build`, verbose builds report IR steps by name, and the binary links the prebuilt runtime library. Those are documented touchpoints. Below them — how that toolchain is driven, in which builder classes — is implementation the language does not expose."
+  }
+ ]
+}

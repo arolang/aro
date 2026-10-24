@@ -10,6 +10,8 @@ here is pure python. Known-bad snippets are taken verbatim from
 Train/FIXTRAIN.md (the training-data issue catalogue).
 """
 
+import importlib
+import os
 import sys
 from pathlib import Path
 
@@ -437,6 +439,92 @@ def test_auto_wrap_aro():
     assert auto_wrap_aro('(Name: Activity) with <statements>') == (None, False)
     # The wrapped snippet is a complete program (pass as a raw block)
     assert is_complete_program([wrapped])
+
+
+# ── the student model resolves from the run's environment ────────────────────
+# The id is bound at import; the notebooks re-execute the import (the
+# documented `import config; importlib.reload(config)` idiom), which is
+# exactly what these tests exercise. The context manager leaves the module
+# loaded from the committed default, as the rest of the suite found it.
+
+from contextlib import contextmanager as _ctx  # noqa: E402
+
+
+@_ctx
+def _student_env(value):
+    _prev = os.environ.get('ARO_TRAIN_STUDENT_MODEL_ID')
+    if value is None:
+        os.environ.pop('ARO_TRAIN_STUDENT_MODEL_ID', None)
+    else:
+        os.environ['ARO_TRAIN_STUDENT_MODEL_ID'] = value
+    try:
+        importlib.reload(config)
+        yield config.STUDENT_MODEL_ID, config.STUDENT_MODEL_OVERRIDDEN
+    finally:
+        if _prev is None:
+            os.environ.pop('ARO_TRAIN_STUDENT_MODEL_ID', None)
+        else:
+            os.environ['ARO_TRAIN_STUDENT_MODEL_ID'] = _prev
+        importlib.reload(config)
+
+
+def test_student_model_uses_the_committed_default():
+    with _student_env(None) as (sid, overridden):
+        assert sid == 'mlx-community/Qwen3-8B-bf16'
+        assert overridden is False
+
+
+def test_student_model_follows_the_run_env():
+    with _student_env('mlx-community/Qwen3-8B-8bit') as (sid, overridden):
+        assert sid == 'mlx-community/Qwen3-8B-8bit'
+        assert overridden is True
+
+
+def test_a_blank_override_is_not_a_model_id():
+    # A whitespace-only value is "not set", not an empty model id.
+    with _student_env('   ') as (sid, overridden):
+        assert sid == 'mlx-community/Qwen3-8B-bf16'
+        assert overridden is False
+
+
+# ── the teacher is inference-only unless a run opts into training it ─────────
+
+@_ctx
+def _train_teacher_env(value):
+    _prev = os.environ.get('ARO_TRAIN_TRAIN_TEACHER')
+    if value is None:
+        os.environ.pop('ARO_TRAIN_TRAIN_TEACHER', None)
+    else:
+        os.environ['ARO_TRAIN_TRAIN_TEACHER'] = value
+    try:
+        importlib.reload(config)
+        yield config.TEACHER_IS_INFERENCE_ONLY
+    finally:
+        if _prev is None:
+            os.environ.pop('ARO_TRAIN_TRAIN_TEACHER', None)
+        else:
+            os.environ['ARO_TRAIN_TRAIN_TEACHER'] = _prev
+        importlib.reload(config)
+
+
+def test_the_teacher_defaults_to_inference_only():
+    with _train_teacher_env(None) as flag:
+        assert flag is True
+
+
+def test_training_the_teacher_is_an_explicit_opt_in():
+    with _train_teacher_env('1') as flag:
+        assert flag is False
+    with _train_teacher_env('yes') as flag:
+        assert flag is False
+
+
+def test_values_that_are_not_the_opt_in_leave_it_inference_only():
+    # The env releases the default skips in NB00 and the stage guards in
+    # 18/19 — a typo'd value must not do that by accident.
+    for value in ('0', 'no', 'sometimes', ''):
+        with _train_teacher_env(value) as flag:
+            assert flag is True, value
 
 
 # Allow running without pytest: `python3 test_config_helpers.py`
