@@ -21,7 +21,7 @@ until someone noticed, which on a multi-day run could be the next morning.
 A wall clock is the wrong instrument. What separates a healthy 6-hour fine-tune
 from a wedged one is not elapsed time, it is whether anything is still being
 written. `run_notebook()` therefore watches the stage's log: the stage is killed
-when the log stops growing for `stall_timeout` seconds (default 30 minutes),
+when the log stops growing for `stall_timeout` seconds (default 2 hours),
 however long it has been running. A hard `max_runtime` remains available per
 stage for the few where one makes sense, and defaults to off.
 
@@ -43,7 +43,7 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
-DEFAULT_STALL_TIMEOUT = 30 * 60       # seconds of silence before a stage is wedged
+DEFAULT_STALL_TIMEOUT = 2 * 60 * 60   # seconds of silence before a stage is wedged
 POLL_INTERVAL = 5.0                   # how often the watchdog looks at the log
 NB_EXEC = Path(__file__).with_name('nb_exec.py')   # the streaming notebook runner
 _ANSI = re.compile(r'\x1b\[[0-9;]*m')     # kernel tracebacks arrive coloured

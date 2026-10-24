@@ -164,10 +164,15 @@ def test_a_mutation_the_oracle_does_not_object_to_is_dropped(tmp_path):
     rows, stats = gen.build_traces(corpus, system_prompt='SYS')
     # Nothing in a single Log statement can be broken by these mutations
     # except the period, which is a real break — so either a trace or none,
-    # never a trace the oracle did not confirm.
+    # never a trace the oracle did not confirm. The confirming voice is
+    # either the checker's error, the action catalog, or — for the style
+    # class — the registry's canonical-verb claim, which checks green both
+    # ways (`both check green` is the think block's way of saying that).
     for row in rows:
-        assert '`aro check` rejects it' in row['messages'][-1]['content'] or \
-               'the action catalog rejects it' in row['messages'][-1]['content']
+        content = row['messages'][-1]['content']
+        assert ('`aro check` rejects it' in content or
+                'the action catalog rejects it' in content or
+                'both check green' in content)
     assert stats['not_broken'] >= 0
 
 

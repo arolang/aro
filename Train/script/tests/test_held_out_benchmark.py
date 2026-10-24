@@ -26,6 +26,8 @@ toolchain) runs it. The one test that needs a real `aro` carries the usual
 import hashlib
 import json
 import random
+import re
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -548,6 +550,109 @@ class TestAgainstTheBinary(unittest.TestCase):
                   '    Then the <a> with 1.\n}\n```')
         row = oracle.judge(task, answer)
         self.assertIs(row['test'], False, row.get('reason'))
+
+
+class TestScopeInternalsPanel(unittest.TestCase):
+    """`scope.internals.json` — the scope diagnostic beside the frozen ruler.
+
+    Deliberately OUTSIDE the frozen digest: the release ruler is
+    version-bumped, not appended to, while this panel may grow between
+    versions. It keeps every other discipline the frozen set has: same row
+    format (scored with load_benchmark(path=...)), the rubric self-pass
+    through the real scoring path, the never-mine marker it sits under, and
+    the same leakage gate against the corpus.
+    """
+
+    SCOPE_FILE = hob.BENCHMARK_DIR / 'scope.internals.json'
+
+    @classmethod
+    def setUpClass(cls):
+        cls.bench = hob.load_benchmark(cls.SCOPE_FILE)
+        cls.prompts = cls.bench['prompts']
+
+    def test_the_panel_exists_and_is_shaped_like_the_explain_stratum(self):
+        self.assertTrue(self.SCOPE_FILE.exists())
+        self.assertGreaterEqual(len(self.prompts), 10)
+        for p in self.prompts:
+            for field in ('id', 'prompt', 'grade_by', 'must_include',
+                          'must_not_include', 'reference'):
+                self.assertTrue(p.get(field), f'{p.get("id")}: missing {field}')
+            self.assertEqual(p['grade_by'], 'doc_qa', p['id'])
+            self.assertEqual(p['stratum'], 'explain', p['id'])
+        self.assertTrue(self.bench.get('never_mine'), 'the panel must say so')
+
+    def test_ids_and_prompts_are_unique(self):
+        ids = [p['id'] for p in self.prompts]
+        self.assertEqual(len(ids), len(set(ids)))
+        normed = [' '.join(p['prompt'].lower().split()) for p in self.prompts]
+        self.assertEqual(len(normed), len(set(normed)))
+
+    def test_the_traps_are_implementer_machinery_not_user_vocabulary(self):
+        # LLVM IR, DWARF, the symbol table and @_cdecl are sanctioned user
+        # vocabulary (the Language Guide, Plugin Guide and Debugging Guide
+        # teach them) — a trap on those words would punish a correctly
+        # user-scoped answer. Each trap must therefore be more than one of
+        # those words: 'swift-llvm' is the implementer's compound and legal,
+        # a bare 'llvm' is not.
+        sanctioned = {'llvm', 'dwarf', 'symbol table', 'lexer', 'sendable'}
+        for p in self.prompts:
+            for phrase in p['must_not_include']:
+                lower = phrase.lower()
+                self.assertNotIn(lower, sanctioned,
+                                 f'{p["id"]}: trap {phrase!r} is user '
+                                 'vocabulary')
+                toks = re.findall(r'[a-z@_]+', lower)
+                self.assertTrue(any(t not in sanctioned for t in toks),
+                                f'{p["id"]}: trap {phrase!r} says only '
+                                'sanctioned words')
+
+    def test_every_reference_passes_its_own_rubric(self):
+        for p in self.prompts:
+            text = p['reference'].lower()
+            for phrase in p['must_include']:
+                self.assertIn(phrase.lower(), text,
+                              f'{p["id"]}: must_include {phrase!r} absent')
+            for phrase in p['must_not_include']:
+                self.assertNotIn(phrase.lower(), text,
+                                 f'{p["id"]}: trap {phrase!r} self-hit')
+
+    def test_scored_by_the_same_machinery_references_score_one(self):
+        scored_sum, rows = hob.score(
+            self.prompts, hob.reference_generations(self.prompts))
+        self.assertIsInstance(scored_sum, dict)
+        rubric = scored_sum['overall']['rubric']
+        self.assertEqual(rubric['n'], len(self.prompts))
+        self.assertEqual(rubric['rate'], 1.0)
+        self.assertEqual(len(rows), len(self.prompts))
+
+    def test_the_panel_stays_out_of_the_frozen_digest(self):
+        # A row that migrated into prompts.benchmark.json would have needed a
+        # version bump; the two sets being disjoint is also what keeps the
+        # panel's numbers from being quoted as the ruler's.
+        frozen_ids = {p['id'] for p in PROMPTS}
+        for p in self.prompts:
+            self.assertNotIn(p['id'], frozen_ids, p['id'])
+
+    def test_a_scope_prompt_is_not_mineable(self):
+        report = leakage.benchmark_leakage(self.prompts)
+        self.assertEqual(report['violations'], [], report['violations'])
+
+    @needs_binary
+    def test_the_warning_fact_behind_the_check_rows(self):
+        # scope-002's claim, against the real binary: a Throw with a
+        # preposition the action does not take is a WARNING and exit 0 —
+        # "a green exit code is not a promise that every statement will run".
+        with tempfile.TemporaryDirectory() as tmp:
+            d = Path(tmp)
+            (d / 'main.aro').write_text(
+                '(Application-Start: Probe) {\n'
+                '    Throw a <BadRequest: status> with "age".\n'
+                '}\n')
+            r = subprocess.run(
+                [aro_oracle.aro_bin(), 'check', str(d)],
+                capture_output=True, text=True, timeout=30)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn('warning', (r.stdout + r.stderr).lower())
 
 
 if __name__ == '__main__':

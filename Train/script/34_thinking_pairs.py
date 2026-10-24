@@ -117,10 +117,124 @@ def _mutate_entry_point(code):
         'no entry point')
 
 
+# ── warning-class and style-class mutations ──────────────────────────────────
+# Six mutations above produce programs `aro check` *rejects*. The checker
+# also reports a second, quieter class: a preposition the action does not
+# accept leaves exit 0 with a warning, and the program still fails at run
+# time ("Invalid preposition"). The corpus trains only on programs the
+# oracle took issue with, so those were invisible. One mutation reaches the
+# registry directly: an alias is not wrong, but the registry keys the action
+# by one canonical verb, and that is the verb the action reference uses.
+
+from functools import lru_cache
+
+
+@lru_cache(maxsize=1)
+def _statement_catalog():
+    """(canonical→other aliases, verb→{prepositions}). From the committed
+    catalogs; lru-cached so a 300-program run reads the JSON once."""
+    try:
+        _verbs, vp, _known = rc.load_catalogs()
+    except Exception:
+        return {}, {}
+    others = {}
+    try:
+        import extract_action_catalog
+        catalog = extract_action_catalog.load()
+        for canon_key, meta in catalog.items():
+            alts = sorted(a for a in meta.get('aliases', [])
+                          if a.lower() != canon_key)
+            if alts:
+                others[canon_key.lower()] = alts
+    except Exception:
+        pass
+    return others, {k: set(v) for k, v in vp.items()}
+
+
+# Prepositions the parser treats as preposition WORDS but that are either
+# always-allowed (guards/queries) or keywords that move the failure to the
+# error class, where `_mutate_preposition` already lives.
+_WARNINGS_OFF = frozenset({'when', 'where', 'in'})
+
+
+def _mutate_unlisted_preposition(code):
+    """Swap one action's preposition for one it does not hold. The checker
+    exits 0 — the diagnostic is a warning, and the program dies at run
+    time with `Invalid preposition` — so the rejected side here is one the
+    old oracle (exit code alone) passed."""
+    _others, vp = _statement_catalog()
+    for m in re.finditer(
+            r'^(\s*)([A-Z][A-Za-z]+)\s+((?:the\s+|an?\s+)?'
+            r'(?:<[^>\n.]+>|"[^"\n.]+"))\s+([a-z]+)\b'
+            r'(?=\s+(?:the\s+|an?\s+)?<)', code, re.MULTILINE):
+        verb = m.group(2).lower()
+        current = m.group(4)
+        allowed = vp.get(verb)
+        if not allowed:
+            continue
+        # 'using' parses as an identifier ("Expected preposition, but got
+        # identifier(using)"), so it moves the failure into the error class;
+        # 'in'/'when'/'where' are keywords the checker treats differently.
+        candidates = [p for p in sorted(config.ARO_PREPOSITIONS)
+                      if p not in allowed and p != current
+                      and p not in _WARNINGS_OFF and p != 'using']
+        if not candidates:
+            continue
+        wrong = candidates[0]
+        start = m.start(4)
+        broken = code[:start] + wrong + code[m.end(4):]
+        return broken, (
+            f'the preposition. The registry gives `{m.group(2)}` '
+            f'{_list_of(allowed)} — and nothing else; `{wrong}` is only '
+            'tolerated as a warning, so the green exit code is not a green '
+            'program')
+    return None
+
+
+def _list_of(items):
+    items = sorted(items)
+    if len(items) == 1:
+        return f'`{items[0]}`'
+    return '`' + '`, `'.join(items[:-1]) + f'` and `{items[-1]}`'
+
+
+def _mutate_canonical_alias(code):
+    """Write a registered alias instead of the canonical verb. Both sides
+    check green — this is a style claim, and the registry is the one making
+    it: the action reference is keyed by the canonical verb."""
+    others, _vp = _statement_catalog()
+    if not others:
+        return None
+    for m in re.finditer(r'^(\s*)([A-Z][A-Za-z]+)\b\s', code, re.MULTILINE):
+        verb = m.group(2)
+        canonical = verb.lower()
+        alts = others.get(canonical)
+        if not alts:
+            continue
+        alias = alts[0]
+        broken = code[:m.start(2)] + alias.capitalize() + code[m.end(2):]
+        return broken, (
+            f'the verb. `{verb}` and `{alias}` are the same action in the '
+            f'registry, and the registry keys that action by `{canonical}` '
+            '— the alias works, but the canonical verb is the one the action '
+            'reference, the generated action list and the repair corpus all '
+            'use. Write the canonical verb')
+    return None
+
+
 # (category, mutate, oracle). Most mistakes the checker catches; an invented
 # verb it does not — `Process the <x> from <y>.` passes `aro check` with
 # nothing worse than a use-before-definition warning — so that one is graded
 # against the generated action catalog instead, and the trace says so.
+#
+# Two quieter classes sit beside the rejections now:
+#
+#   * 'check_warning' — the registry *warns*: a preposition the action does
+#     not accept leaves exit 0 and dies at run time. The chosen side is the
+#     program with the preposition the action actually grants.
+#   * 'style' — an alias is not wrong; the registry keys the action by one
+#     canonical verb and every piece of generated reference uses it. Both
+#     sides check green; the preference is the registry's, not the checker's.
 MUTATIONS = (
     ('wrong_preposition', _mutate_preposition, 'check'),
     ('missing_period', _mutate_missing_period, 'check'),
@@ -128,7 +242,70 @@ MUTATIONS = (
     ('invalid_verb', _mutate_invented_verb, 'catalog'),
     ('unknown_qualifier', _mutate_qualifier, 'check'),
     ('missing_application_start', _mutate_entry_point, 'check'),
+    ('unlisted_preposition', _mutate_unlisted_preposition, 'check_warning'),
+    ('noncanonical_alias', _mutate_canonical_alias, 'style'),
 )
+
+
+def registry_diagnostic(alias, canonical):
+    """What the think block quotes where the toolchain has nothing to say:
+    the registry's own keying, not an invented complaint."""
+    return (f"`{alias}` is an alias of the `{canonical}` action; the "
+            f"registry keys that action by `{canonical}`." + '\n'
+            'Run `aro actions` for the registry as the compiler keys it.')
+
+
+def handle_oracle_outcome(category, oracle, broken, explanation, stats,
+                          *, verbs=None):
+    """(diagnostic, reason) or None. The acceptance rule per oracle class:
+      check          — the rejected side must FAIL `aro check`;
+      catalog        — the rejected side must name a verb no action owns;
+      check_warning  — the rejected side must PASS `aro check` and carry the
+                       preposition warning that names the defect;
+      style          — the rejected side must pass `aro check` (it does; the
+                       preference is the registry's canonical verb)."""
+    if oracle == 'catalog':
+        unknown = rc.hallucinated_verbs(broken, verbs)
+        if not unknown:
+            stats['not_broken'] += 1
+            return None
+        diagnostic = (f"`{unknown[0]}` is not a registered action verb.\n"
+                      f"Run `aro actions` for the ones that are.")
+        reason = f'`{unknown[0]}` is not a registered action verb'
+        return diagnostic, reason
+    if oracle == 'check_warning':
+        ok, out = aro_oracle.check_block(broken)
+        if ok is not True or 'does not accept the preposition' not in (out or ''):
+            stats['not_broken'] += 1
+            return None
+        diagnostic = first_warning(out)
+        reason = diagnostic
+        return diagnostic, reason
+    if oracle == 'style':
+        ok, out = aro_oracle.check_block(broken)
+        if ok is not True:
+            stats['not_broken'] += 1
+            return None
+        # The dropped-in alias is the first statement verb — the same shape
+        # _mutate_canonical_alias matched, so skip non-statement lines the
+        # same way ('(Application-Start: Books) {' is not a statement).
+        m = re.search(r'^\s*([A-Z][A-Za-z]+)\b\s', broken, re.MULTILINE)
+        alias = m.group(1).lower() if m else ''
+        others, _vp = _statement_catalog()
+        canonical = next((k for k, alts in others.items()
+                          if alias in alts), None) or alias
+        if canonical == alias:
+            stats['not_broken'] += 1
+            return None
+        diagnostic = registry_diagnostic(alias, canonical)
+        reason = (f'`{alias}` is a registered alias — the registry keys this '
+                  f'action by `{canonical}`')
+        return diagnostic, reason
+    ok, error = aro_oracle.check_block(broken)
+    if ok is not False:
+        stats['not_broken'] += 1
+        return None
+    return first_diagnostic(error), first_diagnostic(error)
 
 
 def first_diagnostic(error: str) -> str:
@@ -144,9 +321,32 @@ def first_diagnostic(error: str) -> str:
     return '\n'.join(out) or (error or '').strip()[:200]
 
 
+def first_warning(output: str, needle: str = 'does not accept the preposition') -> str:
+    """The first warning line naming the complaint, plus its hint.
+
+    `aro check` is happy to exit 0 while reporting an action it does not
+    accept ("warning: Action 'Log' does not accept the preposition 'into'") —
+    the exit code is not the diagnostic, the warning line is."""
+    for line in (output or '').splitlines():
+        stripped = line.strip()
+        if needle in stripped and 'warning:' in stripped:
+            return stripped
+    return first_diagnostic(output)
+
+
+REGISTRY_NOTE = ('Run `aro actions` for the registry as the compiler sees '
+                 'it; the canonical verb is the key each action answers to.')
+
+
 def think_block(instruction, broken, diagnostic, explanation, oracle):
-    who = ('`aro check` rejects it' if oracle == 'check'
-           else 'the action catalog rejects it')
+    who = {
+        'check': '`aro check` rejects it',
+        'catalog': 'the action catalog rejects it',
+        'check_warning': ('`aro check` exits 0 — and still says it. The '
+                          'warning is the diagnostic; the same statement '
+                          'fails at run time'),
+        'style': 'both check green. The action registry is the one with an opinion',
+    }.get(oracle, '`aro check` rejects it')
     return (
         f'The instruction is: {instruction.strip()}\n\n'
         f'My first attempt was this:\n\n```aro\n{broken.strip()}\n```\n\n'
@@ -195,22 +395,11 @@ def build_traces(source: Path, limit=0, seed=0, system_prompt=None):
             if broken.strip() == code:
                 continue
             stats['mutations_tried'] += 1
-            if oracle == 'catalog':
-                unknown = rc.hallucinated_verbs(broken, verbs)
-                if not unknown:
-                    stats['not_broken'] += 1
-                    continue
-                diagnostic = (
-                    f"`{unknown[0]}` is not a registered action verb.\n"
-                    f"Run `aro actions` for the ones that are.")
-            else:
-                broken_ok, broken_error = aro_oracle.check_block(broken)
-                if broken_ok is not False:
-                    # The mutation did not actually break anything, so there
-                    # is no repair to reason about.
-                    stats['not_broken'] += 1
-                    continue
-                diagnostic = first_diagnostic(broken_error)
+            outcome = handle_oracle_outcome(category, oracle, broken,
+                                            explanation, stats, verbs=verbs)
+            if outcome is None:
+                continue
+            diagnostic = outcome[0]
             messages = []
             if system_prompt:
                 messages.append({'role': 'system', 'content': system_prompt})

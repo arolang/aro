@@ -13,6 +13,9 @@
 #   Train/training.sh --skip 03,07     # skip specific notebooks (forwarded
 #                                        as SKIP env var read by the meta
 #                                        notebook). Combine with --from.
+#   Train/training.sh --exact 18       # run notebook 18 only, then stop.
+#                                        Accepts "18" or "18_finetune".
+#                                        Cannot be combined with --from.
 #   Train/training.sh --no-stop        # keep going past failing notebooks
 #                                        (default: STOP_ON_FAILURE=True)
 #   Train/training.sh --no-execute     # generate the meta script but don't
@@ -49,6 +52,7 @@ mkdir -p "${OUT_DIR}"
 EXECUTE=1
 SKIP=""
 FROM=""
+EXACT=""
 STOP_ON_FAILURE=""
 EXTRA_ARGS=()
 while [[ $# -gt 0 ]]; do
@@ -61,6 +65,12 @@ while [[ $# -gt 0 ]]; do
       # Start at notebook N: skip every notebook numbered below it. Accepts
       # "17" or "18_finetune" — only the leading number is used.
       FROM="${2%%_*}"
+      shift 2
+      ;;
+    --exact)
+      # Run exactly notebook N and stop after it. Same "18" / "18_finetune"
+      # forms as --from.
+      EXACT="${2%%_*}"
       shift 2
       ;;
     --no-stop)
@@ -77,7 +87,7 @@ while [[ $# -gt 0 ]]; do
       break
       ;;
     -h|--help)
-      sed -n '2,32p' "$0"
+      sed -n '2,35p' "$0"
       exit 0
       ;;
     *)
@@ -86,6 +96,11 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+if [[ -n "${EXACT}" && -n "${FROM}" ]]; then
+  echo "error: --exact and --from are mutually exclusive" >&2
+  exit 2
+fi
 
 # ── Virtualenv + requirements management ──────────────────────────────────
 # Every run uses Train/.venv with the exact stack pinned in
@@ -156,6 +171,19 @@ if [[ "${ARO_TRAIN_SKIP_MLX_PREFLIGHT:-0}" != "1" ]]; then
   fi
 fi
 
+# ── Model prefetch ───────────────────────────────────────────────────────────
+# Download the model here, in the terminal, rather than inside the first stage
+# that loads it — where the download is invisible to the stall watchdog and a
+# slow 60 GB fetch is killed as a hang.
+if [[ "${ARO_TRAIN_SKIP_MODEL_PREFETCH:-0}" != "1" ]]; then
+  echo "==> model prefetch"
+  if ! (cd "${NB_DIR}" && "${PYTHON}" model_prefetch.py); then
+    echo "Refusing to start: the model could not be downloaded." >&2
+    echo "Re-run to resume, or set ARO_TRAIN_SKIP_MODEL_PREFETCH=1." >&2
+    exit 4
+  fi
+fi
+
 # Register a Jupyter kernel inside the venv so nbconvert can resolve
 # 'python3' to *our* interpreter instead of the system one. Idempotent.
 "${PYTHON}" -m ipykernel install --user --name=aro-train --display-name='ARO Train' \
@@ -166,6 +194,7 @@ fi
 # the var is unset), so this is the seam for the CLI options above.
 [[ -n "${SKIP}" ]] && export ARO_TRAIN_SKIP="${SKIP}"
 [[ -n "${FROM}" ]] && export ARO_TRAIN_FROM="${FROM}"
+[[ -n "${EXACT}" ]] && export ARO_TRAIN_EXACT="${EXACT}"
 [[ -n "${STOP_ON_FAILURE}" ]] && export ARO_TRAIN_STOP_ON_FAILURE="${STOP_ON_FAILURE}"
 
 # Default to the venv kernel we just registered so notebook cells run
@@ -193,6 +222,7 @@ echo "    notebook:  ${META_NB}"
 echo "    script:    ${META_PY}"
 echo "    logs:      ${OUT_DIR}/<NN>_*.log  (per child notebook)"
 echo "    from:      ${ARO_TRAIN_FROM:-(start)}"
+echo "    exact:     ${ARO_TRAIN_EXACT:-(all)}"
 echo "    skip:      ${ARO_TRAIN_SKIP:-(none)}"
 echo "    stop-on-failure: ${ARO_TRAIN_STOP_ON_FAILURE:-True (default)}"
 echo "    kernel:    ${KERNEL_NAME}"
