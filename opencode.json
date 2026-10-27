@@ -1,0 +1,13 @@
+{
+  "mcp": {
+    "servers": {
+      "aro": {
+        "type": "local",
+        "command": [
+          "aro",
+          "mcp"
+        ]
+      }
+    }
+  }
+}
