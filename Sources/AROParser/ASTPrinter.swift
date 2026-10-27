@@ -234,6 +234,15 @@ public struct ASTPrinter: ASTVisitor {
         return result
     }
 
+    public func visit(_ node: RangeExpression) -> String {
+        var result = "\(indentation())Range: ->\n"
+        var printer = self
+        printer.indent += 1
+        result += printer.render(node.lower)
+        result += printer.render(node.upper)
+        return result
+    }
+
     public func visit(_ node: UnaryExpression) -> String {
         var result = "\(indentation())Unary: \(node.op.rawValue)\n"
         var printer = self

@@ -306,6 +306,29 @@
             <strong>repositories</strong> and <strong>published symbols</strong>.
         </p>
 
+        <h2>Application-wide limits</h2>
+        <p>
+            <code>with &lt;concurrency: N&gt;</code> bounds one loop; these bound the whole
+            application (ARO-0088 &sect;10a). Work <strong>queues</strong> at a ceiling &mdash;
+            it never fails:
+        </p>
+<pre><code><span class="code-keyword">Configure</span> the <span class="code-result">&lt;application: concurrency&gt;</span> with 8.
+<span class="code-keyword">Configure</span> the <span class="code-result">&lt;http-client&gt;</span> with { concurrency: 4, rate: <span class="code-string">"10/s"</span> }.</code></pre>
+        <p>
+            Several settings for one category go in <strong>one object</strong>: two statements
+            naming the same category rebind an immutable binding. A ceiling and a rate are
+            different limits and both apply &mdash; one request at a time still exceeds a
+            per-minute quota.
+        </p>
+        <p>
+            The ceiling counts units of work not already running inside one: every triggered
+            feature set and every <code>parallel for each</code> iteration. Work started beneath
+            a slot-holder runs under that slot, which is what makes the ceiling deadlock-free.
+            The exception is the fire-and-forget event path, where nobody awaits the handler, so
+            it takes a slot of its own. <code>ARO_CONCURRENCY</code>,
+            <code>ARO_HTTP_CONCURRENCY</code> and <code>ARO_HTTP_RATE</code> set the same three.
+        </p>
+
         <h2>Turning it off, and tuning it</h2>
         <table>
             <thead>

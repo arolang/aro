@@ -215,19 +215,98 @@ def test_check_block_rejects_an_invented_qualifier():
     assert 'qualifier' in error.lower()
 
 
+def _feature_set(*statements: str) -> str:
+    body = ''.join(f'    {s}\n' for s in statements)
+    return '(Demo: Example) {\n' + body + '}'
+
+
+# What `aro check` does and does not catch, measured rather than remembered.
+#
+# This table is the rationale for the catalog gate that sits next to the binary
+# (GitLab #798), and it has to be re-derived rather than copied forward: the
+# gate was justified by "`aro check` is happy with a verb no action
+# implements", which stopped being true — the checker errors on an invented
+# verb now, and on an invented Compute qualifier. A test asserting the old
+# behaviour failed on every machine with a local build while CI skipped it for
+# want of a binary (GitLab #900).
+#
+#   'error'   — the binary fails the block on its own.
+#   'warning' — the binary says so and still exits 0, so a corpus graded on
+#               exit codes alone never sees it. `preposition_warnings` reads
+#               these out of the output for exactly that reason.
+#   'silent'  — the binary has nothing to say; only a catalog or a run can
+#               catch it.
+CHECK_VERDICTS = [
+    ('an invented verb',
+     _feature_set('Create the <password> with "p".',
+                  'Hash the <digest> from the <password>.',
+                  'Return an <OK: status> with <digest>.'),
+     'error', "'Hash' is not a verb of any action"),
+
+    ('an invented Compute qualifier',
+     _feature_set('Create the <t> with "p".',
+                  'Compute the <u: shoutify> from <t>.',
+                  'Return an <OK: status> with <u>.'),
+     'error', "Unknown Compute qualifier 'shoutify'"),
+
+    ('a preposition the action does not accept',
+     _feature_set('Create the <t> with "p".',
+                  'Render the <page> from <t>.',
+                  'Return an <OK: status> with <page>.'),
+     'warning', "Action 'Render' does not accept the preposition 'from'"),
+
+    ('a reference nothing binds',
+     _feature_set('Return an <OK: status> with <never-bound>.'),
+     'warning', "External dependency 'never-bound' is not published"),
+
+    # The gap the gate still exists for. A handle is resolved at run time
+    # against the plugins an application actually loads, so the checker cannot
+    # know this one is invented — and neither can a verb catalog.
+    ('an action handle no plugin provides',
+     _feature_set('Create the <t> with "p".',
+                  'Markdown.ToHTML the <html> with <t>.',
+                  'Return an <OK: status> with <html>.'),
+     'silent', None),
+]
+
+
 @needs_binary
-def test_aro_check_alone_does_not_catch_an_invented_verb():
-    """The reason the catalog gate exists next to the binary (GitLab #798):
-    `aro check` is happy with a verb no action implements."""
-    ok, _ = aro_oracle.check_block(
-        '(Demo: Example) {\n'
-        '    Create the <password> with "p".\n'
-        '    Hash the <digest> from the <password>.\n'
-        '    Return an <OK: status> with <digest>.\n}')
-    assert ok is True
+@pytest.mark.parametrize('shape,code,verdict,excerpt', CHECK_VERDICTS,
+                         ids=[c[0] for c in CHECK_VERDICTS])
+def test_what_aro_check_catches(shape, code, verdict, excerpt):
+    ok, output = aro_oracle.check_block(code)
+    if verdict == 'error':
+        assert ok is False, f'{shape} is no longer an error'
+        assert 'error:' in output
+    else:
+        assert ok is True, f'{shape} now fails the block: {output}'
+    if verdict == 'warning':
+        assert 'warning:' in output, f'{shape} is no longer even warned about'
+    if verdict == 'silent':
+        assert 'warning:' not in output and 'error:' not in output, \
+            f'{shape} is diagnosed now — move it up the table: {output}'
+    if excerpt:
+        assert excerpt in output
+
+
+@needs_binary
+def test_the_catalog_gate_agrees_with_the_binary_on_verbs():
+    """Both catch an invented verb, which is what makes the gate the
+    `--no-binary` fallback rather than the only line of defence."""
+    code = 'Hash the <digest> from the <password>.'
+    verbs, _vp, _q = rc.load_catalogs()
+    assert rc.hallucinated_verbs(code, verbs) == ['Hash']
+    ok, _ = aro_oracle.check_block(_feature_set(
+        'Create the <password> with "p".', code,
+        'Return an <OK: status> with <digest>.'))
+    assert ok is False
+
+
+def test_the_catalog_gate_flags_an_invented_verb_without_a_binary():
     verbs, _vp, _q = rc.load_catalogs()
     assert rc.hallucinated_verbs('Hash the <digest> from the <password>.',
                                  verbs) == ['Hash']
+    assert rc.hallucinated_verbs('Log "hi" to the <console>.', verbs) == []
 
 
 @needs_binary

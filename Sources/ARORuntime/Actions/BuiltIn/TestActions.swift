@@ -80,6 +80,18 @@ public struct WhenAction: ActionImplementation {
 
         // Check if this is a test context with feature set lookup
         guard let testContext = context as? TestExecutionContext else {
+            // A compiled test-harness binary (`aro test --compiled`, GitLab
+            // #694) has no `TestExecutionContext`: there is no AST at run time
+            // to hand back an `AnalyzedFeatureSet` from. Its feature sets are
+            // native functions registered by name at startup, so dispatch
+            // through that table instead. `nil` means this process is not a
+            // harness binary, which is the case the error below is for.
+            if let compiled = try invokeCompiledFeatureSet(
+                named: object.base, resultBase: result.base, caller: context
+            ) {
+                context.bind(result.base, value: compiled)
+                return compiled
+            }
             throw ActionError.missingService("TestExecutionContext (use 'aro test' command)")
         }
 
@@ -116,11 +128,15 @@ public struct WhenAction: ActionImplementation {
         // Extract result from response data
         // Try to get the primary result value
         let resultValue: any Sendable
-        if !response.data.isEmpty {
+        // The flattened rendering, deliberately: an assertion written against
+        // a returned list's JSON text keeps meaning what it meant. Read once,
+        // because it is rendered on access now (GitLab #711).
+        let responseData = response.data
+        if !responseData.isEmpty {
             // First try to get the value matching the result variable name
-            if let namedValue = response.data[result.base]?.get() as (any Sendable)? {
+            if let namedValue = responseData[result.base]?.get() as (any Sendable)? {
                 resultValue = namedValue
-            } else if let firstValue = response.data.values.first?.get() as (any Sendable)? {
+            } else if let firstValue = responseData.values.first?.get() as (any Sendable)? {
                 // Then try the first value from response data
                 resultValue = firstValue
             } else {
@@ -197,12 +213,33 @@ public struct ThenAction: ActionImplementation {
                 actual: actualValue,
                 passed: valuesEqual(actualValue, expectedValue)
             )
+        } else if CompiledTestHarness.isActive {
+            // Compiled harness binary (GitLab #694): the context is a
+            // `RuntimeContext`, so there is nothing to record into. The
+            // process-wide log keeps `--verbose`'s per-assertion breakdown
+            // working, tells the harness a failure was an expectation rather
+            // than a broken statement, and carries the message below so both
+            // modes print the same sentence.
+            let passed = valuesEqual(actualValue, expectedValue)
+            CompiledTestHarness.recordAssertion(
+                TestAssertion(
+                    variable: result.base,
+                    expected: expectedValue,
+                    actual: actualValue,
+                    passed: passed
+                ),
+                failureMessage: passed ? nil : Self.failureMessage(
+                    variable: result.base, expected: expectedValue, actual: actualValue
+                )
+            )
         }
 
         // Compare values
         if !valuesEqual(actualValue, expectedValue) {
             throw AssertionError(
-                message: "Expected \(result.base) to be \(expectedValue), but was \(actualValue)",
+                message: Self.failureMessage(
+                    variable: result.base, expected: expectedValue, actual: actualValue
+                ),
                 expected: expectedValue,
                 actual: actualValue,
                 variable: result.base
@@ -210,6 +247,12 @@ public struct ThenAction: ActionImplementation {
         }
 
         return true
+    }
+
+    /// The one sentence a failed `Then` says, composed in one place so the
+    /// thrown error and the compiled harness's log cannot drift apart.
+    static func failureMessage(variable: String, expected: any Sendable, actual: any Sendable) -> String {
+        "Expected \(variable) to be \(expected), but was \(actual)"
     }
 
     private func valuesEqual(_ a: any Sendable, _ b: any Sendable) -> Bool {
@@ -285,7 +328,7 @@ public struct AssertAction: ActionImplementation {
             expectedValue = object.base
         }
 
-        // Record assertion
+        // Record assertion — see ThenAction above for the compiled-harness arm.
         if let testContext = context as? TestExecutionContext {
             testContext.recordAssertion(
                 variable: result.base,
@@ -293,12 +336,27 @@ public struct AssertAction: ActionImplementation {
                 actual: actualValue,
                 passed: valuesEqual(actualValue, expectedValue)
             )
+        } else if CompiledTestHarness.isActive {
+            let passed = valuesEqual(actualValue, expectedValue)
+            CompiledTestHarness.recordAssertion(
+                TestAssertion(
+                    variable: result.base,
+                    expected: expectedValue,
+                    actual: actualValue,
+                    passed: passed
+                ),
+                failureMessage: passed ? nil : Self.failureMessage(
+                    variable: result.base, expected: expectedValue, actual: actualValue
+                )
+            )
         }
 
         // Perform assertion
         if !valuesEqual(actualValue, expectedValue) {
             throw AssertionError(
-                message: "Assertion failed: \(result.base) is \(actualValue), expected \(expectedValue)",
+                message: Self.failureMessage(
+                    variable: result.base, expected: expectedValue, actual: actualValue
+                ),
                 expected: expectedValue,
                 actual: actualValue,
                 variable: result.base
@@ -306,6 +364,11 @@ public struct AssertAction: ActionImplementation {
         }
 
         return true
+    }
+
+    /// See `ThenAction.failureMessage` — same reason, different wording.
+    static func failureMessage(variable: String, expected: any Sendable, actual: any Sendable) -> String {
+        "Assertion failed: \(variable) is \(actual), expected \(expected)"
     }
 
     private func valuesEqual(_ a: any Sendable, _ b: any Sendable) -> Bool {

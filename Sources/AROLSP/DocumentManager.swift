@@ -125,9 +125,35 @@ public final class DocumentManager: @unchecked Sendable {
     ///
     /// A closure rather than a stored registry, so the server owns the cache
     /// and its invalidation; the manager just asks at compile time.
-    nonisolated(unsafe) public var declaredActionsProvider: (@Sendable () -> UserActionRegistry?)?
+    /// Under `lock`, like every other mutable field here (GitLab #674).
+    ///
+    /// It was `nonisolated(unsafe)`, which is the annotation for state whose
+    /// safety you have reasoned about — and every *other* field of this class
+    /// goes through `lock` precisely because the LSP runs its handlers
+    /// concurrently. The server sets this during initialisation and
+    /// `compile` reads it on whichever thread a request arrives on, so the
+    /// write and the reads are on different threads and nothing ordered
+    /// them.
+    public var declaredActionsProvider: (@Sendable () -> UserActionRegistry?)? {
+        get {
+            lock.lock()
+            defer { lock.unlock() }
+            return _declaredActionsProvider
+        }
+        set {
+            lock.lock()
+            defer { lock.unlock() }
+            _declaredActionsProvider = newValue
+        }
+    }
+
+    private var _declaredActionsProvider: (@Sendable () -> UserActionRegistry?)?
 
     /// Compile `content` with whatever application context the server has.
+    ///
+    /// The provider is read out under the lock and *called* outside it: it
+    /// reaches into the server's own cache, and holding this manager's lock
+    /// across that is how two locks become a deadlock.
     private func compile(_ content: String) -> CompilationResult {
         if let declared = declaredActionsProvider?() {
             return Compiler().compile(content, declaredUserActions: declared)
@@ -137,12 +163,12 @@ public final class DocumentManager: @unchecked Sendable {
 
     // MARK: - Document Operations
 
-    // All public mutation / query methods now go through `lock`
+    // All public mutation / query methods go through `lock`
     // (#356 unification). The previous "non-Sync" variants
     // omitted the lock entirely — a real race when the LSP runs
-    // multi-threaded request dispatch. The "Sync" variants
-    // remain as thin forwarders so existing callers don't have
-    // to migrate in this MR.
+    // multi-threaded request dispatch. The "Sync" forwarders that
+    // survived that unification are gone with the transport that
+    // needed the distinction (GitLab #736).
 
     /// Open a document. Compiles **synchronously** — first diagnostics
     /// should not wait for a keystroke.
@@ -329,38 +355,6 @@ public final class DocumentManager: @unchecked Sendable {
     public func isOpen(uri: DocumentUri) -> Bool {
         lock.lock(); defer { lock.unlock() }
         return documents[uri] != nil
-    }
-
-    // MARK: - Legacy "Sync" Aliases (#356)
-    //
-    // Pre-unification the *Sync variants were the only
-    // thread-safe ones. The main methods above now take the
-    // lock too, so these are thin forwarders kept around for
-    // source compatibility. Migrate call sites to the plain
-    // names in follow-ups.
-
-    public func openSync(uri: DocumentUri, content: String, version: Int) -> DocumentState {
-        open(uri: uri, content: content, version: version)
-    }
-
-    public func applyChangesSync(
-        uri: DocumentUri,
-        changes: [TextDocumentContentChangeEvent],
-        version: Int
-    ) -> DocumentState? {
-        applyChanges(uri: uri, changes: changes, version: version)
-    }
-
-    public func closeSync(uri: DocumentUri) {
-        close(uri: uri)
-    }
-
-    public func getSync(uri: DocumentUri) -> DocumentState? {
-        get(uri: uri)
-    }
-
-    public func allSync() -> [DocumentUri: DocumentState] {
-        all()
     }
 }
 

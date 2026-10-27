@@ -326,10 +326,11 @@ table.
 | 4 | equality | `==`, `!=`, `is`, `is not`, `contains`, `matches` |
 | 5 | comparison | `<`, `>`, `<=`, `>=` |
 | 6 | defaulting | `default` (GitLab #547) |
-| 7 | term | `+`, `-`, `++` |
-| 8 | factor | `*`, `/`, `%` |
-| 9 | unary | unary `-` |
-| 10 | postfix | `.`, `[]` |
+| 7 | range | `->` (ARO-0089) |
+| 8 | term | `+`, `-`, `++` |
+| 9 | factor | `*`, `/`, `%` |
+| 10 | unary | unary `-` |
+| 11 | postfix | `.`, `[]` |
 
 Two of those placements are decisions rather than consequences, and both
 are easy to misremember:

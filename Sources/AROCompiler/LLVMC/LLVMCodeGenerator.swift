@@ -102,6 +102,14 @@ public final class LLVMCodeGenerator {
     // MARK: - State
 
     private var globalRuntime: GlobalVariable?
+
+    /// Emit a test-harness `main` instead of the application's (GitLab #694).
+    ///
+    /// Set by `aro build --tests`, which is how `aro test --compiled` gets a
+    /// binary that runs the program's colocated tests. The feature-set bodies
+    /// are generated identically in both modes — that is the point: a test has
+    /// to exercise the same code the shipped binary runs. Only `main` differs.
+    private var testHarness = false
     /// Stack of break target blocks for nested loops (top = innermost loop)
     private var breakBlockStack: [BasicBlock] = []
 
@@ -146,8 +154,11 @@ public final class LLVMCodeGenerator {
         linkMode: String? = nil,
         sourceFilename: String? = nil,
         sourceDirectory: String? = nil,
-        sourceFileMap: [String: String]? = nil
+        sourceFileMap: [String: String]? = nil,
+        testHarness: Bool = false
     ) throws -> LLVMCodeGenerationResult {
+        self.testHarness = testHarness
+
         // Issue #231 — capture source-file provenance for DWARF emission.
         self.sourceDirectory = sourceDirectory ?? ""
         self.sourceFileMap = sourceFileMap ?? [:]
@@ -253,6 +264,21 @@ public final class LLVMCodeGenerator {
     // MARK: - Validation
 
     private func validateEntryPoint(_ program: AnalyzedProgram) throws {
+        // A test-harness binary's entry point is the test list, not
+        // `Application-Start` — which it never calls, because a test run must
+        // not start the application's servers and watchers (GitLab #694). So a
+        // directory holding only test feature sets builds as a harness, and the
+        // test feature sets are what must not be empty.
+        if testHarness {
+            let tests = program.featureSets.filter {
+                TestFeatureSetNaming.isTest(activity: $0.featureSet.businessActivity)
+            }
+            if tests.isEmpty {
+                throw LLVMCodeGenError.noEntryPoint
+            }
+            return
+        }
+
         let entryPoints = program.featureSets.filter {
             $0.featureSet.name == "Application-Start"
         }
@@ -598,15 +624,29 @@ public final class LLVMCodeGenerator {
         // would make the next `Store the <x> into the <repo>.` store the wrong
         // value (GitLab #515).
         //
-        // The names come from `FrameworkVariables.transientKeys`, the same
-        // constant `FeatureSetExecutor.executeAROStatement` iterates. This list
-        // used to be written out here by hand and covered 14 of the
-        // interpreter's 21 names, so seven modifiers leaked in compiled mode
-        // only and the two modes printed different answers for one program.
-        for transientKey in FrameworkVariables.transientKeys {
-            let keyStr = ctx.stringConstant(transientKey)
-            _ = ctx.module.insertCall(externals.variableUnbind, on: [ctx.currentContextVar!, keyStr], at: ctx.insertionPoint)
-        }
+        // One bridge call, not one per name. The sweep lives on the runtime
+        // side in `aro_context_clear_transients`, over
+        // `FrameworkVariables.transientKeys` — the same constant
+        // `FeatureSetExecutor.executeAROStatement` iterates, so the two modes
+        // clear exactly the same names. (That list used to be written out here
+        // by hand and covered 14 of the interpreter's 21, so seven modifiers
+        // leaked in compiled mode only.)
+        //
+        // Emitting it as 21 `aro_variable_unbind` calls put 21 C-ABI
+        // crossings, string conversions and dictionary removals in front of
+        // every statement, inside loop bodies included — 21 million of them
+        // for a ten-statement loop over 100 000 elements, almost all finding
+        // nothing to remove (GitLab #714).
+        _ = ctx.module.insertCall(
+            externals.contextClearTransients,
+            on: [ctx.currentContextVar!],
+            at: ctx.insertionPoint)
+
+        // GitLab #906: the `as <Type>` annotation, as a modifier. It has no
+        // slot in the C result descriptor, so this is how it reaches both the
+        // expression evaluator (which must pick its arithmetic *before*
+        // evaluating) and the action (which coerces afterwards).
+        binder.bindResultTypeAnnotation(statement.result.asType)
 
         // Bind query modifiers if present
         binder.bindQueryModifiers(statement.queryModifiers)
@@ -615,7 +655,39 @@ public final class LLVMCodeGenerator {
         binder.bindRangeModifiers(statement.rangeModifiers)
 
         // Bind value source if present
-        binder.bindValueSource(statement.valueSource, prefix: prefix)
+        binder.bindValueSource(
+            statement.valueSource, prefix: prefix, asType: statement.result.asType)
+
+        // `Start the <socket-server> with { port: 9123 }.` has nowhere to put
+        // the map except the object slot, so it parses as `with the
+        // <_expression_>` rather than as a `rangeModifiers.withClause`. The
+        // interpreter binds that value to `_with_` as well as `_expression_`
+        // (`FeatureSetExecutor.executeAROStatement`); this path bound only
+        // `_expression_`, so every action that reads `_with_` saw nothing once
+        // compiled — the socket server above bound its default 9000 and
+        // reported success (GitLab #887).
+        //
+        // An alias of the value already computed, not a second evaluation:
+        // re-serialising the expression here would run its side effects twice.
+        if statement.object.preposition == .with,
+           statement.object.noun.base == "_expression_" {
+            let expressionName = ctx.stringConstant("_expression_")
+            let withName = ctx.stringConstant("_with_")
+            let expressionValue = ctx.module.insertCall(
+                externals.variableResolve,
+                on: [ctx.currentContextVar!, expressionName],
+                at: ctx.insertionPoint
+            )
+            _ = ctx.module.insertCall(
+                externals.variableBindValue,
+                on: [ctx.currentContextVar!, withName, expressionValue],
+                at: ctx.insertionPoint
+            )
+            // `aro_variable_resolve` hands back a passRetained box; the inner
+            // value is now in the context under both names, so the wrapper goes.
+            _ = ctx.module.insertCall(
+                externals.valueFree, on: [expressionValue], at: ctx.insertionPoint)
+        }
 
         // Call action function
         let verb = statement.action.verb.lowercased()
@@ -775,54 +847,30 @@ public final class LLVMCodeGenerator {
     /// Collects all variable names that will be bound by statements in the loop body.
     /// This is used to unbind them at the start of each iteration, simulating the
     /// child context behavior of the interpreter.
+    ///
+    /// GitLab #723: the descent is `AROStatementWalk`'s, so this sees every
+    /// body the loop body can contain. The private recursion it replaces
+    /// never entered a `when { … }` block, so a binding made inside one was
+    /// not unbound between iterations — an immutability error on the second
+    /// pass through a loop whose body guards a binding with `when`, in
+    /// compiled mode only.
+    ///
+    /// The item and index variables of a nested `for each` stay out: the
+    /// nested loop manages its own. A `RangeLoop`'s variable does not — it
+    /// lives in this scope and has to be unbound with the rest, which is why
+    /// the containers are walked too rather than only the actions.
     private func collectBoundVariables(from statements: [any Statement]) -> Set<String> {
         var variables = Set<String>()
-        for statement in statements {
-            collectBoundVariablesFromStatement(statement, into: &variables)
+        for statement in AROStatementWalk.flattenAll(statements) {
+            if let aroStatement = statement as? AROStatement {
+                variables.insert(aroStatement.result.base)
+            } else if let rangeLoop = statement as? RangeLoop {
+                variables.insert(rangeLoop.variable)
+            }
+            // Publish, Require and Break bind nothing; a pipeline's stages
+            // arrive as the `AROStatement`s they are (ARO-0067).
         }
         return variables
-    }
-
-    private func collectBoundVariablesFromStatement(_ statement: any Statement, into variables: inout Set<String>) {
-        if let aroStatement = statement as? AROStatement {
-            // The result of an ARO statement is bound to a variable
-            variables.insert(aroStatement.result.base)
-        } else if let matchStatement = statement as? MatchStatement {
-            // Recurse into match statement cases
-            for caseClause in matchStatement.cases {
-                for stmt in caseClause.body {
-                    collectBoundVariablesFromStatement(stmt, into: &variables)
-                }
-            }
-            if let otherwise = matchStatement.otherwise {
-                for stmt in otherwise {
-                    collectBoundVariablesFromStatement(stmt, into: &variables)
-                }
-            }
-        } else if let forEachLoop = statement as? ForEachLoop {
-            // The item and index variables are managed by the nested loop
-            // But we still need to collect variables from the nested body
-            for stmt in forEachLoop.body {
-                collectBoundVariablesFromStatement(stmt, into: &variables)
-            }
-        } else if let rangeLoop = statement as? RangeLoop {
-            // Range loop variable and body variables
-            variables.insert(rangeLoop.variable)
-            for stmt in rangeLoop.body {
-                collectBoundVariablesFromStatement(stmt, into: &variables)
-            }
-        } else if let whileLoop = statement as? WhileLoop {
-            // While loop variables are in the outer scope — collect them
-            for stmt in whileLoop.body {
-                collectBoundVariablesFromStatement(stmt, into: &variables)
-            }
-        } else if let pipeline = statement as? PipelineStatement {
-            // ARO-0067: Each pipeline stage binds its result variable
-            for stage in pipeline.stages {
-                variables.insert(stage.result.base)
-            }
-        }
-        // PublishStatement, RequireStatement, and BreakStatement don't bind new variables
     }
 
     /// The name the compiled loop resolves its collection from, plus the
@@ -842,7 +890,15 @@ public final class LLVMCodeGenerator {
         let temp = "_foreach\(index)_collection_"
         if let expression = loop.collectionExpression {
             let tempName = ctx.stringConstant(temp)
-            let exprJSON = ctx.stringConstant(serializer.serializeExpression(expression))
+            // A range in the collection slot is bound as the span rather than
+            // as its elements, so the loop walks `1->10_000_000` in O(1)
+            // memory here exactly as the interpreter does (ARO-0089 §3.3,
+            // GitLab #546). Everywhere else a range serialises to its
+            // elements, which is why this is the only call site that asks for
+            // the lazy form.
+            let serialized = (expression as? RangeExpression).map(serializer.serializeLazyRange)
+                ?? serializer.serializeExpression(expression)
+            let exprJSON = ctx.stringConstant(serialized)
             _ = ctx.module.insertCall(
                 externals.evaluateAndBind,
                 on: [ctx.currentContextVar!, tempName, exprJSON],
@@ -1747,6 +1803,16 @@ public final class LLVMCodeGenerator {
         // user-defined actions.
         emitHandlerRegistration(program: program, runtime: runtime, at: ip)
 
+        // A test harness stops here and runs the tests instead of the
+        // application (GitLab #694). Phases 0-3 still ran, so a test sees the
+        // same contract, plugins, event handlers and user-defined actions the
+        // application would — and `Application-Start` is deliberately not
+        // called, because a test run must not bind ports or start watchers.
+        if testHarness {
+            emitTestHarness(program: program, runtime: runtime, at: ip)
+            return
+        }
+
         // Phase 4: invoke all Application-Start feature sets; the last one's
         // context is retained for response printing and teardown.
         let mainCtx = emitApplicationStart(program: program, runtime: runtime, at: ip)
@@ -1756,6 +1822,62 @@ public final class LLVMCodeGenerator {
 
         // Phase 6: print the response (unless --keep-alive) and tear down.
         emitCleanup(mainFunc: mainFunc, runtime: runtime, mainCtx: mainCtx, at: ip)
+    }
+
+    /// Emit the body of a test-harness `main` (GitLab #694).
+    ///
+    /// Three steps, all straight-line:
+    ///
+    ///   1. register every feature-set body by name, so a test's
+    ///      `When the <len> from the <get-length>.` can reach its target. The
+    ///      interpreter resolves that through the AST; a compiled binary has no
+    ///      AST, so the names have to travel as a table of function pointers.
+    ///   2. one `aro_test_run_case` per test feature set, in source order, each
+    ///      with its own context — the isolation `TestRunner` gives each test.
+    ///   3. `aro_test_report`, whose return value is the process exit code, so
+    ///      `aro test --compiled` fails the way `aro test` does.
+    private func emitTestHarness(program: AnalyzedProgram, runtime: IRValue, at ip: InsertionPoint) {
+        for analyzed in program.featureSets {
+            let fs = analyzed.featureSet
+            // `Application-Start` / `Application-End` get activity-qualified
+            // symbol names and are not callable targets for `When`, so they are
+            // not in the table.
+            guard fs.name != "Application-Start", fs.name != "Application-End" else { continue }
+            guard let bodyFunc = ctx.module.function(named: featureSetFunctionName(fs.name)) else { continue }
+            let nameStr = ctx.stringConstant(fs.name)
+            _ = ctx.module.insertCall(
+                externals.registerFeatureSetBody,
+                on: [runtime, nameStr, bodyFunc],
+                at: ip
+            )
+        }
+
+        let tests = program.featureSets.filter {
+            TestFeatureSetNaming.isTest(activity: $0.featureSet.businessActivity)
+        }
+
+        for analyzed in tests {
+            let fs = analyzed.featureSet
+            guard let bodyFunc = ctx.module.function(named: featureSetFunctionName(fs.name)) else { continue }
+
+            let nameStr = ctx.stringConstant(fs.name)
+            let activityStr = ctx.stringConstant(fs.businessActivity)
+            let testCtx = ctx.module.insertCall(
+                externals.contextCreateNamed,
+                on: [runtime, nameStr, activityStr],
+                at: ip
+            )
+            _ = ctx.module.insertCall(
+                externals.testRunCase,
+                on: [testCtx, nameStr, activityStr, bodyFunc],
+                at: ip
+            )
+            _ = ctx.module.insertCall(externals.contextDestroy, on: [testCtx], at: ip)
+        }
+
+        let exitCode = ctx.module.insertCall(externals.testReport, on: [], at: ip)
+        _ = ctx.module.insertCall(externals.runtimeShutdown, on: [runtime], at: ip)
+        ctx.module.insertReturn(exitCode, at: ip)
     }
 
     /// Phase 1 — embed the OpenAPI spec and template bundle into the runtime.
@@ -2289,11 +2411,21 @@ private final class StringConstantCollector {
         _ = ctx.stringConstant(fs.name)
         _ = ctx.stringConstant(fs.businessActivity)
 
-        for statement in fs.statements {
+        collectFromStatements(fs.statements)
+    }
+
+    /// GitLab #723: interning is driven by `AROStatementWalk`, which reaches
+    /// `when { … }`, `while` and range bodies — all three invisible to the
+    /// private recursion that stood here. Interning is memoized and happens
+    /// on demand anyway, so the old gaps cost a late allocation rather than a
+    /// wrong program; the point of doing it here is to do it once.
+    private func collectFromStatements(_ statements: [Statement]) {
+        for statement in AROStatementWalk.flattenAll(statements) {
             collectFromStatement(statement)
         }
     }
 
+    /// One statement, its own strings only — the walker supplies the nesting.
     private func collectFromStatement(_ statement: Statement) {
         if let aro = statement as? AROStatement {
             _ = ctx.stringConstant(aro.result.base)
@@ -2309,16 +2441,6 @@ private final class StringConstantCollector {
             collectFromRangeModifiers(aro.rangeModifiers)
         } else if let match = statement as? MatchStatement {
             _ = ctx.stringConstant(match.subject.base)
-            for caseClause in match.cases {
-                for stmt in caseClause.body {
-                    collectFromStatement(stmt)
-                }
-            }
-            if let otherwise = match.otherwise {
-                for stmt in otherwise {
-                    collectFromStatement(stmt)
-                }
-            }
         } else if let loop = statement as? ForEachLoop {
             _ = ctx.stringConstant(loop.itemVariable)
             if let index = loop.indexVariable {
@@ -2328,13 +2450,6 @@ private final class StringConstantCollector {
             // interned on demand when the loop is generated (GitLab #519).
             if let noun = loop.collection {
                 _ = ctx.stringConstant(noun.base)
-            }
-            for stmt in loop.body {
-                collectFromStatement(stmt)
-            }
-        } else if let pipeline = statement as? PipelineStatement {
-            for stage in pipeline.stages {
-                collectFromStatement(stage)
             }
         } else if let publish = statement as? PublishStatement {
             _ = ctx.stringConstant(publish.externalName)

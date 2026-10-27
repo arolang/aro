@@ -16,34 +16,57 @@ public struct Response: Sendable, Equatable {
     /// Reason or description
     public let reason: String
 
-    /// Response data, flattened for transport: nested objects become
-    /// dot-notation keys and collections become their JSON serialization,
-    /// because `AnySendable` can only hold `Equatable` values.
-    public let data: [String: AnySendable]
+    /// The values the feature set answered with, in the shape it produced
+    /// them: lists stay lists, records stay records (GitLab #504).
+    ///
+    /// This is the only payload a response carries. There used to be a second
+    /// one — `data`, flattened for transport — stored alongside it and built
+    /// eagerly by `Return`, which meant every response paid for a rendering
+    /// whether or not its boundary wanted that one; the HTTP renderer then
+    /// parsed the rendering back to re-serialise it (GitLab #711). The
+    /// flattened form is now computed by the boundary that needs it.
+    public let payload: [String: any Sendable]
 
-    /// The same payload *before* flattening — lists stay lists, records stay
-    /// records (GitLab #504).
+    /// The payload flattened for transport: nested records become dot-notation
+    /// keys and collections become their JSON text, because `AnySendable` can
+    /// only hold `Equatable` values.
     ///
-    /// `data` is what HTTP and the CLI render, and its lossy shape is baked
-    /// into those renderers. In-process callers — chiefly a user-defined
-    /// action returning to its caller (ARO-0081 §5) — need the values
-    /// themselves, not a rendering of them, so `Return` records both and
-    /// callers pick the one their boundary needs.
-    ///
-    /// Empty for responses built by anything other than `Return`; callers
-    /// must fall back to `data` in that case.
-    public let structuredData: [String: any Sendable]
+    /// Computed on each access, so read it once into a local. The CLI printer,
+    /// `aro test` and this type's own identity are what still want it; the two
+    /// HTTP renderers go from `payload` to a JSON body directly.
+    public var data: [String: AnySendable] {
+        ResponsePayload.flatten(payload)
+    }
 
     public init(
         status: String,
         reason: String = "",
-        data: [String: AnySendable] = [:],
-        structuredData: [String: any Sendable] = [:]
+        payload: [String: any Sendable] = [:]
     ) {
         self.status = status
         self.reason = reason
-        self.data = data
-        self.structuredData = structuredData
+        self.payload = payload
+    }
+
+    /// Build a response from an already-flattened dictionary.
+    ///
+    /// For the handful of in-runtime callers that have one. Unwrapping it back
+    /// into a payload is lossless in the direction that matters: a flat value
+    /// has no structure left to recover, and flattening it again returns the
+    /// same dictionary.
+    public init(
+        status: String,
+        reason: String = "",
+        data: [String: AnySendable]
+    ) {
+        self.status = status
+        self.reason = reason
+        var payload: [String: any Sendable] = [:]
+        payload.reserveCapacity(data.count)
+        for (key, wrapped) in data {
+            payload[key] = wrapped.erased
+        }
+        self.payload = payload
     }
 
     /// Common responses
@@ -55,10 +78,14 @@ public struct Response: Sendable, Equatable {
         Response(status: "Error", reason: reason, data: data)
     }
 
-    /// Identity is the transport payload. `structuredData` is the same values
-    /// in a richer shape, so comparing it would only re-answer a question
-    /// `data` already answered — and `any Sendable` has no `==` to answer it
-    /// with.
+    /// Identity is the flattened rendering of the payload, because
+    /// `any Sendable` has no `==` to compare the payload itself with.
+    ///
+    /// Each comparison therefore flattens both sides. That is affordable
+    /// because `Response` equality is a test and debugger convenience — no
+    /// request, event or statement path compares two responses — and the
+    /// alternative is storing a second payload on every response for the
+    /// benefit of a few assertions, which is what GitLab #711 was.
     public static func == (lhs: Response, rhs: Response) -> Bool {
         lhs.status == rhs.status && lhs.reason == rhs.reason && lhs.data == rhs.data
     }
@@ -82,6 +109,15 @@ public struct AnySendable: Sendable, Equatable {
     /// Get the underlying value
     public func get<T>() -> T? {
         value as? T
+    }
+
+    /// The underlying value without naming its type.
+    ///
+    /// `get()` needs the caller to guess, which is why unwrapping used to be a
+    /// ladder of typed attempts ending in `String(describing:)`. Needed to
+    /// turn an already-flattened dictionary back into a payload (GitLab #711).
+    public var erased: any Sendable {
+        value
     }
 
     public static func == (lhs: AnySendable, rhs: AnySendable) -> Bool {
@@ -440,6 +476,30 @@ public protocol ExecutionContext:
 // MARK: - Default Implementations
 
 public extension VariableBinding {
+
+    /// Remove every framework variable that belongs to a single statement.
+    ///
+    /// A statement's modifiers reach its action through `_`-prefixed context
+    /// bindings rather than as arguments, so they have to go when the
+    /// statement does — otherwise the next statement inherits them, and a
+    /// `join` with no `with` clause quietly reuses the previous one's
+    /// separator (GitLab #552).
+    ///
+    /// Both execution modes call this: the interpreter directly, the compiled
+    /// binary through the `aro_context_clear_transients` bridge. That is the
+    /// point of it being one function — the compiled path used to spell the
+    /// sweep out as one `aro_variable_unbind` call per name in the generated
+    /// IR, which was 21 C-ABI crossings before every statement (GitLab #714)
+    /// and, before that, a hand-written list that had drifted from the
+    /// interpreter's by seven names.
+    func clearTransientFrameworkVariables() {
+        for key in FrameworkVariables.transientKeys {
+            unbind(key)
+        }
+    }
+}
+
+public extension VariableBinding {
     func require<T: Sendable>(_ name: String) throws -> T {
         guard let value: T = resolve(name) else {
             throw ActionError.undefinedVariable(name)
@@ -452,6 +512,31 @@ public extension VariableBinding {
     /// the unforced future.
     func resolveAnyRaw(_ name: String) -> (any Sendable)? {
         resolveAny(name)
+    }
+
+    /// `resolveAny(_:)` for a caller that is already `async`: identical in what
+    /// it returns, but a still-pending deferred result is *awaited* rather than
+    /// waited on with a blocking `force()` (GitLab #707).
+    ///
+    /// Use this, never `resolveAny`, from `async` code that runs on Swift's
+    /// cooperative pool — which is where every eager action and every statement
+    /// of the interpreter runs. `force()` parks the calling pthread on a
+    /// `DispatchGroup`, and the pool has only as many threads as there are
+    /// cores: at that many concurrent handlers, every thread ends up parked on a
+    /// deferred result and nothing async can run, including the work that would
+    /// resolve those results. Measured on an 18-core machine, 24 concurrent
+    /// requests to a handler reading a deferred `Request` deadlocked outright.
+    ///
+    /// Not a protocol requirement, so the call is statically dispatched and the
+    /// overwhelmingly common case — no future bound to `name` — costs the same
+    /// walk `resolveAny` would have done and nothing else.
+    func resolveAnyAwaitingDeferred(_ name: String) async -> (any Sendable)? {
+        // Only `RuntimeContext` stores bindings as `AROFuture`s, so for anything
+        // else the two resolves are the same function.
+        if let runtime = self as? RuntimeContext {
+            return await runtime.resolveAnyAsync(name)
+        }
+        return resolveAny(name)
     }
 
     // MARK: - Default Type-Aware Implementations

@@ -27,28 +27,77 @@ esac
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$REPO_ROOT"
 
-# Self-healing `swift build`. On macOS a debug->release switch can leave a
-# stale `_NumericsShims` module that makes the release build fail with
-# "missing required module '_NumericsShims'" (issue #295). Detect that one
-# failure, clear the stale release artifacts, and retry once. Config-agnostic:
-# debug builds and unrelated failures pass straight through. (`set -o pipefail`
-# from the script header makes the pipeline report swift's exit, not tee's.)
+# Which build system to ask for. Xcode's current default is `swiftbuild`, and
+# it cannot resolve SwiftNIO's `CNIOLLHTTP`:
+#
+#   error: unable to resolve module dependency: 'CNIOLLHTTP'
+#
+# so every product here failed to build and there was no scripted way to get a
+# runnable Solaro.app at all (issue #898). `native` builds them cleanly, which
+# is the workaround the rest of the project already relies on.
+#
+# Probed rather than hardcoded, because `--build-system native` is itself
+# deprecated and will stop being accepted: on a toolchain without the flag this
+# is empty and the default is used.
+#
+# Expanded as `${BUILD_SYSTEM_ARGS[@]+"${BUILD_SYSTEM_ARGS[@]}"}` everywhere
+# below, never as a bare `"${BUILD_SYSTEM_ARGS[@]}"`. /usr/bin/env bash on
+# macOS is bash 3.2.57, where expanding an EMPTY array is an unbound variable
+# under `set -u` — so the no-flag path, the whole point of probing, died on the
+# first `swift build` with
+#
+#   build-solaro-app-local.sh: BUILD_SYSTEM_ARGS[@]: unbound variable
+#
+# before anything was built. The `+` form expands to nothing when the array is
+# unset or empty, which is what was meant.
+BUILD_SYSTEM_ARGS=()
+if swift build --help 2>&1 | grep -q -- '--build-system'; then
+    BUILD_SYSTEM_ARGS=(--build-system native)
+fi
+
+# Self-healing `swift build`. Two failures are recognised:
+#
+#   * a stale `_NumericsShims` module left by a debug->release switch, which
+#     makes the release build fail with "missing required module
+#     '_NumericsShims'" (issue #295) — clear the stale release artifacts and
+#     retry once;
+#   * a `C*` module-resolution failure (`CNIOLLHTTP` and friends), which is a
+#     build-system problem and not a cache problem — clearing caches does not
+#     help it, so retry under `native` instead (issue #898). Only reachable on
+#     a toolchain that ignored the probe above.
+#
+# Config-agnostic, and unrelated failures pass straight through. (`set -o
+# pipefail` from the script header makes the pipeline report swift's exit, not
+# tee's.)
 swift_build() {
     local log
     log="$(mktemp)"
-    if swift build "$@" 2>&1 | tee "$log"; then rm -f "$log"; return 0; fi
+    if swift build ${BUILD_SYSTEM_ARGS[@]+"${BUILD_SYSTEM_ARGS[@]}"} "$@" 2>&1 | tee "$log"; then rm -f "$log"; return 0; fi
     if grep -q _NumericsShims "$log"; then
         echo "[solaro-app] stale _NumericsShims release module (#295); clearing and retrying once…" >&2
         rm -f "$log"
-        local rel; rel="$(swift build -c release --show-bin-path 2>/dev/null || true)"
+        local rel; rel="$(swift build -c release ${BUILD_SYSTEM_ARGS[@]+"${BUILD_SYSTEM_ARGS[@]}"} --show-bin-path 2>/dev/null || true)"
         [ -n "$rel" ] && rm -rf "$rel"
-        swift build "$@"; return $?
+        swift build ${BUILD_SYSTEM_ARGS[@]+"${BUILD_SYSTEM_ARGS[@]}"} "$@"; return $?
+    fi
+    if grep -qE "unable to resolve module dependency: '[A-Z]" "$log" \
+       && [ ${#BUILD_SYSTEM_ARGS[@]} -eq 0 ]; then
+        echo "[solaro-app] C module resolution failed (#898); retrying with --build-system native…" >&2
+        rm -f "$log"
+        BUILD_SYSTEM_ARGS=(--build-system native)
+        swift build ${BUILD_SYSTEM_ARGS[@]+"${BUILD_SYSTEM_ARGS[@]}"} "$@"; return $?
     fi
     rm -f "$log"; return 1
 }
 
 echo "[solaro-app] swift build -c $CONFIG --product SolaroApp"
 swift_build -c "$CONFIG" --product SolaroApp
+
+# Where the products actually landed. `native` writes `.build/<config>/`,
+# `swiftbuild` writes `.build/out/Products/Debug/` — so the path this script
+# copies from is asked for, not assumed. Resolved after the first build so the
+# answer reflects the system that build ended up using.
+BIN_DIR="$(swift build -c "$CONFIG" ${BUILD_SYSTEM_ARGS[@]+"${BUILD_SYSTEM_ARGS[@]}"} --show-bin-path)"
 
 echo "[solaro-app] swift build -c $CONFIG --product solaro"
 swift_build -c "$CONFIG" --product solaro
@@ -74,7 +123,7 @@ swift_build -c "$CONFIG" --product AROXPCService
 # are no-ops because the metallib is cached.
 if [ -d ".build/checkouts/mlx-swift" ]; then
     echo "[solaro-app] tools/build-metallib.sh $CONFIG"
-    ./tools/build-metallib.sh "$CONFIG" 2>&1 | sed 's/^/[metallib] /'
+    ./tools/build-metallib.sh "$CONFIG" "$BIN_DIR" 2>&1 | sed 's/^/[metallib] /'
 fi
 
 APP_DIR=".build/Solaro.app"
@@ -84,7 +133,7 @@ mkdir -p "$APP_DIR/Contents/MacOS" "$APP_DIR/Contents/Resources"
 # name (Solaro). The product is named SolaroApp internally only
 # to dodge SwiftPM's case-insensitive-fs collision with the
 # launcher product `solaro`.
-cp ".build/$CONFIG/SolaroApp" "$APP_DIR/Contents/MacOS/Solaro"
+cp "$BIN_DIR/SolaroApp" "$APP_DIR/Contents/MacOS/Solaro"
 cp Sources/SOLARO/LICENSE-NOTICE.md "$APP_DIR/Contents/Resources/LICENSE-NOTICE.md"
 
 # App icon (Graphics/AppIcon.icns, generated from Graphics/solaro.svg by
@@ -98,7 +147,7 @@ fi
 # first before walking the dev build dirs — keeps the .app
 # self-contained for release while still letting devs override
 # with whatever .build/<config>/AROXPCService is freshest.
-cp ".build/$CONFIG/AROXPCService" "$APP_DIR/Contents/Resources/AROXPCService"
+cp "$BIN_DIR/AROXPCService" "$APP_DIR/Contents/Resources/AROXPCService"
 chmod +x "$APP_DIR/Contents/Resources/AROXPCService"
 
 VERSION=$(git describe --tags --always --dirty 2>/dev/null || echo "dev")
@@ -250,10 +299,72 @@ cat > "$APP_DIR/Contents/Info.plist" <<PLIST
 </dict></plist>
 PLIST
 
+# Re-sign the assembled bundle, ad-hoc (GitLab #288).
+#
+# Everything above rewrote the inside of a bundle Launch Services has very
+# likely seen before. On Apple Silicon the linker ad-hoc signs every executable
+# it produces, so the binary that just landed in Contents/MacOS/ does carry a
+# signature — but a flat-file signature is not a bundle signature. Nothing
+# writes Contents/_CodeSignature/CodeResources, so the bundle has no seal over
+# Info.plist and Resources/ while its executable's signature says it must have
+# one: `codesign --verify` on what this script used to produce says
+#
+#   code has no resources but signature indicates they must be present
+#
+# and Launch Services, reaching the same conclusion on the NEXT launch, kills
+# the process before main() runs:
+#
+#   EXC_CRASH (SIGKILL (Code Signature Invalid))
+#
+# which reads as a crash in Solaro rather than as a stale signature — made
+# worse by the same bundle having launched fine before the copy. The manual fix
+# was `codesign --force --sign -` after every build; this is that, scripted.
+#
+# Ad-hoc (`-`) deliberately: this bundle never leaves the machine that built
+# it. The distribution path signs with the real Developer ID certificate, adds
+# the hardened runtime and entitlements, and notarizes — that lives in
+# .github/workflows/build.yml and Scripts/package-solaro-dmg.sh and is
+# untouched here.
+#
+# Order is inside-out, and this block sits after the Info.plist heredoc for the
+# same reason: signing a bundle seals what it contains, so anything signed or
+# written afterwards invalidates the seal around it. Nested executables first,
+# Info.plist already written, bundle last.
+if command -v codesign >/dev/null 2>&1; then
+    # Nested executables, found rather than listed — Contents/Resources has
+    # grown one helper binary already (AROXPCService, #282 phase 3) and the
+    # next one should not need an edit here to get signed.
+    while IFS= read -r nested; do
+        echo "[solaro-app] codesign (ad-hoc) $nested"
+        codesign --force --sign - "$nested"
+    done < <(find "$APP_DIR/Contents" -type f -perm -111 \
+                  ! -path "*/Contents/MacOS/Solaro" 2>/dev/null || true)
+
+    # The bundle last. Signing a bundle also signs its main executable, so this
+    # covers Contents/MacOS/Solaro and writes the CodeResources seal in one go.
+    echo "[solaro-app] codesign (ad-hoc) $APP_DIR"
+    codesign --force --sign - "$APP_DIR"
+
+    # Fatal on failure — `set -e` from the script header, left deliberately
+    # unguarded. A codesign that is installed and still refuses means the
+    # bundle is malformed, and the result would be an .app that gets SIGKILLed
+    # at launch with the exact message above: better to fail here, where the
+    # reason is on screen, than there, where it is a crash report.
+    codesign --verify --strict "$APP_DIR"
+else
+    # Not fatal: the other products of this script (solaro, aro,
+    # AROXPCService) are perfectly usable, and a machine without codesign
+    # cannot be given a valid signature by any means. Say so loudly instead,
+    # naming the symptom so the SIGKILL is recognisable when it happens.
+    echo "[solaro-app] warning: codesign not found — $APP_DIR is unsigned." >&2
+    echo "[solaro-app]          macOS will kill it at launch with" >&2
+    echo "[solaro-app]          'SIGKILL (Code Signature Invalid)' (GitLab #288)." >&2
+fi
+
 echo ""
 echo "[solaro-app] Built: $(pwd)/$APP_DIR"
-echo "[solaro-app] Launcher: $(pwd)/.build/$CONFIG/solaro"
+echo "[solaro-app] Launcher: $BIN_DIR/solaro"
 echo ""
 echo "Try it:"
 echo "  export SOLARO_APP=\"$(pwd)/$APP_DIR\""
-echo "  ./.build/$CONFIG/solaro ./Examples/HelloWorld"
+echo "  $BIN_DIR/solaro ./Examples/HelloWorld"

@@ -184,8 +184,20 @@ public actor RuntimeContext: ExecutionContext {
     /// Wait state flag
     nonisolated(unsafe) private var _isWaiting: Bool = false
 
-    /// Continuation for wait/shutdown signaling
+    /// Continuation for wait/shutdown signaling.
+    ///
+    /// Read and written only under `storageLock` (GitLab #631). It was
+    /// touched unlocked, which lost wake-ups and could resume twice — see
+    /// `waitForShutdown`.
     nonisolated(unsafe) private var shutdownContinuation: CheckedContinuation<Void, Error>?
+
+    /// Whether shutdown was signalled before anyone waited (GitLab #631).
+    ///
+    /// The signal path can run before `waitForShutdown` has stored its
+    /// continuation — the whole point of a shutdown signal is that it
+    /// arrives at a moment nobody chose. Without this flag that signal was
+    /// dropped and the waiter hung forever.
+    nonisolated(unsafe) private var _shutdownRequested: Bool = false
 
     /// Output context for formatting
     private nonisolated let _outputContext: OutputContext
@@ -273,6 +285,11 @@ public actor RuntimeContext: ExecutionContext {
     ///   - parent: Optional parent context for nested execution
     ///   - isCompiled: Whether this is a compiled binary execution (defaults to false)
     ///   - isTemplateContext: Whether this is a template rendering context (defaults to false)
+    ///   - inheritsExecutionId: Whether this context is a nested *scope* of the
+    ///     parent's execution rather than an execution of its own. See
+    ///     `executionId` below. Only `createStatementScope()` and the two
+    ///     `createChild` overloads pass `true` — the per-statement and
+    ///     per-iteration contexts, which are the hot ones.
     public init(
         featureSetName: String,
         businessActivity: String = "",
@@ -283,11 +300,37 @@ public actor RuntimeContext: ExecutionContext {
         isCompiled: Bool = false,
         isTemplateContext: Bool = false,
         driverChannel: ActionDriverChannel? = nil,
-        caller: CallerIdentity? = nil
+        caller: CallerIdentity? = nil,
+        inheritsExecutionId: Bool = false
     ) {
         self.featureSetName = featureSetName
         self.businessActivity = businessActivity
-        self.executionId = UUID().uuidString
+
+        // A nested scope of one execution shares its id instead of minting one
+        // (GitLab #702). `UUID().uuidString` is a CSPRNG draw plus hex
+        // formatting, and the interpreter builds one of these per statement and
+        // per loop iteration: in a 300 000-row loop with a three-statement body
+        // it measured 4.7% of the whole run's CPU — more than the actor, the
+        // lock and the six (empty, so unallocated) collections put together.
+        //
+        // What it gives up: a statement scope and a loop iteration are no
+        // longer distinguishable from their feature set in a trace. That is
+        // what they are — one execution — and it repairs a leak: the verb form
+        // of `Publish` registers symbols under `context.executionId`, which was
+        // the *statement scope's* id, while `FeatureSetExecutor` evicts under
+        // the feature-set context's. Nothing ever matched, so those symbols
+        // were never evicted.
+        //
+        // A fresh id is still the default, because a *feature set* execution
+        // nested inside another is a different thing: `UserDefinedActionHost`
+        // parents a callee frame to its caller and `FeatureSetExecutor` evicts
+        // on that frame's exit. Sharing an id there would have the callee evict
+        // the caller's published symbols.
+        if inheritsExecutionId, let parentCtx = parent as? RuntimeContext {
+            self.executionId = parentCtx.executionId
+        } else {
+            self.executionId = UUID().uuidString
+        }
         self._outputContext = outputContext
         self._isCompiled = isCompiled
         self._isTemplateContext = isTemplateContext
@@ -547,6 +590,27 @@ public actor RuntimeContext: ExecutionContext {
         "metrics", "application"
     ]
 
+    /// Can a name with this first byte be magic?
+    ///
+    /// Every variable read in the program asks whether the name is one of the
+    /// seven above, and almost none of them is (GitLab #710). One byte
+    /// comparison answers "no" for `<users>`, `<total>`, `<_with_>` and the
+    /// rest without hashing the string or walking a seven-case switch.
+    ///
+    /// Derived by hand from `magicNames` rather than computed, because a
+    /// `Set<UInt8>` lookup would hash — which is the cost being avoided. A
+    /// test asserts the two agree, so adding a magic name that starts with a
+    /// new letter fails the suite instead of making that name unresolvable.
+    static func mayBeMagic(_ name: String) -> Bool {
+        switch name.utf8.first {
+        case UInt8(ascii: "n"), UInt8(ascii: "c"), UInt8(ascii: "C"),
+             UInt8(ascii: "h"), UInt8(ascii: "m"), UInt8(ascii: "a"):
+            return true
+        default:
+            return false
+        }
+    }
+
     /// Resolve a framework-provided name.
     nonisolated func resolveMagic(_ name: String) -> MagicResolution {
         switch name {
@@ -587,7 +651,7 @@ public actor RuntimeContext: ExecutionContext {
     nonisolated func resolveAnyWithoutDraining(_ name: String) -> (any Sendable)? {
         // Names the framework answers itself, before any variable store is
         // consulted (`<now>`, `<contract>`, `<metrics>`, …).
-        if case .resolved(let value) = resolveMagic(name) { return value }
+        if Self.mayBeMagic(name), case .resolved(let value) = resolveMagic(name) { return value }
 
         // Iterative walk without the drain fallback — see `resolveWithoutDraining`
         // for the drain reasoning and `ancestorHolding` for why it is a loop.
@@ -629,7 +693,7 @@ public actor RuntimeContext: ExecutionContext {
     /// Magic variables (e.g. `<now>`, `<contract>`) never produce futures and
     /// fall through to the regular resolveAny path.
     public nonisolated func resolveAnyRaw(_ name: String) -> (any Sendable)? {
-        if Self.magicNames.contains(name) {
+        if Self.mayBeMagic(name), Self.magicNames.contains(name) {
             return resolveAny(name)
         }
         let (owner, foreignParent) = ancestorHolding(name)
@@ -642,11 +706,16 @@ public actor RuntimeContext: ExecutionContext {
     /// or task body so the cooperative pool doesn't have a thread tied up
     /// blocking on another task on the same pool.
     ///
-    /// Issue #55, Phase 2.
+    /// Issue #55, Phase 2. It existed but nothing in the runtime called it — only
+    /// tests did — which is the whole of GitLab #707: every read the interpreter
+    /// makes went through the blocking `resolveAny`, from code running on the
+    /// cooperative pool. Reach for it through
+    /// `ExecutionContext.resolveAnyAwaitingDeferred(_:)`, which handles the
+    /// non-`RuntimeContext` case.
     public nonisolated func resolveAnyAsync(_ name: String) async -> (any Sendable)? {
         // Magic variables short-circuit through the sync path — they don't
         // produce futures.
-        if Self.magicNames.contains(name) {
+        if Self.mayBeMagic(name), Self.magicNames.contains(name) {
             return resolveAny(name)
         }
         let (owner, foreignParent) = ancestorHolding(name)
@@ -654,7 +723,14 @@ public actor RuntimeContext: ExecutionContext {
         guard let typedValue = ctx.localVariable(name) else { return nil }
         if let future = typedValue.value as? AROFuture {
             do {
-                return try await future.value()
+                let forced = try await future.value()
+                // Same choice the blocking path makes, and it has to be the same
+                // answer: an action's own binding wins over the value it
+                // returned. This was missing, so adopting the async variant
+                // anywhere would have reintroduced the AROStream-vs-wrapper
+                // divergence `bindingProducedWhileForcing` exists to fix.
+                if let bound = ctx.bindingProducedWhileForcing(name) { return bound }
+                return forced
             } catch {
                 ctx.recordDeferredFailure(
                     error, binding: name, sourceLocation: future.sourceLocation)
@@ -662,6 +738,43 @@ public actor RuntimeContext: ExecutionContext {
             }
         }
         return typedValue.value
+    }
+
+    // MARK: - Non-blocking waits (GitLab #707)
+
+    /// `drainPendingFutures()` for an `async` caller: awaits instead of parking
+    /// a cooperative thread per outstanding future.
+    ///
+    /// Feature-set exit drains whatever nobody read, which is the one thing that
+    /// stops an unread failure being discarded (ARO-0088 §4). Doing it with
+    /// `force()` parked the handler's thread once per outstanding future, at the
+    /// moment a server is most likely to have many handlers finishing at once.
+    /// The compiled binary keeps the blocking drain — `aro_context_drain_deferred`
+    /// is called from generated C, where there is no cooperative thread to lose.
+    @discardableResult
+    public nonisolated func drainPendingFuturesAwaiting() async -> Error? {
+        if _isDraining { return nil }
+        let pending: [AROFuture] = withExclusiveMutation {
+            _isDraining = true
+            let snapshot = pendingFutures
+            pendingFutures.removeAll()
+            return snapshot
+        }
+        defer { _isDraining = false }
+        var firstError: Error?
+        for future in pending {
+            do {
+                _ = try await future.value()
+            } catch {
+                // Recorded as well as returned, for the same reason the blocking
+                // drain does it: the list is already empty, so a failure not
+                // recorded here is gone by the next drain.
+                recordDeferredFailure(
+                    error, binding: future.bindingName, sourceLocation: future.sourceLocation)
+                if firstError == nil { firstError = error }
+            }
+        }
+        return firstError
     }
 
     /// Resolve a variable returning the full TypedValue (type + value)
@@ -1121,7 +1234,8 @@ public actor RuntimeContext: ExecutionContext {
             parent: self,
             isCompiled: _isCompiled,
             isTemplateContext: _isTemplateContext,
-            driverChannel: driverChannel
+            driverChannel: driverChannel,
+            inheritsExecutionId: true
         )
         scope._isStatementScope = true
         return scope
@@ -1187,6 +1301,9 @@ public actor RuntimeContext: ExecutionContext {
     /// (GitLab #561).
     nonisolated(unsafe) private var _deferredFailureLocation: String?
 
+    /// Whether the deferred failure has been written to stderr already.
+    nonisolated(unsafe) private var _deferredFailureReported: Bool = false
+
     nonisolated func recordDeferredFailure(
         _ error: Error,
         binding: String,
@@ -1200,14 +1317,37 @@ public actor RuntimeContext: ExecutionContext {
         // Reads are total, so the caller is about to receive an empty value.
         // Say so: a silently-empty binding is exactly the kind of failure that
         // is impossible to trace back to its cause later.
+        //
+        // Once per failure, though (GitLab #816). The write used to happen on
+        // every call while only the *first* error was stored, so a future
+        // read twice — which is ordinary, a guard and then a use — printed
+        // its multi-line error twice. `Examples/EventReplay` produced 36
+        // stderr lines for three handlers failing once each.
+        let isFirst: Bool = withExclusiveMutation {
+            guard _deferredFailure == nil else { return false }
+            _deferredFailure = error
+            _deferredFailureLocation = sourceLocation
+            _deferredFailureReported = true
+            return true
+        }
+        guard isFirst else { return }
+
         FileHandle.standardError.write(Data(
             "[ARO] Deferred action for '\(binding)' failed: \(error)\n".utf8))
-        withExclusiveMutation {
-            if _deferredFailure == nil {
-                _deferredFailure = error
-                _deferredFailureLocation = sourceLocation
-            }
-        }
+    }
+
+    /// Whether this scope has already written a deferred failure to stderr
+    /// (GitLab #816).
+    ///
+    /// The handler path catches the same failure a moment later and logged
+    /// it again under a different prefix, so one broken statement produced
+    /// two multi-line reports saying the same thing. A caller that is about
+    /// to report an error it caught can ask whether the statement that
+    /// caused it has already spoken.
+    public nonisolated var didReportDeferredFailure: Bool {
+        let owner = statementScopeOwner
+        if owner !== self { return owner.didReportDeferredFailure }
+        return withExclusiveMutation { _deferredFailureReported }
     }
 
     /// Consume the recorded deferred failure, if one was observed.
@@ -1403,7 +1543,10 @@ public actor RuntimeContext: ExecutionContext {
             parent: self,
             isCompiled: _isCompiled,
             isTemplateContext: false,
-            driverChannel: driverChannel
+            driverChannel: driverChannel,
+            // A child scope — a `for each` iteration, a compiled block — is
+            // part of the parent's execution, not one of its own (GitLab #702).
+            inheritsExecutionId: true
         )
     }
 
@@ -1418,7 +1561,8 @@ public actor RuntimeContext: ExecutionContext {
             parent: self,
             isCompiled: _isCompiled,
             isTemplateContext: false,
-            driverChannel: driverChannel
+            driverChannel: driverChannel,
+            inheritsExecutionId: true
         )
     }
 
@@ -1450,20 +1594,64 @@ public actor RuntimeContext: ExecutionContext {
         withExclusiveMutation { _isWaiting = true }
     }
 
+    /// Suspend until `signalShutdown()` (GitLab #631).
+    ///
+    /// Two races, both fatal in their own way, and both from touching
+    /// `shutdownContinuation` without the lock:
+    ///
+    /// - **Lost wake-up.** `signalShutdown()` could run between this
+    ///   function being entered and the continuation being stored. It then
+    ///   saw `nil`, resumed nobody, and the continuation stored a moment
+    ///   later was never resumed by anything — the process hung on exactly
+    ///   the signal that was meant to end it. The signal path is where this
+    ///   is most likely, because a signal arrives at a moment nobody chose.
+    ///
+    /// - **Double resume.** Two concurrent `signalShutdown()` calls could
+    ///   both read the same non-nil continuation before either cleared it,
+    ///   and resuming a `CheckedContinuation` twice traps. `Keepalive`,
+    ///   `Stop` and the signal handler can all call it.
+    ///
+    /// Both sides now take `storageLock`, and a shutdown signalled before
+    /// anyone waited is remembered rather than dropped, so a late waiter
+    /// returns immediately. The remembering is sticky, matching
+    /// `ShutdownCoordinator.isShuttingDown`: a process shuts down once.
+    ///
+    /// Worth knowing which of the two you are looking at. Every waiter that
+    /// actually runs — `Keepalive`, `Schedule`, `Stream`, the compiled
+    /// bridge — waits on `ShutdownCoordinator`, whose `registerWaiter`
+    /// decides "register or return" atomically under its own lock and so
+    /// never had either race. This pair has no callers in the tree. It is
+    /// fixed rather than deleted because it is public API that a plugin or
+    /// SOLARO may hold, and a public function with a data race in it is
+    /// worth more dead than alive only if nobody ever calls it.
     public nonisolated func waitForShutdown() async throws {
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-            shutdownContinuation = continuation
+            let alreadyRequested: Bool = withExclusiveMutation {
+                if _shutdownRequested { return true }
+                shutdownContinuation = continuation
+                return false
+            }
+            if alreadyRequested {
+                continuation.resume(returning: ())
+            }
         }
     }
 
     public nonisolated var isWaiting: Bool {
-        return _isWaiting
+        withExclusiveMutation { _isWaiting }
     }
 
     public nonisolated func signalShutdown() {
-        let continuation = shutdownContinuation
-        shutdownContinuation = nil
-        _isWaiting = false
+        // Take the continuation out under the lock, so two callers cannot
+        // both resume it, and record the request so a waiter that has not
+        // arrived yet does not block forever.
+        let continuation: CheckedContinuation<Void, Error>? = withExclusiveMutation {
+            let pending = shutdownContinuation
+            shutdownContinuation = nil
+            _shutdownRequested = true
+            _isWaiting = false
+            return pending
+        }
         continuation?.resume(returning: ())
     }
 

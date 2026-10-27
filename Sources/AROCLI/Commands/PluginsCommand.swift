@@ -7,6 +7,7 @@ import ArgumentParser
 import Foundation
 import AROPackageManager
 import ARORuntime
+import AROToolchain
 import AROVersion
 
 /// Command group for plugin management
@@ -57,11 +58,25 @@ struct ListPlugins: ParsableCommand {
         let appDir = directory.map { URL(fileURLWithPath: $0) }
             ?? URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
 
-        // List managed plugins from Plugins/ directory
+        // Both listings come from ONE directory (#848). Managed and local is a
+        // distinction of layout — a `plugin.yaml` or not — never of location,
+        // so resolve it once and let the headers say which spelling is on disk
+        // rather than printing two hardcoded names that disagreed with the
+        // loader and with each other.
+        let pluginDir = PluginDirectory.resolve(in: appDir)
+        let dirLabel = pluginDir.map { $0.url.lastPathComponent + "/" }
+            ?? PluginDirectory.canonicalName + "/"
+
+        // Said here too, not only at load time: `aro plugins list` is where
+        // somebody goes to find out what their project has, and it is the one
+        // moment they are looking at the directory's name.
+        if pluginDir?.spelling == .legacy {
+            print(PluginDirectory.deprecationWarning(for: appDir))
+        }
+
         let pm = PackageManager(applicationDirectory: appDir)
         let managedPlugins = try pm.list()
 
-        // List local plugins from plugins/ directory
         let localPlugins = try PluginLoader.shared.listLocalPlugins(from: appDir)
 
         if managedPlugins.isEmpty && localPlugins.isEmpty {
@@ -71,14 +86,14 @@ struct ListPlugins: ParsableCommand {
             print("  aro add <git-url>")
             print("")
             print("To add a local plugin, create:")
-            print("  plugins/MyPlugin.swift")
+            print("  \(PluginDirectory.canonicalName)/MyPlugin.swift")
             return
         }
 
         // Show managed plugins if any
         if !managedPlugins.isEmpty {
             print("")
-            print("Managed Plugins (from Plugins/):")
+            print("Managed Plugins (from \(dirLabel), with a plugin.yaml):")
             print("───────────────────────────────────────────────────────────────────")
 
             // Calculate column widths
@@ -148,7 +163,7 @@ struct ListPlugins: ParsableCommand {
         // Show local plugins if any
         if !localPlugins.isEmpty {
             print("")
-            print("Local Plugins (from plugins/):")
+            print("Local Plugins (from \(dirLabel), no manifest):")
             print("───────────────────────────────────────────────────────────────────")
 
             // Calculate column widths
@@ -626,10 +641,7 @@ struct RebuildPlugins: ParsableCommand {
 
         let projectDir = cargoToml.deletingLastPathComponent()
 
-        guard let cargo = ToolResolver.findTool("cargo", envOverride: "ARO_CARGO_PATH", fallbackPaths: [
-            "\(FileManager.default.homeDirectoryForCurrentUser.path)/.cargo/bin/cargo",
-            "/root/.cargo/bin/cargo",
-        ]) else {
+        guard let cargo = Toolchain.find("cargo") else {
             throw RebuildError.toolNotFound("cargo")
         }
 
@@ -651,21 +663,13 @@ struct RebuildPlugins: ParsableCommand {
             throw RebuildError.sourceNotFound(pluginName, "No .\(ext) files found")
         }
 
-        let compiler: String
-        if cpp {
-            guard let found = ToolResolver.findTool("clang++", envOverride: "ARO_CXX_PATH", fallbackPaths: [
-                "/usr/bin/clang++", "/usr/bin/g++",
-            ]) else {
-                throw RebuildError.toolNotFound("clang++")
-            }
-            compiler = found
-        } else {
-            guard let found = ToolResolver.findTool("clang", envOverride: "ARO_CC_PATH", fallbackPaths: [
-                "/usr/bin/clang", "/usr/bin/gcc",
-            ]) else {
-                throw RebuildError.toolNotFound("clang")
-            }
-            compiler = found
+        // GNU as the last resort, the way these two lists spelled it: clang
+        // first, then g++/gcc. Both lookups go through `Toolchain` now
+        // (GitLab #733).
+        let wanted = cpp ? "clang++" : "clang"
+        let gnu = cpp ? "g++" : "gcc"
+        guard let compiler = Toolchain.find(wanted) ?? Toolchain.find(gnu) else {
+            throw RebuildError.toolNotFound(wanted)
         }
 
         #if os(Linux)
@@ -701,11 +705,10 @@ struct RebuildPlugins: ParsableCommand {
             throw RebuildError.sourceNotFound(pluginName, "No .swift files found")
         }
 
-        // Find swiftc (SWIFTC env var is the established convention; ARO_SWIFTC_PATH also accepted)
-        guard let swiftc = ToolResolver.findTool("swiftc", envOverride: "SWIFTC", fallbackPaths: [
-            "/usr/share/swift/usr/bin/swiftc",
-            "/opt/swift/usr/bin/swiftc",
-        ]) ?? ToolResolver.findTool("swiftc", envOverride: "ARO_SWIFTC_PATH") else {
+        // Both env spellings — SWIFTC is the established convention,
+        // ARO_SWIFTC_PATH is also accepted — are in the table (GitLab #733),
+        // which is what the second lookup here used to be for.
+        guard let swiftc = Toolchain.find("swiftc") else {
             throw RebuildError.toolNotFound("swiftc")
         }
 

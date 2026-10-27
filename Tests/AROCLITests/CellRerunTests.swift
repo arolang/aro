@@ -107,6 +107,57 @@ struct CellRerunTests {
         #expect(engine.session.getVariable("dropped") == nil)
     }
 
+    // MARK: - More than twice
+    //
+    // Every test above runs a cell exactly twice, and twice was the one
+    // count that worked. The ledger was rebuilt from a snapshot taken
+    // BEFORE the cell released its own names, so the second run recorded
+    // an empty set — nothing to release on the third, which then failed
+    // as an ordinary rebind. A notebook cell is edited and re-run far
+    // more than once, so the interesting number is "again, and again".
+
+    @Test("The same cell runs many times")
+    func rerunManyTimes() async {
+        let engine = engine()
+        for i in 1...6 {
+            let outcome = await engine.executeCell(
+                "Compute the <total> from 40 + \(i).", cellID: "c1")
+            #expect(outcome.error == nil,
+                    "run \(i) was refused: \(String(describing: outcome.error))")
+            #expect(engine.session.getVariable("total") as? Int == 40 + i)
+        }
+    }
+
+    @Test("An unchanged cell re-run repeatedly keeps working")
+    func rerunIdenticalSource() async {
+        // The notebook case: press ⇧⏎ on the same cell without editing it.
+        let engine = engine()
+        let source = """
+        Create the <checkout> with { subtotal: 2350, size: "large" }.
+        Extract the <checkout-subtotal> from the <checkout: subtotal>.
+        Compute the <charged> from <checkout-subtotal> + 60.
+        """
+        for i in 1...5 {
+            let outcome = await engine.executeCell(source, cellID: "nb")
+            #expect(outcome.error == nil, "run \(i) was refused")
+            #expect(engine.session.getVariable("charged") as? Int == 2410)
+        }
+    }
+
+    @Test("A cross-cell rebind is still refused after several re-runs")
+    func guardSurvivesManyReruns() async {
+        // The ledger must stay accurate, not merely permissive: releasing
+        // this cell's names repeatedly must not start excusing another
+        // cell's rebind.
+        let engine = engine()
+        for _ in 1...4 {
+            _ = await engine.executeCell("Compute the <total> from 1.", cellID: "c1")
+        }
+        let other = await engine.executeCell("Compute the <total> from 2.", cellID: "c2")
+        #expect(other.error?.name == "ImmutabilityError",
+                "cross-cell rebinding must still be refused")
+    }
+
     @Test("reset() forgets the ledger")
     func resetClearsLedger() async {
         let engine = engine()

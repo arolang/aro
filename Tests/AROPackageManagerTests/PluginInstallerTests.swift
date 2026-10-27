@@ -20,11 +20,17 @@ import Foundation
 @Suite("PluginInstaller", .serialized)
 struct PluginInstallerTests {
 
+    /// `makePluginRepoBlocking` off the cooperative pool: it is a run of
+    /// `git` subprocesses (see `offThePool`).
+    private func makePluginRepo(at repoDir: URL, name: String, handle: String?) async throws {
+        try await offThePool { try makePluginRepoBlocking(at: repoDir, name: name, handle: handle) }
+    }
+
     /// Create a local git repository at `repoDir` containing a
     /// minimal aro-files plugin with the given manifest name/handle.
     /// aro-files plugins have no build step, so the installer needs
     /// nothing but git.
-    private func makePluginRepo(
+    private func makePluginRepoBlocking(
         at repoDir: URL, name: String, handle: String?
     ) throws {
         try FileManager.default.createDirectory(
@@ -70,7 +76,11 @@ struct PluginInstallerTests {
 
     /// Move the upstream repository on by one commit so an `update` has
     /// something to pull.
-    private func commitAnotherChange(in repoDir: URL) throws {
+    private func commitAnotherChange(in repoDir: URL) async throws {
+        try await offThePool { try commitAnotherChangeBlocking(in: repoDir) }
+    }
+
+    private func commitAnotherChangeBlocking(in repoDir: URL) throws {
         try "(* second *)\n".write(
             to: repoDir.appendingPathComponent("features/second.aro"),
             atomically: true, encoding: .utf8)
@@ -88,17 +98,17 @@ struct PluginInstallerTests {
     }
 
     @Test("Install directory is named after the manifest, not the repository")
-    func manifestNamedDirectory() throws {
+    func manifestNamedDirectory() async throws {
         let root = try makeTempDir("dirname")
         defer { try? FileManager.default.removeItem(at: root) }
 
         // Repository directory name ≠ manifest name.
         let repo = root.appendingPathComponent("stats-src")
-        try makePluginRepo(at: repo, name: "plugin-collection", handle: "Stats")
+        try await makePluginRepo(at: repo, name: "plugin-collection", handle: "Stats")
 
         let pluginsDir = root.appendingPathComponent("Plugins")
         let installer = PluginInstaller(directory: pluginsDir)
-        let result = try installer.install(from: "file://\(repo.path)")
+        let result = try await offThePool { try installer.install(from: "file://\(repo.path)") }
 
         #expect(result.name == "plugin-collection")
         #expect(result.path.lastPathComponent == "plugin-collection")
@@ -110,16 +120,16 @@ struct PluginInstallerTests {
     }
 
     @Test("The manifest rewrite preserves the namespace handle")
-    func handleSurvivesRewrite() throws {
+    func handleSurvivesRewrite() async throws {
         let root = try makeTempDir("handle")
         defer { try? FileManager.default.removeItem(at: root) }
 
         let repo = root.appendingPathComponent("repo")
-        try makePluginRepo(at: repo, name: "handled-plugin", handle: "Stats")
+        try await makePluginRepo(at: repo, name: "handled-plugin", handle: "Stats")
 
         let pluginsDir = root.appendingPathComponent("Plugins")
         let installer = PluginInstaller(directory: pluginsDir)
-        let result = try installer.install(from: "file://\(repo.path)")
+        let result = try await offThePool { try installer.install(from: "file://\(repo.path)") }
 
         let installedManifest = try PluginManifest.parse(
             from: result.path.appendingPathComponent("plugin.yaml"))
@@ -133,24 +143,24 @@ struct PluginInstallerTests {
     /// the user updated it and `Collections.pick-random` stopped resolving
     /// (GitLab #661). Both rewrites now go through `PluginManifest.with(source:)`.
     @Test("The handle survives an install/update round trip")
-    func handleSurvivesUpdate() throws {
+    func handleSurvivesUpdate() async throws {
         let root = try makeTempDir("update-handle")
         defer { try? FileManager.default.removeItem(at: root) }
 
         let repo = root.appendingPathComponent("repo")
-        try makePluginRepo(at: repo, name: "handled-plugin", handle: "Stats")
+        try await makePluginRepo(at: repo, name: "handled-plugin", handle: "Stats")
 
         let pluginsDir = root.appendingPathComponent("Plugins")
         let installer = PluginInstaller(directory: pluginsDir)
-        let installed = try installer.install(from: "file://\(repo.path)")
+        let installed = try await offThePool { try installer.install(from: "file://\(repo.path)") }
 
         let manifestPath = installed.path.appendingPathComponent("plugin.yaml")
         #expect(try PluginManifest.parse(from: manifestPath).handle == "Stats")
 
         // Move the upstream repository on so there is something to pull.
-        try commitAnotherChange(in: repo)
+        try await commitAnotherChange(in: repo)
 
-        let result = try installer.update(name: "handled-plugin")
+        let result = try await offThePool { try installer.update(name: "handled-plugin") }
         #expect(result.name == "handled-plugin")
 
         let afterUpdate = try PluginManifest.parse(from: manifestPath)
@@ -190,7 +200,7 @@ struct PluginInstallerTests {
     }
 
     @Test("A second install of the same plugin is refused by manifest name")
-    func duplicateRefusedByManifestName() throws {
+    func duplicateRefusedByManifestName() async throws {
         let root = try makeTempDir("dup")
         defer { try? FileManager.default.removeItem(at: root) }
 
@@ -199,13 +209,13 @@ struct PluginInstallerTests {
         // alongside.
         let repoA = root.appendingPathComponent("repo-a")
         let repoB = root.appendingPathComponent("repo-b")
-        try makePluginRepo(at: repoA, name: "same-name", handle: nil)
-        try makePluginRepo(at: repoB, name: "same-name", handle: nil)
+        try await makePluginRepo(at: repoA, name: "same-name", handle: nil)
+        try await makePluginRepo(at: repoB, name: "same-name", handle: nil)
 
         let installer = PluginInstaller(directory: root.appendingPathComponent("Plugins"))
-        _ = try installer.install(from: "file://\(repoA.path)")
-        #expect(throws: (any Error).self) {
-            _ = try installer.install(from: "file://\(repoB.path)")
+        _ = try await offThePool { try installer.install(from: "file://\(repoA.path)") }
+        await #expect(throws: (any Error).self) {
+            _ = try await offThePool { try installer.install(from: "file://\(repoB.path)") }
         }
     }
 }

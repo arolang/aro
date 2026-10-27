@@ -17,10 +17,15 @@ import Testing
 struct ExecTimeoutTests {
 
     /// Wall-clock seconds spent running `config`, alongside its result.
-    private func timed(_ config: ExecConfig) -> (result: ExecResult, seconds: Double) {
-        let start = Date()
-        let result = ExecuteAction.runCommandSyncForTesting(config)
-        return (result, Date().timeIntervalSince(start))
+    ///
+    /// The run blocks for up to several seconds, so it happens off the
+    /// cooperative pool (see `offThePool`).
+    private func timed(_ config: ExecConfig) async -> (result: ExecResult, seconds: Double) {
+        await offThePool {
+            let start = Date()
+            let result = ExecuteAction.runCommandSyncForTesting(config)
+            return (result, Date().timeIntervalSince(start))
+        }
     }
 
     private func uniqueMarker(_ label: String) -> String {
@@ -47,8 +52,8 @@ struct ExecTimeoutTests {
     private static let enforcementCeiling: Double = 6.0
 
     @Test("A command that outruns its timeout returns exit code -1, quickly")
-    func testTimeoutReturnsMinusOne() {
-        let (result, seconds) = timed(ExecConfig(command: "sleep 30", timeout: 200))
+    func testTimeoutReturnsMinusOne() async {
+        let (result, seconds) = await timed(ExecConfig(command: "sleep 30", timeout: 200))
 
         #expect(result.exitCode == -1)
         #expect(result.error)
@@ -61,9 +66,9 @@ struct ExecTimeoutTests {
     }
 
     @Test("A command that finishes inside its timeout is unaffected")
-    func testFastCommandUnaffected() {
+    func testFastCommandUnaffected() async {
         let timeoutMilliseconds = 5000
-        let (result, seconds) = timed(
+        let (result, seconds) = await timed(
             ExecConfig(command: "echo inside", timeout: timeoutMilliseconds)
         )
 
@@ -89,19 +94,19 @@ struct ExecTimeoutTests {
     }
 
     @Test("Output produced before the timeout is still returned")
-    func testPartialOutputSurvivesTimeout() {
-        let (result, _) = timed(ExecConfig(command: "echo partial; sleep 3", timeout: 300))
+    func testPartialOutputSurvivesTimeout() async {
+        let (result, _) = await timed(ExecConfig(command: "echo partial; sleep 3", timeout: 300))
 
         #expect(result.exitCode == -1)
         #expect(result.output.contains("partial"))
     }
 
     @Test("A SIGTERM-ignoring child is killed anyway")
-    func testSigtermIgnoringChildIsKilled() {
+    func testSigtermIgnoringChildIsKilled() async {
         // `trap "" TERM` makes the shell itself ignore SIGTERM, and the busy loop
         // keeps it in the shell rather than in a signal-killable child — so only
         // the SIGKILL escalation can end this process.
-        let (result, seconds) = timed(
+        let (result, seconds) = await timed(
             ExecConfig(command: #"trap "" TERM; while :; do :; done"#, timeout: 200)
         )
 
@@ -112,20 +117,20 @@ struct ExecTimeoutTests {
     }
 
     @Test("Work the command backgrounded is killed with it")
-    func testBackgroundedGrandchildIsKilled() throws {
+    func testBackgroundedGrandchildIsKilled() async throws {
         let marker = uniqueMarker("grandchild")
         defer { try? FileManager.default.removeItem(atPath: marker) }
 
         // The subshell outlives its parent shell unless the whole process group
         // is signalled — it only touches the marker a full second after the
         // 200ms timeout has already stopped the shell.
-        let (result, _) = timed(
+        let (result, _) = await timed(
             ExecConfig(command: "(sleep 1; touch \(marker)) & sleep 5", timeout: 200)
         )
 
         #expect(result.exitCode == -1)
         // Well past the moment the orphan would have written.
-        Thread.sleep(forTimeInterval: 2.0)
+        try await Task.sleep(for: .seconds(2))
         #expect(
             !FileManager.default.fileExists(atPath: marker),
             "a backgrounded grandchild survived the timeout and kept working"
@@ -133,8 +138,8 @@ struct ExecTimeoutTests {
     }
 
     @Test("timeout: 0 means no timeout")
-    func testZeroTimeoutDisablesTheBound() {
-        let (result, seconds) = timed(ExecConfig(command: "sleep 1", timeout: 0))
+    func testZeroTimeoutDisablesTheBound() async {
+        let (result, seconds) = await timed(ExecConfig(command: "sleep 1", timeout: 0))
 
         #expect(result.exitCode == 0)
         #expect(!result.error)
@@ -142,26 +147,26 @@ struct ExecTimeoutTests {
     }
 
     @Test("A negative timeout is treated as no timeout, not as an instant one")
-    func testNegativeTimeoutDisablesTheBound() {
-        let (result, _) = timed(ExecConfig(command: "sleep 1", timeout: -1))
+    func testNegativeTimeoutDisablesTheBound() async {
+        let (result, _) = await timed(ExecConfig(command: "sleep 1", timeout: -1))
 
         #expect(result.exitCode == 0)
         #expect(!result.error)
     }
 
     @Test("The default timeout is 30 seconds and applies to every construction")
-    func testDefaultTimeout() {
+    func testDefaultTimeout() async {
         #expect(ExecConfig(command: "true").timeout == 30000)
         #expect(ExecConfig.direct(argv: ["true"]).timeout == 30000)
 
         // A command well inside the default is not disturbed by it.
-        let (result, _) = timed(ExecConfig(command: "sleep 0.2"))
+        let (result, _) = await timed(ExecConfig(command: "sleep 0.2"))
         #expect(result.exitCode == 0)
     }
 
     @Test("The shell-free argv form is bounded too")
-    func testArgvFormIsBounded() {
-        let (result, seconds) = timed(
+    func testArgvFormIsBounded() async {
+        let (result, seconds) = await timed(
             ExecConfig.direct(argv: ["sleep", "30"], timeout: 200)
         )
 

@@ -6,6 +6,7 @@
 import ArgumentParser
 import Foundation
 import ARORuntime
+import AROToolchain
 import AROVersion
 
 struct MCPCommand: AsyncParsableCommand {

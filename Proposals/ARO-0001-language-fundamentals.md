@@ -584,13 +584,20 @@ arithmetic_op = "+" | "-" | "*" | "/" | "%" ;
 ### Comparison Operators
 
 ```ebnf
-comparison_op = "==" | "!=" | "is" | "is not"
+comparison_op = "==" | "=" | "!=" | "is" | "is not"
               | "<" | ">" | "<=" | ">=" ;
 ```
 
+`=` is a synonym for `==`, not an assignment: ARO has no assignment, so a
+single `=` cannot be a typo *for* anything and reads unambiguously as
+equality. It is the spelling `where` clauses use throughout `Examples/`
+(`Filter the <errors> from <log-data> where <level> = "ERROR".`) and the one
+the Language Guide uses for handler guards, and the parser has always accepted
+both — this grammar simply did not say so (GitLab #678).
+
 | Operator | Meaning |
 |----------|---------|
-| `==`, `is` | Equal |
+| `==`, `=`, `is` | Equal |
 | `!=`, `is not` | Not equal |
 | `<` | Less than |
 | `>` | Greater than |

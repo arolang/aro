@@ -165,6 +165,7 @@ class AROBackend:
         self,
         kind: str,
         on_stream: Optional[Callable[[str, str], None]] = None,
+        on_input: Optional[Callable[[str, bool], str]] = None,
         timeout: Optional[float] = None,
         **payload: Any,
     ) -> Dict[str, Any]:
@@ -173,6 +174,13 @@ class AROBackend:
         `on_stream` is called with (name, text) for each output chunk as it
         arrives, so a long-running cell shows its `Log` output while it runs
         instead of all at once at the end.
+
+        `on_input` is called with (prompt, password) when the ARO side asks
+        the user a question mid-cell — `Prompt`, `Select`, `Ask` (GitLab
+        #690). It maps straight onto ipykernel's `raw_input` / `getpass`,
+        because the ARO protocol's `input_request` is deliberately shaped
+        like Jupyter's. Without it the shim answers "the client cannot
+        answer", which fails the statement instead of hanging the cell.
         """
         if not self.alive:
             raise AROBackendError("The ARO REPL process is not running")
@@ -204,6 +212,30 @@ class AROBackend:
             if received.get("type") == "stream":
                 if on_stream is not None:
                     on_stream(received.get("name", "stdout"), received.get("text", ""))
+                continue
+
+            if received.get("type") == "input_request":
+                reply: Dict[str, Any] = {
+                    "id": received.get("id", request_id),
+                    "type": "input_reply",
+                }
+                if on_input is None:
+                    # No answerer: say so at once. The ARO side turns this
+                    # into a failed statement naming the reason, which is
+                    # the whole point — a cell waiting on a question
+                    # nobody will answer cannot be told from a slow one.
+                    reply["status"] = "error"
+                else:
+                    try:
+                        reply["value"] = on_input(
+                            received.get("prompt", ""),
+                            bool(received.get("password", False)),
+                        )
+                    except Exception:
+                        # The front-end refused or the user dismissed it.
+                        reply["status"] = "error"
+                process.stdin.write(json.dumps(reply) + "\n")
+                process.stdin.flush()
                 continue
 
             if received.get("type") == "result" and received.get("id") == request_id:

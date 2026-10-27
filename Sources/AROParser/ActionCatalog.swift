@@ -37,7 +37,7 @@ public enum ActionCatalog {
         "compute", "validate", "compare", "transform", "create", "update",
         "accept",
         // Response actions
-        "return", "throw", "emit", "send", "log", "store", "write", "publish",
+        "return", "throw", "emit", "deliver", "send", "log", "store", "write", "publish",
         // Server actions
         "start", "listen", "stop", "keepalive", "broadcast",
         "connect",

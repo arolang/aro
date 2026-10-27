@@ -1,0 +1,21 @@
+This directory is the held-out benchmark (GitLab #785). Nothing in it may be
+mined into a training corpus, ever.
+
+The marker is load-bearing, not decorative. `Train/script/leakage.py`'s
+`corpus_files()` — the single enumerator every leakage check and the benchmark
+tests go through — skips any directory containing a file named `.never-mine`,
+and `leakage.assert_mineable()` raises when pipeline code names a file inside
+one by hand. The data files also carry `.benchmark.` in their names, which
+`corpus_files()` excludes wherever the file sits, so a copy taken out of this
+directory is still excluded.
+
+Why this exists: the 4,000-prompt `aro ask` evaluation was folded back into
+training (2,679 good answers became `code_generation` pairs, 1,160 repaired bad
+answers became feedback pairs), and `Train/eval_prompts.json` — the release
+gate's own prompt set — shares templates with `Train/Material/`. The project's
+two quoted figures, 75.5 % and 67 %, were therefore measured on prompts the
+model had paraphrased answers for. There was no untouched benchmark left.
+
+If you are here because you want more training data: generate it. The whole
+value of this directory is that it has never been trained on, and that value is
+destroyed permanently and silently the first time somebody makes an exception.

@@ -66,19 +66,20 @@ struct ExecArgvConstructionTests {
 @Suite("Exec Injection Resistance")
 struct ExecInjectionResistanceTests {
 
-    /// Runs `argv` through the same execution path the action uses.
-    private func run(argv: [String]) -> ExecResult {
-        ExecuteAction.runCommandSyncForTesting(ExecConfig.direct(argv: argv))
+    /// Runs `argv` through the same execution path the action uses, off the
+    /// cooperative pool (see `offThePool`).
+    private func run(argv: [String]) async -> ExecResult {
+        await offThePool { ExecuteAction.runCommandSyncForTesting(ExecConfig.direct(argv: argv)) }
     }
 
     @Test("Command separator in an argument is not executed")
-    func testCommandSeparatorNotExecuted() throws {
+    func testCommandSeparatorNotExecuted() async throws {
         let marker = FileManager.default.temporaryDirectory
             .appendingPathComponent("aro-471-semicolon-\(ProcessInfo.processInfo.processIdentifier)")
             .path
         defer { try? FileManager.default.removeItem(atPath: marker) }
 
-        let result = run(argv: ["echo", "hello; touch \(marker)"])
+        let result = await run(argv: ["echo", "hello; touch \(marker)"])
 
         // echo receives one literal argument...
         #expect(result.output == "hello; touch \(marker)")
@@ -88,54 +89,54 @@ struct ExecInjectionResistanceTests {
     }
 
     @Test("Command substitution in an argument is not evaluated")
-    func testCommandSubstitutionNotEvaluated() throws {
-        let result = run(argv: ["echo", "$(id -u)", "`id -u`"])
+    func testCommandSubstitutionNotEvaluated() async throws {
+        let result = await run(argv: ["echo", "$(id -u)", "`id -u`"])
 
         #expect(result.output == "$(id -u) `id -u`")
     }
 
     @Test("Pipe and redirection in an argument are literal")
-    func testPipeAndRedirectionAreLiteral() throws {
+    func testPipeAndRedirectionAreLiteral() async throws {
         let marker = FileManager.default.temporaryDirectory
             .appendingPathComponent("aro-471-redirect-\(ProcessInfo.processInfo.processIdentifier)")
             .path
         defer { try? FileManager.default.removeItem(atPath: marker) }
 
-        let result = run(argv: ["echo", "a | b > \(marker)"])
+        let result = await run(argv: ["echo", "a | b > \(marker)"])
 
         #expect(result.output == "a | b > \(marker)")
         #expect(!FileManager.default.fileExists(atPath: marker))
     }
 
     @Test("Argument with whitespace stays a single argument")
-    func testWhitespaceArgumentStaysSingle() throws {
+    func testWhitespaceArgumentStaysSingle() async throws {
         // `-n` suppresses the trailing newline, so two args would print with a
         // space between them and one arg prints verbatim — same string either way.
         // Use `wc -w`-free check: pass to `printf %s` which takes exactly one arg.
-        let result = run(argv: ["printf", "%s", "two words"])
+        let result = await run(argv: ["printf", "%s", "two words"])
 
         #expect(result.output == "two words")
     }
 
     @Test("Executable is resolved through PATH without a shell")
-    func testExecutableResolvedThroughPath() throws {
-        let result = run(argv: ["echo", "resolved"])
+    func testExecutableResolvedThroughPath() async throws {
+        let result = await run(argv: ["echo", "resolved"])
 
         #expect(result.exitCode == 0)
         #expect(result.output == "resolved")
     }
 
     @Test("Absolute executable path is used directly")
-    func testAbsoluteExecutablePath() throws {
-        let result = run(argv: ["/bin/echo", "direct"])
+    func testAbsoluteExecutablePath() async throws {
+        let result = await run(argv: ["/bin/echo", "direct"])
 
         #expect(result.exitCode == 0)
         #expect(result.output == "direct")
     }
 
     @Test("Nonexistent executable fails without invoking a shell")
-    func testNonexistentExecutableFails() throws {
-        let result = run(argv: ["aro-no-such-binary-471", "arg"])
+    func testNonexistentExecutableFails() async throws {
+        let result = await run(argv: ["aro-no-such-binary-471", "arg"])
 
         #expect(result.error)
         #expect(result.exitCode != 0)
@@ -148,25 +149,25 @@ struct ExecInjectionResistanceTests {
 struct ExecShellFormTests {
 
     @Test("Pipeline in the command qualifier is shell-interpreted")
-    func testPipelineStillWorks() throws {
-        let result = ExecuteAction.runCommandSyncForTesting(
-            ExecConfig(command: "echo 'a\nb\nc' | wc -l")
-        )
+    func testPipelineStillWorks() async throws {
+        let result = await offThePool {
+            ExecuteAction.runCommandSyncForTesting(ExecConfig(command: "echo 'a\nb\nc' | wc -l"))
+        }
 
         #expect(result.exitCode == 0)
         #expect(result.output.trimmingCharacters(in: .whitespaces) == "3")
     }
 
     @Test("Redirection in the command qualifier still works")
-    func testRedirectionStillWorks() throws {
+    func testRedirectionStillWorks() async throws {
         let marker = FileManager.default.temporaryDirectory
             .appendingPathComponent("aro-471-shellform-\(ProcessInfo.processInfo.processIdentifier)")
             .path
         defer { try? FileManager.default.removeItem(atPath: marker) }
 
-        let result = ExecuteAction.runCommandSyncForTesting(
-            ExecConfig(command: "echo written > \(marker)")
-        )
+        let result = await offThePool {
+            ExecuteAction.runCommandSyncForTesting(ExecConfig(command: "echo written > \(marker)"))
+        }
 
         #expect(result.exitCode == 0)
         #expect(FileManager.default.fileExists(atPath: marker))

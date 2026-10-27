@@ -90,6 +90,21 @@ public struct ObjectDescriptor: Sendable, Equatable, CustomStringConvertible {
         preposition.indicatesExternalSource
     }
 
+    /// Whether the object slot holds an evaluated expression rather than a
+    /// named source.
+    ///
+    /// The parser puts `_expression_` in the noun when the object is a
+    /// compound expression (`<x> - <y>`, `{ port: 9123 }`), and the value
+    /// itself arrives through the framework variable of the same name. A bare
+    /// `<text>` is a named source, not this.
+    ///
+    /// Actions that read an operation out of their *result's* name need the
+    /// distinction: with an expression in the object slot there is nothing to
+    /// apply an operation to, so the name is just a name (GitLab #903).
+    public var isExpressionValue: Bool {
+        base == FrameworkVariables.expressionValue
+    }
+
     /// Full qualified name for display
     public var fullName: String {
         specifiers.isEmpty ? base : "\(base): \(specifiers.joined(separator: "."))"

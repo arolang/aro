@@ -56,22 +56,43 @@ swift build --product ARORuntime && swift build --product aro
 #   the binary was built against the release you have installed.
 
 aro repl                 # Start the interactive ARO REPL
+aro repl ./MyApp         # …inside a project: its contract, .store seed rows,
+                         # templates/, plugins and feature sets are wired in,
+                         # WITHOUT running Application-Start (GitLab #691).
+                         # `aro kernel --project ./MyApp` does the same.
 aro repl --json          # REPL over line-delimited JSON on stdio (ARO-0091);
                          # the Python shim kernel in Editor/jupyter-aro speaks this
 aro kernel install       # Register the native Jupyter kernel (ZMQ, no Python);
                          # Jupyter then launches `aro kernel --connection-file …`
-aro test ./MyApp         # Run colocated tests (ARO-0015)
+aro test ./MyApp         # Run colocated tests through the interpreter (ARO-0015)
+aro test --compiled ./MyApp   # Build a test-harness binary and run the SAME tests
+                         # through compiled code (ARO-0015 §3.4, GitLab #694). The
+                         # interpreter stays the default; this is the only way the
+                         # test suite can see a compiled/interpreted divergence.
+aro build --tests ./MyApp     # Just the harness binary; exits 1 when a test fails
 aro new plugin foo --lang swift   # Scaffold a plugin (--lang is required:
                                   # swift, rust, c, cpp, python, aro)
 aro add github:org/repo  # Install a plugin from Git
 aro plugins              # List installed plugins
 aro actions              # List built-in and plugin actions
 aro lsp                  # Start the Language Server (stdio)
-aro mcp                  # Start the MCP server (Model Context Protocol)
+aro mcp                  # Start the MCP server (Model Context Protocol).
+                         # 11 tools: check, run, test, compile, graph_diff,
+                         # plugins, examples, actions, qualifiers, parse, syntax.
+                         # `aro_test` reports a FAILING test as a result, not a
+                         # tool error — the agent asked what the tests say, and
+                         # "three fail, here they are" is the answer (#696).
 
 aro ask                  # Interactive AI coding assistant with tool calling
 aro ask "fix this"       # One-shot prompt; uses native MLX on macOS,
                          # llama-server on Linux (auto-downloaded)
+aro ask --export-training Train/seeds/ask_feedback
+                         # Opt-in: turn this project's .context.repairs.jsonl
+                         # into training seeds. Re-validates each pair against
+                         # this build, strips paths/usernames, labels it with
+                         # the diagnostic it repaired (GitLab #800). The writer
+                         # and the reader used different paths, so no real
+                         # repair had ever reached the pipeline.
 ```
 
 ## Architecture
@@ -321,7 +342,7 @@ table and ARO-0004 §11 is generated from it — prefer either over this summary
 - **REQUEST** (Extract, Parse, Retrieve, Fetch, Probe, Pull, Clone): External → Internal
 - **OWN** (Compute, Validate, Compare, Create, Transform, Stage, Checkout): Internal → Internal
 - **RESPONSE** (Return, Throw, **Store, Log, Send, Write**, Render): Internal → External
-- **EXPORT** (Publish, Emit, Commit, Push, Tag, Schedule): Makes symbols globally accessible or exports data
+- **EXPORT** (Publish, Emit, Deliver, Commit, Push, Tag, Schedule): Makes symbols globally accessible or exports data
 - **SERVER** (Start, Stop, Listen, Connect, Close, WaitForEvents): Service lifecycle
 
 `Store`, `Log`, `Send` and `Write` read as exports and declare `.response`. That
@@ -341,7 +362,10 @@ in one feature set take ~2.1s interpreted (~2.8s compiled), not 4.2s.
 
 Effects (`Log`, `Store`, `Emit`, `Send`, `Publish`, `Return`, …) never defer —
 they run at their own statement and force what they read first, so observable
-output stays in source order. Deferral is an allowlist of value-producing verbs
+output stays in source order. `Emit` does not wait for its handlers; `Deliver`
+is the same statement awaited, for when the next statement depends on what a
+handler did (ARO-0088 §7, GitLab #905). Shutdown drains the cascade either
+way. Deferral is an allowlist of value-producing verbs
 (`LazyActionPolicy.deferrableVerbs`); `Sleep` is deliberately excluded because
 the delay *is* the effect.
 
@@ -739,8 +763,28 @@ The Compute action transforms data using built-in operations:
 | `captures` | First regex match, as a record of its groups | `Compute the <p: captures> from <line> by /(?<k>\w+)=(?<v>.*)/.` |
 | `all-captures` | Every match, as a list of those records | `Compute the <ps: all-captures> from <line> by /…/.` |
 | `symmetric-difference` | Elements in exactly one of the two | `Compute the <changed: symmetric-difference> from <before> with <after>.` |
-| `fixed` | Round to N decimal places (2 by default) — money | `Compute the <total: fixed> from <raw>.` |
+| `fixed` | Round to N decimal places (`with { places: N }`, 2 by default) | `Compute the <total: fixed> from <raw>.` |
 | Arithmetic | +, -, *, /, % | `Compute the <total> from <price> * <qty>.` |
+
+**Money is a result type, not a qualifier.** `as Currency` (and `as Decimal`,
+the same format) is exact base-10 arithmetic, so `3 * 2.40` is `7.20` where
+`Float` says `7.199999999999999`. `Decimal` used to be a silent alias for
+`Float` — the word that promises exactness delivering binary floating point —
+and is not any more (GitLab #906). The scale comes from the operands rather
+than being invented: `+`/`-`/`%` take the wider, `*` adds the two and drops
+trailing zeros back to the wider. Division cannot be exact, so the rule is
+stated: six places, half-up, then trimmed the same way — six is four more than
+any circulating currency's minor unit, so an intermediate division never
+decides the cents. Exactness is **contagious**, which is the point: a statement
+reading an exact amount stays exact without the annotation, so an amount is
+computed once and every aggregate downstream agrees about it. `Currency`
+carries **no currency code** — it is a precision format, and the code lives in
+ARO-0014's `Money` schema (`{ amount, currency }`), which composes with it. An
+amount is a number in every sink (JSON, CSV, YAML, HTTP bodies) at its own
+scale, in both execution modes. `fixed` keeps its job — settling a
+*presentation* scale — and on an exact amount it rescales rather than repairs.
+`round`/`rounded`/`precision` still redirect to `fixed`;
+`money`/`currency`/`decimal`/`exact` redirect to `as Currency`.
 
 Encoding qualifiers are specified in `Proposals/ARO-0019-standard-library.md` §3.1,
 collection/text qualifiers in §3.2. A template whose path ends `.html` or `.htm`
@@ -800,7 +844,9 @@ non-match binds an empty record (or empty list), it does not fail** — the same
 call ARO makes for a `Retrieve` that matches nothing. A group that took part in
 no match is absent rather than empty.
 
-**`subset of` is an operator, not a qualifier** (ARO-0042 §3.6, GitLab #864).
+**`subset of` is an operator, not a qualifier** (ARO-0042 §3.6, GitLab #864),
+and it works in `where` as well as `when` (GitLab #894) — filtering is the side
+it is most useful on.
 It answers a question rather than producing a collection, so it sits with `in`,
 `contains` and `matches`: `Return an <OK: status> for the <request> when
 <required-roles> subset of <user-roles>.` Set semantics — a duplicate on the
@@ -819,6 +865,7 @@ statement (GitLab #830):
 | `contains` | `when <name> contains "test"` |
 | `matches` | `when <name> matches "^a.c"` |
 | `before` / `after` | `when <deadline> before <now>` |
+| `subset of` | `where <roles> subset of <granted>` |
 
 The affix operators are **literal** — that is the point of having them, since
 `matches "^a.c"` also accepts `axc`. `starts` and `ends` are not reserved: only
@@ -1014,6 +1061,11 @@ See the [Action Developer Guide](https://github.com/arolang/aro/wiki/Action-Deve
 ```
 Sources/
 ├── AROParser/          # Core parser library
+├── AROToolchain/       # One table of build-tool locations + ToolResolver
+│                       # (GitLab #733). A leaf target with no dependencies, so
+│                       # the runtime, compiler, CLI and package manager can all
+│                       # reach it — tool discovery was implemented nine times
+│                       # with nine candidate lists before it existed.
 ├── ARORuntime/         # Runtime execution (interpreter)
 │   ├── Actions/        # Action protocol, registry, built-ins
 │   ├── Core/           # ExecutionEngine, Context
@@ -1035,10 +1087,10 @@ Sources/
 │       └── RuntimeExecutionBridge.swift # Expression evaluation for built code
 └── AROCLI/             # CLI (run, compile, check, build commands)
 
-Examples/               # 119 examples organized by category (run `ls Examples/` for full list)
+Examples/               # 122 examples organized by category (run `ls Examples/` for full list)
 │                       #
 │                       # plan.md is the canonical description of an example:
-│                       # 110 of the 119 have one, and it is the prompt the
+│                       # 113 of the 122 have one, and it is the prompt the
 │                       # example was written from. expected.txt is its
 │                       # executable contract, and test.hint tells the
 │                       # integration harness how (or whether) to run it.
@@ -1056,11 +1108,13 @@ Examples/               # 119 examples organized by category (run `ls Examples/`
 ├── Expressions/        # Arithmetic, comparison, and logical operators
 ├── Conditionals/       # When guards and conditional execution
 ├── Iteration/          # For-each loops and collection iteration
+├── Ranges/             # `1->10` as a value (ARO-0089)
 ├── Scoping/            # Publish as, business activity scope, framework vars, pipeline, loop isolation
 ├── Immutability/       # Immutable bindings, new-name pattern, qualifier-as-name
 ├── ErrorHandling/      # Error philosophy demonstration
 ├── UserDefinedActions/ # Application.<Name> callable actions (ARO-0081)
 ├── RecursiveActions/   # Recursion shapes: nested frames, tail calls, mutual (ARO-0081 §9)
+├── CurrencyAmounts/    # `as Currency`: exact decimal money, both modes (ARO-0003)
 │
 │   # Events & Lifecycle
 ├── EventExample/       # Custom event emission and handling
@@ -1241,7 +1295,7 @@ The `Proposals/` directory contains language specifications:
 | **0086 Automatic Pipeline Detection** | Implicit pipeline detection |
 | **0087 Plugin SDK** | Plugin SDK & developer experience |
 | **0088 Concurrency Model** | What runs concurrently, ordering guarantees, `parallel for each`, event dispatch, application limits |
-| **0089 Ranges** | `1..10` / `1..<10` as lazy values, lexing rules, why `[1..10]` stays an error (draft) |
+| **0089 Ranges** | `1->10` as a value (both ends included, no exclusive form), why `[1->10]` stays an error |
 | **0090 Streaming I/O** | Request bodies that stream vs. bodies that become values, `x-aro-max-body`, anchoring |
 | **0091 Jupyter Kernel** | `aro repl --json` protocol, notebook cell semantics, output capture |
 | **0092 `aro ask` Assistant** | Local model, tool registry, approval model, `.context` |

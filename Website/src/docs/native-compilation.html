@@ -407,6 +407,62 @@ entry:
             <li>Swift toolchain (for building AROCRuntime)</li>
         </ul>
 
+        <h2>Plugins in a Standalone Binary</h2>
+
+        <p>
+            <code>--static</code> bakes native plugins in. A Swift package plugin is built, C
+            sources are compiled, and a Rust crate gets a <code>staticlib</code>; the resulting
+            object files are linked <em>into</em> the binary with their symbols renamed so
+            several can coexist. Nothing is <code>dlopen</code>ed at run time.
+            <code>--dynamic</code> instead ships each plugin's shared library beside the binary
+            and loads it at startup, the way the interpreter does.
+        </p>
+
+        <h3>Python plugins</h3>
+
+        <p>
+            A Python plugin ordinarily breaks the single-file promise: the binary needs an
+            interpreter, a <code>libpython</code>, and the standard library, all resolved from
+            the machine that built it. So <code>aro build --static</code> declines rather than
+            producing something that looks standalone and dies on the target machine.
+        </p>
+
+        <p>
+            Point <code>ARO_STATIC_PYTHON</code> at a CPython distribution that can be embedded
+            and it builds instead, carrying the interpreter and the parts of the standard
+            library a program actually needs:
+        </p>
+
+<pre><code>ARO_STATIC_PYTHON=/opt/cpython-static aro build ./MyApp</code></pre>
+
+        <div class="warning-box">
+            <h4>It must be a real static <code>libpython</code></h4>
+            <p>
+                A python-build-standalone download, or CPython configured
+                <code>--disable-shared</code>. A stock python.org or Homebrew install will not
+                do, and the reason is worth knowing: they ship a file <em>named</em>
+                <code>libpython3.x.a</code> that is a symlink to the dynamic library. The build
+                reads the file's magic (<code>!&lt;arch&gt;</code>) rather than trusting its name.
+            </p>
+        </div>
+
+        <p>
+            What travels: about 615 files and 35&nbsp;MB, measured against CPython 3.12. What
+            does not: CPython's own test suite, <code>idlelib</code> and <code>tkinter</code>,
+            <code>__pycache__</code>, and <code>site-packages</code> &mdash; the last
+            deliberately, since copying whatever is installed on the build machine is how a
+            binary acquires dependencies nobody declared. A plugin's own requirements are added
+            explicitly instead.
+        </p>
+
+        <p>
+            The stdlib lands beside the executable as <code>aro-python&lt;version&gt;/</code>,
+            not in a temp directory: <code>/tmp</code> is frequently mounted <code>noexec</code>,
+            which the stdlib's C extensions cannot survive. A plugin needing a <strong>native
+            wheel</strong> still cannot be embedded &mdash; those are compiled extensions that no
+            amount of static linking folds in.
+        </p>
+
         <h2>Development vs Production</h2>
 
         <pre><code><span class="code-comment"># Development: Use the interpreter for fast iteration</span>

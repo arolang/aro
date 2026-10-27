@@ -40,25 +40,16 @@ public struct RenameHandler: Sendable {
         position: SourceLocation,
         lines: LineIndex
     ) -> [String: Any]? {
-        for statement in statements {
-            if let aro = statement as? AROStatement {
-                if let result = findPrepareRenameInAROStatement(aro, position: position, lines: lines) {
-                    return result
-                }
-            } else if let forEachLoop = statement as? ForEachLoop {
-                if let result = findPrepareRenameInStatements(forEachLoop.body, position: position, lines: lines) { return result }
-            } else if let rangeLoop = statement as? RangeLoop {
-                if let result = findPrepareRenameInStatements(rangeLoop.body, position: position, lines: lines) { return result }
-            } else if let whileLoop = statement as? WhileLoop {
-                if let result = findPrepareRenameInStatements(whileLoop.body, position: position, lines: lines) { return result }
-            } else if let matchStmt = statement as? MatchStatement {
-                for caseClause in matchStmt.cases {
-                    if let result = findPrepareRenameInStatements(caseClause.body, position: position, lines: lines) { return result }
-                }
-            } else if let pipeline = statement as? PipelineStatement {
-                for stage in pipeline.stages {
-                    if let result = findPrepareRenameInAROStatement(stage, position: position, lines: lines) { return result }
-                }
+        // GitLab #723: what counts as "inside a feature set" is the shared
+        // walker's answer, not a private `as?` chain's. The chain that stood
+        // here knew about loops, match cases and pipeline stages but not
+        // about `when { … }` or a match's `otherwise`, so a name that
+        // appeared only there could not be renamed at all — the request
+        // returned nothing and the editor said the symbol could not be
+        // renamed.
+        for aro in AROStatementWalk.flatten(statements) {
+            if let result = findPrepareRenameInAROStatement(aro, position: position, lines: lines) {
+                return result
             }
         }
         return nil
@@ -184,54 +175,30 @@ public struct RenameHandler: Sendable {
     }
 
     private func findSymbolInStatements(_ statements: [Statement], position: SourceLocation) -> (String, SourceSpan)? {
-        for statement in statements {
-            if let aro = statement as? AROStatement {
-                if aro.result.span.contains(position) { return (aro.result.base, aro.result.span) }
-                if aro.object.noun.span.contains(position) { return (aro.object.noun.base, aro.object.noun.span) }
-                if let expr = aro.valueSource.asExpression, let result = findSymbolInExpression(expr, position: position) { return result }
-            } else if let forEachLoop = statement as? ForEachLoop {
-                if let result = findSymbolInStatements(forEachLoop.body, position: position) { return result }
-            } else if let rangeLoop = statement as? RangeLoop {
-                if let result = findSymbolInStatements(rangeLoop.body, position: position) { return result }
-            } else if let whileLoop = statement as? WhileLoop {
-                if let result = findSymbolInStatements(whileLoop.body, position: position) { return result }
-            } else if let matchStmt = statement as? MatchStatement {
-                for caseClause in matchStmt.cases {
-                    if let result = findSymbolInStatements(caseClause.body, position: position) { return result }
-                }
-            } else if let pipeline = statement as? PipelineStatement {
-                for stage in pipeline.stages {
-                    if stage.result.span.contains(position) { return (stage.result.base, stage.result.span) }
-                    if stage.object.noun.span.contains(position) { return (stage.object.noun.base, stage.object.noun.span) }
-                    if let expr = stage.valueSource.asExpression, let result = findSymbolInExpression(expr, position: position) { return result }
-                }
-            }
+        // A pipeline stage *is* an `AROStatement`, which is why the old
+        // chain's stage branch was a copy of its own first branch. The walker
+        // yields stages as the statements they are, so there is one branch
+        // again (GitLab #723).
+        for aro in AROStatementWalk.flatten(statements) {
+            if aro.result.span.contains(position) { return (aro.result.base, aro.result.span) }
+            if aro.object.noun.span.contains(position) { return (aro.object.noun.base, aro.object.noun.span) }
+            if let expr = aro.valueSource.asExpression, let result = findSymbolInExpression(expr, position: position) { return result }
         }
         return nil
     }
 
     private func findEditsInStatements(_ statements: [Statement], name: String, newName: String, lines: LineIndex) -> [[String: Any]] {
+        // `flattenAll` rather than `flatten`, because a rename has to touch
+        // `Publish as <alias> <variable>` too, and that is not an action
+        // (GitLab #723). Container nodes come through as well and are
+        // ignored here; the statements they hold arrive on their own.
         var edits: [[String: Any]] = []
-        for statement in statements {
+        for statement in AROStatementWalk.flattenAll(statements) {
             if let aro = statement as? AROStatement {
                 edits.append(contentsOf: findEditsInAROStatement(aro, name: name, newName: newName, lines: lines))
             } else if let publish = statement as? PublishStatement {
                 if publish.internalVariable == name {
                     edits.append(createTextEdit(span: publish.span, newText: newName, lines: lines))
-                }
-            } else if let forEachLoop = statement as? ForEachLoop {
-                edits.append(contentsOf: findEditsInStatements(forEachLoop.body, name: name, newName: newName, lines: lines))
-            } else if let rangeLoop = statement as? RangeLoop {
-                edits.append(contentsOf: findEditsInStatements(rangeLoop.body, name: name, newName: newName, lines: lines))
-            } else if let whileLoop = statement as? WhileLoop {
-                edits.append(contentsOf: findEditsInStatements(whileLoop.body, name: name, newName: newName, lines: lines))
-            } else if let matchStmt = statement as? MatchStatement {
-                for caseClause in matchStmt.cases {
-                    edits.append(contentsOf: findEditsInStatements(caseClause.body, name: name, newName: newName, lines: lines))
-                }
-            } else if let pipeline = statement as? PipelineStatement {
-                for stage in pipeline.stages {
-                    edits.append(contentsOf: findEditsInAROStatement(stage, name: name, newName: newName, lines: lines))
                 }
             }
         }

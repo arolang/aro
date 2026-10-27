@@ -22,12 +22,19 @@ sentence that asked for it.
 # macOS
 brew tap arolang/aro && brew install aro
 
-# Linux
+# Linux (Ubuntu 24.04 or newer)
 curl -L https://github.com/arolang/aro/releases/latest/download/aro-linux-amd64.tar.gz | tar xz
 sudo mv aro /usr/local/bin/ && sudo mv libARORuntime.a /usr/local/lib/
 
 aro --version
 ```
+
+The Linux build is produced on Ubuntu 24.04 and links that release's glibc
+(2.39) and `libgit2.so.1.7`. On 22.04 it does not start. It was built on 22.04
+until 0.13.x, which had the mirror-image problem — `libgit2.so.1.1` is not on
+24.04 either — and the move was made because libgit2 1.1 cannot read a shallow
+clone, so `Retrieve the <log> from the <git>` answered "no commits" on any
+`--depth` checkout (GitLab #897). Build from source for an older distribution.
 
 The tap is `arolang/aro` (the repository `github.com/arolang/homebrew-aro`, which the release
 pipeline updates). `brew install arolang/tap/aro` names a different tap that does not exist.
@@ -122,8 +129,8 @@ paths:
 ```
 
 The contract is also the only place complex types are defined. ARO itself has String, Integer,
-Float, Boolean and DateTime, plus `List` and `Map`; everything else comes from
-`components.schemas`.
+Float, Currency (exact base-10 decimals, for money), Boolean and DateTime, plus `List` and `Map`;
+everything else comes from `components.schemas`.
 
 ### The rules worth knowing on day one
 
@@ -161,8 +168,10 @@ all 34.
 aro run ./MyApp              # interpret
 aro check ./MyApp            # errors, warnings, per-route body analysis
 aro test ./MyApp             # run the Given/When/Then feature sets
+aro test --compiled ./MyApp  # run the same tests through a native binary
 aro build ./MyApp            # compile to a native binary via LLVM
-aro repl                     # interactive
+aro repl [./MyApp]           # interactive; a project directory wires in its
+                             # contract, stores, templates and plugins
 aro kernel install           # register the Jupyter kernel
 aro ui ./MyApp               # open Solaro, the ARO IDE
 aro ask "add a delete route" # local-model assistant
@@ -183,6 +192,7 @@ Most of ARO works everywhere. This table is the contract; please keep it current
 | `aro run`, `check`, `compile`, `test` | ✅ | ✅ | ✅ |
 | `aro repl`, `repl --json` | ✅ | ✅ | ✅ ⁹ |
 | `aro build` | ✅ | ✅ | ❌ ¹ |
+| `aro test --compiled`, `aro build --tests` | ✅ | ✅ | ❌ ¹ |
 | `aro build` with a Python plugin | ⚠️ ¹¹ | ⚠️ ¹¹ | ❌ ¹ |
 | **Services** ||||
 | HTTP server | ✅ | ✅ | ✅ ² |
@@ -199,6 +209,7 @@ Most of ARO works everywhere. This table is the contract; please keep it current
 | Git actions (ARO-0080) | ✅ | ✅ | ❌ ⁵ |
 | `.store` write-back | ✅ opt-in | ✅ opt-in | ✅ opt-in ⁶ |
 | Terminal UI | ✅ | ✅ | ✅ ⁷ |
+| Notebook interactive input | ✅ | ✅ | ⚠️ shim only ¹³ |
 | Metrics | ✅ | ✅ | ✅ ⁸ |
 | **Tools** ||||
 | `aro lsp`, `mcp`, `ask`, `kernel` | ✅ | ✅ | ❌ ¹⁰ |
@@ -226,6 +237,12 @@ Most of ARO works everywhere. This table is the contract; please keep it current
 ¹² HTTP sessions and socket promotion work — the Windows server goes through
    the same request handler and publishes the same connection events — but a
    session cannot reach a WebSocket there, because there is no WebSocket (²)
+¹³ `Prompt`, `Select` and `Ask` in a notebook cell: the native kernel serves
+   Jupyter's stdin channel, and `aro repl --json` the matching `input_request`
+   message, so Windows gets it through the Python shim (which speaks that
+   protocol) but not through `aro kernel`, which is not built there (¹⁰).
+   Where nobody can answer, the statement fails with the reason rather than
+   waiting — ARO-0091 §Interactive input, GitLab #690
 
 `MISSING.md` is the fuller list of what is absent, and why.
 

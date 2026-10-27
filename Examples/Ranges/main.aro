@@ -1,0 +1,89 @@
+(* Ranges — `1->10` as a value (ARO-0089)
+ *
+ * A range is a value, not a loop: it goes wherever an expression goes. It
+ * says where it starts and where it ends, and both are included — "one to
+ * ten" reads the way it is written. There is no exclusive-upper-bound
+ * operator; where you want one, subtract.
+ *
+ * The `for each` collection slot is the one place a range is never
+ * materialised, so `for each <n> in 1->10_000_000` costs no more memory than
+ * `1->10`.
+ *)
+
+(Histogram: Action) {
+    Extract the <hours> from the <input: hours>.
+    Compute the <buckets: length> from <hours>.
+    Return an <OK: status> with { buckets: <buckets> }.
+}
+
+(Application-Start: Ranges) {
+    Require the <console> from the <framework>.
+
+    (* Both ends are included *)
+    Log "=== 1->5 ===" to the <console>.
+    for each <n> in 1->5 {
+        Log <n> to the <console>.
+    }
+
+    (* An exclusive upper bound is a subtraction, written where it shows *)
+    Log "=== 1->(5 - 1) ===" to the <console>.
+    for each <n> in 1->(5 - 1) {
+        Log <n> to the <console>.
+    }
+
+    (* Endpoints are expressions, evaluated once. An arrow needs no space
+     * around it, whatever the endpoints are. *)
+    Create the <lo> with 2.
+    Create the <hi> with 4.
+    Log "=== <lo>-><hi> ===" to the <console>.
+    for each <n> in <lo>-><hi> {
+        Log <n> to the <console>.
+    }
+
+    (* A range binds looser than arithmetic, so this is 1->(<hi> + 1) *)
+    Log "=== 1-><hi> + 1 ===" to the <console>.
+    Compute the <span: length> from 1-><hi> + 1.
+    Log <span> to the <console>.
+
+    (* Measuring a range *)
+    Log "=== length ===" to the <console>.
+    Compute the <ten: length> from 1->10.
+    Log <ten> to the <console>.
+    Compute the <day: length> from 0->23.
+    Log <day> to the <console>.
+
+    (* A descending range is empty — reversing is `Reverse`, not a range *)
+    Log "=== 10->1 is empty ===" to the <console>.
+    Compute the <nothing: length> from 10->1.
+    Log <nothing> to the <console>.
+
+    (* Numeric separators work in endpoints (ARO-0082) *)
+    Log "=== 1_001->2_000 ===" to the <console>.
+    Compute the <thousand: length> from 1_001->2_000.
+    Log <thousand> to the <console>.
+
+    (* As a value: bound to a name, filtered, summed, passed to an action *)
+    Log "=== as a value ===" to the <console>.
+    Create the <decade> with 1->10.
+    Log <decade> to the <console>.
+    Compute the <total: sum> from 1->10.
+    Log <total> to the <console>.
+    Filter the <big> from 1->10 where <item> > 7.
+    Log <big> to the <console>.
+    Application.Histogram the <hours> with { hours: 0->23 }.
+    Log <hours: buckets> to the <console>.
+
+    (* A `where` filter and an `at <index>` clause apply to a range loop *)
+    Log "=== every third ===" to the <console>.
+    for each <n> at <i> in 1->10 where <n> % 3 == 0 {
+        Log <n> to the <console>.
+    }
+
+    (* Counting to 300 000 costs two integers of memory, not 300 000 *)
+    Log "=== 1->300_000, streamed ===" to the <console>.
+    for each <n> in 1->300_000 where <n> > 299_998 {
+        Log <n> to the <console>.
+    }
+
+    Return an <OK: status> for the <demo>.
+}

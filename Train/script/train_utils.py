@@ -316,6 +316,108 @@ def select_min_max_checkpoint(per_ckpt_task_losses):
     return best_name, best_stats
 
 
+# Default warmup for the SFT stages (config.py: "warmup 40→100", #440). A run
+# whose best validation iteration lands inside warmup never actually learned
+# anything — the schedule was still ramping the learning rate.
+DEFAULT_WARMUP_ITERS = 100
+
+
+def degenerate_run_reason(metrics, warmup=DEFAULT_WARMUP_ITERS):
+    """Why this training run must not be fused, or None if it is usable.
+
+    `metrics` is a run's metrics dict — `experiments.db`'s `metrics` column, or
+    the `meta.json` a fine-tune stage writes beside its adapter.
+
+    Three questions, in the order they became necessary:
+
+    * **Did it say it failed?** `training_failed` is the explicit flag.
+    * **Is the best iteration degenerate?** `experiments.db` row 12 of the
+      2026-08 run recorded `best_val_iter: 1` with `stopped_early: True`, was
+      fused, trained on top of, and shipped as the teacher. A best iteration
+      inside warmup is not an early stop that found its minimum quickly; it is
+      a run whose validation loss never improved after the first evaluation,
+      and the schedule had not finished ramping the learning rate (#788).
+    * **Did it stop early?** Only when the best iteration is unknown. An early
+      stop is *normal* when the run found its minimum and the patience window
+      then expired — row 1 of the same table stopped early with
+      `best_val_iter: 450` and is a perfectly good model. Rejecting on the flag
+      alone throws away healthy runs, which is why it cannot be the whole test.
+
+    Returns a human-readable reason, so callers can print why a model was
+    skipped rather than skipping it in silence.
+    """
+    if not isinstance(metrics, dict):
+        return None
+
+    if metrics.get('training_failed'):
+        return 'the run recorded training_failed'
+
+    best_iter = metrics.get('best_val_iter')
+    if best_iter is not None:
+        try:
+            best_iter = int(best_iter)
+        except (TypeError, ValueError):
+            return None
+        if best_iter < int(warmup):
+            return (f'best validation iteration {best_iter} is inside warmup '
+                    f'({warmup}) — the run never improved past its first '
+                    f'evaluation')
+        # A known, healthy best iteration. `stopped_early` here means the
+        # patience window expired after a real minimum, which is what early
+        # stopping is for.
+        return None
+
+    if metrics.get('stopped_early'):
+        return 'the run stopped early and recorded no best_val_iter'
+
+    return None
+
+
+def run_is_usable(metrics, warmup=DEFAULT_WARMUP_ITERS):
+    """Convenience inverse of `degenerate_run_reason`."""
+    return degenerate_run_reason(metrics, warmup=warmup) is None
+
+
+# A multi-turn booster needs enough distinct conversations that the run is
+# learning the shape of a dialogue rather than memorising a handful of them.
+MIN_CONVERSATIONS_FOR_BOOSTER = 200
+
+
+def conversation_corpus_verdict(n_convos, iters=None, batch_size=None,
+                                minimum=MIN_CONVERSATIONS_FOR_BOOSTER):
+    """Why the conversation booster must not run, or None if it should.
+
+    The 2026-08 release fine-tuned on **17** conversations for 300 iterations at
+    batch 1x8 — about 140 epochs over the same seventeen rows — and the README
+    describes that booster as producing the final model (#790). A LoRA applied
+    last and fused into the release is the most consequential stage in the
+    pipeline, and it was the one with the least data behind it.
+
+    There is no gate that makes 17 rows safe, so this is a floor rather than a
+    tuning knob: below it the honest action is to skip the stage and ship the
+    model the previous stage produced, not to fuse a memorised one.
+
+    `iters` and `batch_size` are optional and only sharpen the message, so a
+    reader sees the epoch count that makes the number alarming rather than
+    having to work it out.
+    """
+    try:
+        n = int(n_convos)
+    except (TypeError, ValueError):
+        return None
+    if n >= int(minimum):
+        return None
+
+    detail = f'{n} conversation{"" if n == 1 else "s"} is below the {minimum} this stage needs'
+    if iters and batch_size and n > 0:
+        try:
+            epochs = (int(iters) * int(batch_size)) / n
+            detail += f' — {int(iters)} iterations at batch {batch_size} is about {epochs:.0f} epochs over the same rows'
+        except (TypeError, ValueError, ZeroDivisionError):
+            pass
+    return detail
+
+
 def source_to_task_type(source):
     """Map a knowledge_pairs `source` tag to a coarse task type.
     Mirrors NB16's mapping so NB05's per-task validation uses the same

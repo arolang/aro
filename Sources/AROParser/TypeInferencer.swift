@@ -66,6 +66,12 @@ public enum TypeInferencer {
                 return leftType == rightType ? leftType : .unknown
             }
 
+        // A range yields a list of Ints (ARO-0089, GitLab #546) — it
+        // materialises everywhere except the `for each` collection slot, so
+        // that is also what a reader of the type should expect.
+        case is RangeExpression:
+            return .list(.integer)
+
         case is UnaryExpression:
             return .unknown
 

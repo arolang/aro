@@ -42,9 +42,12 @@
 // three levels. Each level's *primary* dispatch is centralized
 // and documented so adding a token/rule is one edit:
 //
-//   1. Statement level  — `statementDispatch` (static table).
+//   1. Statement level  — `parseStatement` (single dispatch site).
 //        Leading keyword → statement parser. Default fallthrough
-//        is an ARO action statement / `|>` pipeline.
+//        is an ARO action statement / `|>` pipeline. A `switch`
+//        for the same reason level 2 is one (GitLab #721): the
+//        keyword is settled by the TokenKind discriminator, and
+//        the kind being matched is usually a payload case.
 //   2. Expression prefix — `parsePrefix` (single dispatch site).
 //        Leading token → prefix expression parser. Payload cases
 //        (identifier/literals) bind their value inline, so this
@@ -72,7 +75,7 @@
 //   - `parseMapEntry`          token → map key
 //   - `parseInterpolatedString` interpolation token → StringPart
 // Adding a new *dispatch* (a token that starts a new kind of
-// statement/expression) touches only the three tables above.
+// statement/expression) touches only the three sites above.
 
 import Foundation
 
@@ -343,44 +346,43 @@ public final class Parser {
     // MARK: - Statement Parsing
 
     /// Parses a statement (ARO, Publish, Require, Match, or ForEach)
-    /// A statement-level parse rule. The leading keyword token has already
-    /// been matched by `statementDispatch`; the parselet consumes it (and any
-    /// lookahead it needs) and produces the corresponding `Statement`.
-    private typealias StatementParselet = @Sendable (Parser) throws -> Statement
-
-    /// Centralized statement dispatch table (#337).
     ///
-    /// This is THE single place that maps a *leading keyword token* to the
-    /// statement parser it selects. Introducing a statement form that begins
-    /// with a dedicated keyword is one entry here — no other method changes,
-    /// and the dispatch strategy is data rather than an implicit `if`/`switch`
-    /// chain. It mirrors the infix `binaryPrecedence` table (#348) so all
-    /// primary parse-rule selection lives in explicit tables.
+    /// Centralized statement dispatch (#337).
     ///
-    /// Tokens NOT listed here (action verbs, identifiers, `<`, literals, …)
-    /// fall through to the default ARO action-statement / `|>` pipeline path
-    /// documented in `parseStatement`. Entries are matched by `TokenKind`
-    /// equality; keys are payload-free keyword kinds, so the scan is exact.
+    /// The `switch` below is THE single place that maps a *leading keyword
+    /// token* to the statement parser it selects. Introducing a statement form
+    /// that begins with a dedicated keyword is one `case` here — no other
+    /// method changes.
+    ///
+    /// Tokens NOT listed (action verbs, identifiers, `<`, literals, …) fall
+    /// through to the default ARO action-statement / `|>` pipeline path below.
     /// `for` appears twice because the lexer may emit it as either the `.for`
     /// keyword or `.preposition(.for)`.
-    private static let statementDispatch: [(match: TokenKind, parse: StatementParselet)] = [
-        (.match,             { try $0.parseMatchStatement() }),               // ARO-0004
-        (.when,              { try $0.parseWhenBlock() }),                     // GitLab #516
-        (.for,               { try $0.parseForOrRangeLoop() }),               // ARO-0005 / ARO-0072
-        (.preposition(.for), { try $0.parseForOrRangeLoop() }),
-        (.parallel,          { try $0.parseParallelForEachLoop() }),
-        (.while,             { try $0.parseWhileLoop() }),                    // ARO-0002 / GitLab #131
-        (.break,             { try $0.parseBreakStatement() }),
-        (.publish,           { try $0.parsePublishStatementForm() }),
-        (.require,           { try $0.parseRequireStatementForm() }),         // ARO-0003
-    ]
-
+    ///
+    /// GitLab #721: this used to be a static array of
+    /// `(TokenKind, (Parser) throws -> Statement)` pairs scanned with
+    /// `first(where:)`. Every statement in the file walked up to nine entries
+    /// calling `TokenKind ==` through a closure, and the common cases — an
+    /// action verb or an identifier — matched nothing and paid for the whole
+    /// scan. A dictionary was the obvious alternative but the wrong one:
+    /// `TokenKind` is `Equatable`, not `Hashable`, and the kind being looked
+    /// up is usually `.identifier(String)`, so keying on it would hash a
+    /// string per statement to answer a question the discriminator alone
+    /// settles. A `switch` compiles to a jump on that discriminator, which is
+    /// also what `parsePrefix` does one level down (see the dispatch-map note
+    /// at the top of this file) and for the same reason.
     private func parseStatement() throws -> Statement {
-        // Centralized keyword dispatch (#337): the leading token selects a
-        // dedicated statement parser. See `statementDispatch`.
-        let kind = peek().kind
-        if let rule = Parser.statementDispatch.first(where: { $0.match == kind }) {
-            return try rule.parse(self)
+        switch peek().kind {
+        case .match:             return try parseMatchStatement()          // ARO-0004
+        case .when:              return try parseWhenBlock()               // GitLab #516
+        case .for,
+             .preposition(.for): return try parseForOrRangeLoop()          // ARO-0005 / ARO-0072
+        case .parallel:          return try parseParallelForEachLoop()
+        case .while:             return try parseWhileLoop()               // ARO-0002 / GitLab #131
+        case .break:             return try parseBreakStatement()
+        case .publish:           return try parsePublishStatementForm()
+        case .require:           return try parseRequireStatementForm()    // ARO-0003
+        default:                 break
         }
 
         // Default path: an ARO action statement (action without angle
@@ -960,13 +962,14 @@ public final class Parser {
 
     /// Check if a verb is a sink action verb
     /// Sink verbs write data TO system objects
+    private static let sinkVerbs: Set<String> = [
+        "log", "print", "output", "debug",  // LogAction
+        "write",                             // WriteAction
+        "send", "dispatch"                   // SendAction
+    ]
+
     private func isSinkActionVerb(_ verb: String) -> Bool {
-        let sinkVerbs: Set<String> = [
-            "log", "print", "output", "debug",  // LogAction
-            "write",                             // WriteAction
-            "send", "dispatch"                   // SendAction
-        ]
-        return sinkVerbs.contains(verb.lowercased())
+        return Self.sinkVerbs.contains(verb.lowercased())
     }
 
     /// Check if the current token starts sink syntax
@@ -1060,7 +1063,11 @@ public final class Parser {
                     switch tokens[index + 1].kind {
                     case .plus, .minus, .hyphen, .star, .slash, .percent,
                          .plusPlus, .equalEqual, .bangEqual, .lessEqual,
-                         .greaterEqual, .and, .or, .contains, .matches:
+                         .greaterEqual, .and, .or, .contains, .matches,
+                         // The range operator makes the reference the lower
+                         // endpoint of an expression — `from <lo: n>-><hi>`
+                         // (ARO-0089, GitLab #546).
+                         .arrow:
                         return true
                     // `<params: count> default 3` is an expression, not an
                     // object with a query modifier (GitLab #547): read as an
@@ -1335,6 +1342,16 @@ public final class Parser {
             let isBefore = word.lowercased() == "before"
             advance()
             op = isBefore ? .before : .after
+        case .identifier(let word) where word.lowercased() == "subset":
+            // `where <roles> subset of <granted>` (GitLab #894). The `of` is
+            // part of the operator and optional, exactly as the expression
+            // grammar reads it (GitLab #864) — the two spellings of one
+            // operator must not disagree about their own syntax.
+            advance()
+            if case .identifier(let next) = peek().kind, next.lowercased() == "of" {
+                advance()
+            }
+            op = .subsetOf
         case .not:
             advance()
             // Must be followed by 'in' for "not in"
@@ -1345,7 +1362,7 @@ public final class Parser {
                 throw ParserError.unexpectedToken(expected: "'in' after 'not' in where clause", got: peek())
             }
         default:
-            throw ParserError.unexpectedToken(expected: "comparison operator (is, =, <, >, <=, >=, !=, contains, matches, starts with, ends with, before, after, in, not in, between) after <\(field)> in where clause", got: peek())
+            throw ParserError.unexpectedToken(expected: "comparison operator (is, =, <, >, <=, >=, !=, contains, matches, starts with, ends with, before, after, in, not in, subset of, between) after <\(field)> in where clause", got: peek())
         }
 
         // Parse value expression — stops before and/or (see doc comment)
@@ -2141,6 +2158,30 @@ public final class Parser {
         advance()
         result = String(firstValue)
 
+        // A range in a qualifier slot (ARO-0089 §4.2, GitLab #546). The
+        // qualifier slot selects an *operation*, so `<a: 1->10>` is not a
+        // range however it is spelled; left alone it dies on "Expected '>'"
+        // two tokens later. Consume the whole thing so one mistake earns one
+        // diagnostic.
+        if check(.arrow) {
+            let opToken = advance()
+            var upper = ""
+            if case .intLiteral(let endValue) = peek().kind {
+                advance()
+                upper = String(endValue)
+            }
+            diagnostics.error(
+                "A range cannot appear in a qualifier — <\(result)->\(upper)>",
+                at: opToken.span.start,
+                hints: [
+                    "The qualifier slot selects an operation; pass the range as the object instead — "
+                    + "`Compute the <len: length> from \(result)->\(upper).`",
+                    "An element range in a specifier is written with a hyphen — `<items: 1-3>` (ARO-0038)."
+                ]
+            )
+            return result
+        }
+
         // Check for range - the lexer produces intLiteral(-19) for "0-19" after the first "0"
         // So we look for a negative integer literal which indicates a range
         if case .intLiteral(let nextValue) = peek().kind, nextValue < 0 {
@@ -2485,6 +2526,10 @@ public final class Parser {
 /// `default` (GitLab #547) sits between arithmetic and comparison, so
 /// `<a> default 1 + 2` defaults to the whole sum and `<a> default 3 > 2`
 /// compares the defaulted value instead of defaulting to a boolean.
+///
+/// A range (`->`) sits in the same band, looser than arithmetic and tighter
+/// than comparison (ARO-0089 §2.2, GitLab #546): `1-><n> + 1` is
+/// `1->(<n> + 1)`, which is what it reads like.
 private enum Precedence: Int, Comparable {
     case none = 0
     case or = 1           // or
@@ -2493,10 +2538,11 @@ private enum Precedence: Int, Comparable {
     case equality = 4     // == != is is_not contains matches
     case comparison = 5   // < > <= >=
     case defaulting = 6   // default (GitLab #547)
-    case term = 7         // + - ++
-    case factor = 8       // * / %
-    case unary = 9        // unary -
-    case postfix = 10     // . []
+    case range = 7        // -> (ARO-0089)
+    case term = 8         // + - ++
+    case factor = 9       // * / %
+    case unary = 10       // unary -
+    case postfix = 11     // . []
 
     static func < (lhs: Precedence, rhs: Precedence) -> Bool {
         lhs.rawValue < rhs.rawValue
@@ -2762,6 +2808,12 @@ extension Parser {
         case .leftBracket:
             return .postfix
 
+        // The range operator (ARO-0089 §2.2, GitLab #546). `->` has no other
+        // meaning in the grammar — it lexed to an unused token before ranges
+        // existed — so no context is needed to recognise it.
+        case .arrow:
+            return .range
+
         // Context-sensitive: `default` is a value-returning fallback operator
         // (GitLab #547), not a reserved word — a variable or field may still be
         // called `default`. It is suppressed inside a where-condition, where
@@ -2795,6 +2847,26 @@ extension Parser {
             let endToken = try expect(.rightBracket, message: "']'")
             let span = left.span.merged(with: endToken.span)
             return SubscriptExpression(base: left, index: index, span: span)
+
+        // Range: `1->10` (ARO-0089 §2).
+        //
+        // The upper endpoint is parsed at `.range`, so arithmetic binds into it
+        // (`1-><n> + 1` is `1->(<n> + 1)`) while a second range operator does
+        // not. Chaining is then rejected here rather than parsed
+        // left-associatively into `(1->5)->10`, which is not a thing (§2.2).
+        case .arrow:
+            advance()
+            let upper = try parsePrecedence(.range)
+            if check(.arrow) {
+                diagnostics.error(
+                    "Ranges do not chain — `1->5->10` is not a nested range",
+                    at: peek().span.start,
+                    hints: ["Write one range: `1->10`."]
+                )
+            }
+            return RangeExpression(
+                lower: left, upper: upper,
+                span: left.span.merged(with: upper.span))
 
         // Binary operators
         default:
@@ -2976,6 +3048,21 @@ extension Parser {
         }
 
         let endToken = try expect(.rightBracket, message: "']'")
+
+        // `[1->10]` is a one-element list *holding* a range, which is almost
+        // certainly not what the author meant — so it is rejected rather than
+        // defined as sugar (ARO-0089 §5, GitLab #546). Defining it would make
+        // `[1->10]` and `[1->10, 20]` mean systematically different things.
+        for element in elements where element is RangeExpression {
+            diagnostics.error(
+                "[\(element.description)] is a list holding one range, not the values of "
+                + "\(element.description)",
+                at: element.span.start,
+                hints: ["Drop the brackets — `for each <n> in \(element.description) { … }`."]
+            )
+            break
+        }
+
         return ArrayLiteralExpression(elements: elements, span: startToken.span.merged(with: endToken.span))
     }
 

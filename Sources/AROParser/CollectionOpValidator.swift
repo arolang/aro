@@ -99,9 +99,15 @@ public struct CollectionOpValidator {
     /// unrecognized shape as "no where clause" and `Delete … from the
     /// <x-repository>` with no where CLEARS THE WHOLE REPOSITORY. So
     /// the shape is rejected here, where it can still name the fix.
+    ///
+    /// GitLab #721: the verb set is a `static let` because this runs once per
+    /// ARO statement and the set was built *before* the guard that rejects
+    /// almost every one of them — so a four-element Set was allocated and torn
+    /// down per statement to answer "is this a delete?" with "no".
+    private static let deleteVerbs: Set<String> = ["delete", "remove", "destroy", "clear"]
+
     private func validateDeleteWhereCondition(_ statement: AROStatement) {
-        let deleteVerbs: Set<String> = ["delete", "remove", "destroy", "clear"]
-        guard deleteVerbs.contains(statement.action.verb.lowercased()) else { return }
+        guard Self.deleteVerbs.contains(statement.action.verb.lowercased()) else { return }
         guard let condition = statement.queryModifiers.whereCondition,
               condition.singlePredicate == nil else { return }
 
@@ -125,6 +131,19 @@ public struct CollectionOpValidator {
     /// runtime would accept is accepted here, and the one thing it
     /// throws on is the one thing reported.
     private func validateComputeQualifier(_ statement: AROStatement) {
+        // Compute verbs only.
+        //
+        // Extending this to `Log` looked right — it runs the same qualifier
+        // registry — and is wrong: `Log`'s qualifier slot is overloaded.
+        // `Log the <metrics: short>` selects a *metrics format* (ARO-0044),
+        // `<template: raw>` is an escaping directive (GitLab #476), and
+        // neither is in the Compute table. Checking Log against that table
+        // rejects `Examples/MetricsDemo`, which is correct ARO.
+        //
+        // The runtime half of GitLab #648 stands: an unknown qualifier that
+        // reaches the registry now throws instead of warning to stderr. Giving
+        // `Log` a check-time equivalent needs a catalog of *its* qualifier
+        // namespaces first, which is its own piece of work.
         guard ComputeQualifierCatalog.computeVerbs.contains(statement.action.verb.lowercased()) else {
             return
         }
@@ -196,8 +215,14 @@ public struct CollectionOpValidator {
         hints.append("Run `aro actions --qualifiers` for the full set")
 
         let context = chain.map { " (stage of the chain '\($0)')" } ?? ""
+        // Named for the verb that wrote it rather than always "Compute":
+        // `Calculate` and `Derive` dispatch to the same action, and a
+        // diagnostic that names a verb the source does not contain reads as
+        // being about a different statement.
+        let verb = statement.action.verb.prefix(1).uppercased()
+                 + statement.action.verb.dropFirst().lowercased()
         diagnostics.error(
-            "Unknown Compute qualifier '\(qualifier)'\(context)",
+            "Unknown \(verb) qualifier '\(qualifier)'\(context)",
             at: result.span.start,
             hints: hints
         )
@@ -263,22 +288,12 @@ public struct CollectionOpValidator {
 
     // MARK: - Traversal
 
-    /// Flattens the statement tree, descending into match cases and loop
-    /// bodies. Mirrors `CodeQualityValidator.collectAROStatements`.
+    /// The shared walk (GitLab #660). This used to be a private copy that
+    /// descended into `match` and `for each` only — so an unknown Compute
+    /// qualifier inside a `while` body or a `when { }` block passed
+    /// `aro check` green, and the promise that a green check means the
+    /// qualifier exists held only at the top level of a feature set.
     private func collectAROStatements(_ statements: [Statement]) -> [AROStatement] {
-        var result: [AROStatement] = []
-        for statement in statements {
-            if let aro = statement as? AROStatement {
-                result.append(aro)
-            } else if let match = statement as? MatchStatement {
-                for matchCase in match.cases {
-                    result.append(contentsOf: collectAROStatements(matchCase.body))
-                }
-                result.append(contentsOf: collectAROStatements(match.otherwise ?? []))
-            } else if let loop = statement as? ForEachLoop {
-                result.append(contentsOf: collectAROStatements(loop.body))
-            }
-        }
-        return result
+        AROStatementWalk.flatten(statements)
     }
 }

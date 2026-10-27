@@ -43,6 +43,17 @@ config.TYPE_CAPS v4):
     notebook_authoring   the `.repl` JSON shape itself — emit a well-formed
                          cell / document with real captured outputs
 
+**Coverage is reported, not implied** (GitLab #907). Every gate above drops
+cells, and for a long while nothing said how many: the stage was registered,
+ordered correctly in the pipeline and unit-tested, and still nobody could
+answer "how much of the 228-cell course reaches the dataset?". `coverage_row`
+turns each notebook's run into *cells mined / cells present* with every
+dropped cell attributed to the bucket that dropped it, `--min-coverage` makes
+that figure a gate, and the buckets are required to sum to the cells present —
+so a cell cannot be lost between them the way cells after a dead session used
+to be. Measured over the whole course: **201–203 of 228 cells mined**
+(91.8–92.7% of the 219 that are eligible), ~686 pairs.
+
 Usage:
     python3 32_notebook_pairs.py --dry-run          # execute, count, save nothing
     python3 32_notebook_pairs.py                    # save (replaces NB32 rows)
@@ -50,6 +61,7 @@ Usage:
     python3 32_notebook_pairs.py --repeats 1        # skip the reproducibility gate
     python3 32_notebook_pairs.py --aro-check        # audit: `aro check` the emitted ARO
     python3 32_notebook_pairs.py --dump out.jsonl   # write pairs to a file too
+    python3 32_notebook_pairs.py --min-coverage 0.8 # fail when mined/eligible drops
 """
 
 import argparse
@@ -75,6 +87,7 @@ from config import (  # noqa: E402
 )
 import stage_runner  # noqa: E402
 import sandbox  # noqa: E402
+import leakage  # noqa: E402
 
 NOTEBOOK_TAG = 'NB32_notebooks'
 
@@ -185,11 +198,33 @@ def execute_notebook(path: Path, repeats: int) -> tuple[dict, dict]:
 
     Returns (runs, stats). A cell present in `runs` has an output we are
     willing to promise: it happened, and it happened the same way twice.
+
+    `stats` accounts for every code cell in the file exactly once, in one of
+    five buckets, and `coverage_row` asserts the sum. That is the point of the
+    shape rather than a nicety (GitLab #907). The buckets used to be three and
+    they were wrong in two different ways:
+
+    * a cell **after** a dead session was counted nowhere at all. This loop
+      used to iterate the session's results rather than the file's code cells,
+      and `run_notebook_session` stops at the first missing result — so those
+      indices never appeared, and the three buckets silently summed to fewer
+      cells than the notebook has. Cells vanished with no reason attached,
+      which is the one thing a coverage figure must not permit.
+    * a cell carrying `(* expect-error *)` was counted as `failed`. Nothing was
+      lost, but nine of the course's cells are marked, so the `failed` column
+      read as nine regressions when it was the notebook working as written.
     """
     document = json.loads(path.read_text())
     cells = document.get('cells', [])
-    stats = {'code_cells': 0, 'ok': 0, 'nondeterministic': 0, 'failed': 0}
-    stats['code_cells'] = sum(1 for c in cells if c.get('kind') == 'code')
+    code_indices = [i for i, c in enumerate(cells) if c.get('kind') == 'code']
+    stats = {
+        'code_cells':       len(code_indices),
+        'ok':               0,   # mined: ran, and ran the same way every repeat
+        'nondeterministic': 0,   # ran, but the repeats disagreed
+        'failed':           0,   # ran and errored, with no expect-error marker
+        'expected_error':   0,   # marked expect-error: excluded by design
+        'not_reached':      0,   # the session died at or before this cell
+    }
 
     passes = []
     for _ in range(repeats):
@@ -198,9 +233,19 @@ def execute_notebook(path: Path, repeats: int) -> tuple[dict, dict]:
     first = passes[0]
 
     kept = {}
-    for index, run in first.items():
+    for index in code_indices:
         source = cells[index].get('source', '')
-        if run.get('status') != 'ok' or EXPECT_ERROR_MARKER in source:
+        # Checked before the run's status: an expect-error cell is excluded
+        # whatever it did, and conflating it with a genuine failure is what
+        # made the old `failed` bucket unreadable.
+        if EXPECT_ERROR_MARKER in source:
+            stats['expected_error'] += 1
+            continue
+        run = first.get(index)
+        if run is None or run.get('status') == 'dead':
+            stats['not_reached'] += 1
+            continue
+        if run.get('status') != 'ok':
             stats['failed'] += 1
             continue
         if any(_signature(p.get(index, {})) != _signature(run) for p in passes[1:]):
@@ -209,6 +254,130 @@ def execute_notebook(path: Path, repeats: int) -> tuple[dict, dict]:
         stats['ok'] += 1
         kept[index] = run
     return kept, stats
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# Coverage — cells mined / cells present (GitLab #907)
+# ════════════════════════════════════════════════════════════════════════════
+
+def coverage_row(stats: dict) -> dict:
+    """One notebook's coverage, with nothing rounded away.
+
+    Two ratios, because there are two honest questions and they have different
+    answers:
+
+    * `of_present` — mined / every code cell in the file. What fraction of the
+      course the dataset actually carries.
+    * `of_eligible` — mined / (cells that could ever be mined). An
+      `(* expect-error *)` cell exists *because* it fails, and training on its
+      failure as if it were the expected result of correct code is the one
+      thing this stage must not do, so it is not a miss. `of_eligible` is the
+      figure to gate on; `of_present` is the figure to report.
+
+    Both are `None`, not `0.0`, when their denominator is zero — a notebook
+    with no code cells has no coverage, and saying "0%" of it would be a wrong
+    number where no number exists.
+    """
+    present = int(stats['code_cells'])
+    by_design = int(stats['expected_error'])
+    eligible = present - by_design
+    mined = int(stats['ok'])
+
+    accounted = (mined + int(stats['nondeterministic']) + int(stats['failed'])
+                 + by_design + int(stats['not_reached']))
+    if accounted != present:
+        # Not a warning: an unbalanced row means some cells were dropped by
+        # nothing nameable, which is exactly the silent filter #907 is about.
+        raise AssertionError(
+            f'coverage buckets do not account for every cell: '
+            f'{accounted} attributed vs {present} present — {stats}')
+
+    return {
+        'present':          present,
+        'mined':            mined,
+        'eligible':         eligible,
+        'expected_error':   by_design,
+        'nondeterministic': int(stats['nondeterministic']),
+        'failed':           int(stats['failed']),
+        'not_reached':      int(stats['not_reached']),
+        'of_present':       (mined / present) if present else None,
+        'of_eligible':      (mined / eligible) if eligible else None,
+    }
+
+
+def coverage_totals(rows: dict) -> dict:
+    """Course-wide coverage: the per-notebook rows summed, then divided.
+
+    Summed first and divided once — a mean of per-notebook percentages would
+    weight a five-cell notebook like an eleven-cell one.
+    """
+    total = {k: 0 for k in ('present', 'mined', 'eligible', 'expected_error',
+                            'nondeterministic', 'failed', 'not_reached')}
+    for row in rows.values():
+        for key in total:
+            total[key] += row[key]
+    total['notebooks'] = len(rows)
+    total['of_present'] = (total['mined'] / total['present']
+                           if total['present'] else None)
+    total['of_eligible'] = (total['mined'] / total['eligible']
+                            if total['eligible'] else None)
+    return total
+
+
+def _percent(value) -> str:
+    """A ratio as a percentage, or an em dash when there is no ratio."""
+    return '—' if value is None else f'{100 * value:.1f}%'
+
+
+def render_coverage(rows: dict, totals: dict) -> str:
+    """The coverage figure, as a markdown table the CI log can be read for."""
+    lines = [
+        '## Notebook coverage — cells mined / cells present',
+        '',
+        '| Notebook | Present | Mined | of present | of eligible | nondet | '
+        'failed | expect-error | not reached |',
+        '|----------|--------:|------:|-----------:|------------:|-------:|'
+        '-------:|-------------:|------------:|',
+    ]
+    for name in sorted(rows):
+        r = rows[name]
+        lines.append(
+            f'| {name} | {r["present"]} | {r["mined"]} | '
+            f'{_percent(r["of_present"])} | {_percent(r["of_eligible"])} | '
+            f'{r["nondeterministic"]} | {r["failed"]} | '
+            f'{r["expected_error"]} | {r["not_reached"]} |')
+    lines.append(
+        f'| **{totals["notebooks"]} notebooks** | **{totals["present"]}** | '
+        f'**{totals["mined"]}** | **{_percent(totals["of_present"])}** | '
+        f'**{_percent(totals["of_eligible"])}** | '
+        f'**{totals["nondeterministic"]}** | **{totals["failed"]}** | '
+        f'**{totals["expected_error"]}** | **{totals["not_reached"]}** |')
+    return '\n'.join(lines)
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# Which notebooks may be mined
+# ════════════════════════════════════════════════════════════════════════════
+
+def learning_notebooks(match: str | None = None, root: Path | None = None):
+    """The course's `.repl` notebooks, benchmark-excluded.
+
+    One function rather than a bare `glob` at the call site, so the held-out
+    benchmark's exclusion applies here too (GitLab #785): `leakage` owns both
+    mechanisms — a `.never-mine` marker in a directory and a `.benchmark.`
+    infix in a filename — and `assert_mineable` raises rather than warns. The
+    course carries neither marker today; the point is that dropping one in is
+    all it takes, and that this stage will not need a second exclusion of its
+    own invention to honour it.
+    """
+    root = root or LEARNING_DIR
+    paths = sorted(Path(root).glob('*.repl'))
+    if match:
+        paths = [p for p in paths if match in p.name]
+    # root=the course directory bounds the marker walk to it; without a root
+    # `is_never_mined` climbs from Learning/ to the filesystem root, since it
+    # stops at Train/ and a Learning path never passes through Train/.
+    return leakage.assert_mineable(paths, root=root)
 
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -687,6 +856,10 @@ def main():
                     help='keep Q&A whose quoted markdown ARO fails `aro check` '
                          '(the gate is on by default)')
     ap.add_argument('--dump', help='also write the pairs to this .jsonl file')
+    ap.add_argument('--min-coverage', type=float, default=None,
+                    help='fail (exit 1, save nothing) when mined/eligible '
+                         'cells fall below this fraction — the floor for the '
+                         'full-course run (GitLab #907)')
     args = ap.parse_args()
 
     probe = subprocess.run([_aro_bin(), '--version'], capture_output=True)
@@ -694,9 +867,7 @@ def main():
         sys.exit('no working `aro` on PATH — refusing to emit unverified '
                  'notebook outputs (set ARO_BIN or build the CLI)')
 
-    notebooks = sorted(LEARNING_DIR.glob('*.repl'))
-    if args.notebook:
-        notebooks = [n for n in notebooks if args.notebook in n.name]
+    notebooks = learning_notebooks(args.notebook)
     if not notebooks:
         sys.exit(f'no .repl notebooks found under {LEARNING_DIR}')
     # --limit caps the notebooks EXECUTED, not the pairs kept: executing
@@ -707,9 +878,11 @@ def main():
 
     funnel = FunnelCounter('notebook_pairs')
     coverage = {}
+    rows = {}
     reasons: dict = {}
     raw_pairs = []
-    totals = {'code_cells': 0, 'ok': 0, 'nondeterministic': 0, 'failed': 0}
+    totals = {'code_cells': 0, 'ok': 0, 'nondeterministic': 0, 'failed': 0,
+              'expected_error': 0, 'not_reached': 0}
 
     for path in notebooks:
         runs, stats = execute_notebook(path, max(1, args.repeats))
@@ -717,12 +890,21 @@ def main():
                                    prose_gate=not args.no_prose_gate)
         for key in totals:
             totals[key] += stats[key]
-        coverage[path.name] = {**stats, 'pairs': len(pairs)}
+        rows[path.name] = coverage_row(stats)
+        # The raw buckets stay at the top level: generate_training_report.py
+        # reads `ok` and `code_cells` off each notebook to draw its bar.
+        coverage[path.name] = {**stats, 'pairs': len(pairs),
+                               'coverage': rows[path.name]}
         raw_pairs.extend(pairs)
         print(f'  {path.name:<44} cells={stats["code_cells"]:3d} '
-              f'verified={stats["ok"]:3d} '
+              f'mined={stats["ok"]:3d} '
+              f'({_percent(rows[path.name]["of_eligible"])} of eligible) '
               f'nondet={stats["nondeterministic"]:2d} '
-              f'failed={stats["failed"]:2d} → {len(pairs):3d} pairs')
+              f'failed={stats["failed"]:2d} '
+              f'expect-err={stats["expected_error"]:2d} '
+              f'unreached={stats["not_reached"]:2d} → {len(pairs):3d} pairs')
+
+    course_totals = coverage_totals(rows)
 
     raw_pairs.extend(course_index_pairs(LEARNING_DIR / 'README.md'))
     raw_pairs.extend(format_pairs())
@@ -730,7 +912,9 @@ def main():
     funnel.record_stage('cell execution', before=totals['code_cells'],
                         after=totals['ok'],
                         reasons={'nondeterministic': totals['nondeterministic'],
-                                 'failed_or_expected_error': totals['failed']})
+                                 'failed': totals['failed'],
+                                 'expected_error': totals['expected_error'],
+                                 'not_reached': totals['not_reached']})
 
     # Dedup — the course repeats itself on purpose (each notebook re-teaches
     # what it builds on); training data must not.
@@ -749,10 +933,15 @@ def main():
         by_type[pair['task_type']] = by_type.get(pair['task_type'], 0) + 1
 
     print()
+    print(render_coverage(rows, course_totals))
+    print()
     print(funnel.render_markdown())
     print()
     print(f'notebooks: {len(notebooks)} | code cells: {totals["code_cells"]} | '
-          f'verified outputs: {totals["ok"]} | pairs: {len(pairs)}')
+          f'mined: {totals["ok"]} '
+          f'({_percent(course_totals["of_present"])} of present, '
+          f'{_percent(course_totals["of_eligible"])} of eligible) | '
+          f'pairs: {len(pairs)}')
     for task_type, n in sorted(by_type.items()):
         print(f'  {task_type:<20} {n:5d}')
 
@@ -775,6 +964,7 @@ def main():
     report = {
         'notebooks': coverage,
         'totals': totals,
+        'coverage': course_totals,
         'pairs_by_type': by_type,
         'funnel': funnel.to_dict(),
         'aro_check': check_stats,
@@ -788,6 +978,25 @@ def main():
             for pair in pairs:
                 f.write(json.dumps(pair) + '\n')
         print(f'wrote {args.dump}')
+
+    # The floor is checked after the report is written — a run that fails it is
+    # exactly the run whose numbers somebody needs to read.
+    if args.min_coverage is not None:
+        achieved = course_totals['of_eligible']
+        if achieved is None:
+            print(f'FAIL: --min-coverage {args.min_coverage:.0%} asked for, but '
+                  f'no notebook had a mineable cell — there is no coverage to '
+                  f'compare, not 0%')
+            return 1
+        if achieved < args.min_coverage:
+            print(f'FAIL: notebook coverage {_percent(achieved)} of eligible '
+                  f'cells is below the {args.min_coverage:.0%} floor '
+                  f'({course_totals["mined"]}/{course_totals["eligible"]} '
+                  f'cells mined). GitLab #907: the course is meant to reach '
+                  f'the dataset, and this is the gate that says whether it does.')
+            return 1
+        print(f'notebook coverage {_percent(achieved)} of eligible cells '
+              f'≥ {args.min_coverage:.0%} floor')
 
     if args.dry_run:
         print('dry run — nothing saved to the corpus')

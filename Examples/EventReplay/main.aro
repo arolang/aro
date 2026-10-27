@@ -16,21 +16,21 @@
 }
 
 (User Event Handler: UserCreated Handler) {
-    Extract the <data> from the <event: payload>.
+    Extract the <data> from the <event>.
     Log "UserCreated event received:" to the <console>.
     Log <data> to the <console>.
     Return an <OK: status> for the <handler>.
 }
 
 (Order Event Handler: OrderPlaced Handler) {
-    Extract the <data> from the <event: payload>.
+    Extract the <data> from the <event>.
     Log "OrderPlaced event received:" to the <console>.
     Log <data> to the <console>.
     Return an <OK: status> for the <handler>.
 }
 
 (Payment Event Handler: PaymentProcessed Handler) {
-    Extract the <data> from the <event: payload>.
+    Extract the <data> from the <event>.
     Log "PaymentProcessed event received:" to the <console>.
     Log <data> to the <console>.
     Return an <OK: status> for the <handler>.

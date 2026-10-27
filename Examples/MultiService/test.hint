@@ -1,7 +1,8 @@
 # Test hints for MultiService
 # Multi-service example with HTTP, Socket, and File Monitor
 type: multiservice
-# mode: interpreter — two of the three gaps this pinned are now closed.
+# mode: interpreter — the three gaps that pinned this here are closed; a
+# fourth, smaller one is not. See the note above the directive.
 #
 # File events were the first: the compiled binary reported FILE MODIFIED for a
 # creation on macOS and reported nothing at all on Linux, because only the
@@ -10,22 +11,32 @@ type: multiservice
 #
 # The socket welcome was the second: the compiled socket *server* dispatched to
 # no `Socket Event Handler` at all, so `Handle Client Connected` never ran and
-# nothing was sent. Fixed in GitLab #881 — compiled, this example now sends the
-# welcome, echoes through its own `Handle Data Received`, and runs its
-# disconnect handler.
+# nothing was sent. Fixed in GitLab #881.
 #
-# What still pins it is GitLab #882: a compiled file monitor watches the
-# process's working directory rather than the path it was given. The harness
-# runs examples from the project root, so the compiled binary reports a
-# FILE CREATED for every build artefact anything else happens to write:
+# The third was GitLab #882: a compiled file monitor watched the process's
+# working directory rather than the path it was given, so run from the project
+# root it reported a FILE CREATED for every build artefact anything else
+# happened to write —
 #
 #   Socket: FILE CREATED: ./.build/index-build/.../AROLSPTests~partial.swiftmodule.tmp
 #
-# It therefore passes only while the tree is quiet — during a full run with
-# builds in flight it fails and passes on retry. Flipping to `mode: both` now
-# would buy a flaky job rather than coverage.
+# — and passed only while the tree was quiet. The compiled binary delivers the
+# path through `_expression_` where the interpreter uses `_literal_`, and only
+# the latter was read; the former fell through to a `"."` default.
+# Still `interpreter`, for a reason that only appears on Linux.
 #
-# Flip to `mode: both` once #882 lands.
+# Flipped to `both`, the compiled binary there is fast enough to see its own
+# test file:
+#
+#   A| Socket: FILE CREATED: ms_testfile.txt
+#
+# which the expected output does not contain — no mode has ever emitted it
+# before — and `Socket: Hello from HTTP!` then lands after capture ends.
+# Both are timing, not correctness: the event is real and the directory is
+# the right one, which is #882 working. macOS passes `both`; Linux does not.
+#
+# Pinning that would encode a race, so this stays interpreter-only until the
+# file event can be awaited rather than raced.
 mode: interpreter
 timeout: 20
 skip-on-windows: Multi-service tests not supported on Windows CI

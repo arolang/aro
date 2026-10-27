@@ -639,7 +639,8 @@ private struct BookRow: View {
                     Text(err)
                         .font(SolaroFont.monoCaption)
                         .foregroundStyle(SolaroColor.stateError)
-                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .textSelection(.enabled)
                 }
             }
             Spacer()
@@ -1114,6 +1115,22 @@ private struct SelectableText: ViewModifier {
 /// and the inline markdown editor (#488) — the editor needs the
 /// exact same block typography so a rendered `.md` file and a
 /// book chapter read as one design.
+///
+/// **Every text block is `.fixedSize(horizontal: false, vertical: true)`.**
+/// Without it a paragraph loses its last line to an ellipsis: the
+/// blocks live in a `LazyVStack` inside a `ScrollView` (the notebook
+/// and the book both), and a lazy stack will propose a height it
+/// guessed at a different width than the one the row finally lays out
+/// at. `Text` treats a short height proposal as permission to
+/// truncate, so prose that needs three lines gets two and a `…`. The
+/// same text re-measured after a scroll or a resize comes back whole,
+/// which is why it reads as intermittent (GitLab #895).
+///
+/// Fixing the height says: wrap to the width you are given, then take
+/// however many lines that costs. There is no reason to cap rendered
+/// prose — it is the content, and the pane it sits in scrolls.
+/// `MarkdownProseView` in the AI panel has always done this; this
+/// renderer never did.
 struct BookMarkdownBlockView: View {
     let block: BookMarkdownBlock
     /// Editor blocks get a highlighted ARO fence and a tighter code
@@ -1162,6 +1179,7 @@ struct BookMarkdownBlockView: View {
             inlineText(text)
                 .font(.system(size: scaled(14)))
                 .lineSpacing(3)
+                .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .modifier(SelectableText(enabled: selectable))
         case .unorderedList(let items):
@@ -1172,6 +1190,7 @@ struct BookMarkdownBlockView: View {
                             .foregroundStyle(SolaroColor.accent)
                         inlineText(item)
                             .font(.system(size: scaled(14)))
+                            .fixedSize(horizontal: false, vertical: true)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .modifier(SelectableText(enabled: selectable))
                     }
@@ -1188,6 +1207,7 @@ struct BookMarkdownBlockView: View {
                             .frame(width: 22, alignment: .trailing)
                         inlineText(item)
                             .font(.system(size: scaled(14)))
+                            .fixedSize(horizontal: false, vertical: true)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .modifier(SelectableText(enabled: selectable))
                     }
@@ -1203,6 +1223,7 @@ struct BookMarkdownBlockView: View {
                     .font(.system(size: scaled(14)))
                     .italic()
                     .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
                     .padding(.horizontal, SolaroSpace.s)
                     .padding(.vertical, 4)
                     .modifier(SelectableText(enabled: selectable))
@@ -1223,6 +1244,7 @@ struct BookMarkdownBlockView: View {
                 }
                 codeBody(body, language: language)
                     .font(.system(size: scaled(13), design: .monospaced))
+                    .fixedSize(horizontal: false, vertical: true)
                     .modifier(SelectableText(enabled: selectable))
                     .padding(SolaroSpace.s)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -1368,6 +1390,7 @@ private struct BookTableRowView: View {
                         .frame(width: 1)
                 }
                 cellLabel(pair.prose)
+                    .fixedSize(horizontal: false, vertical: true)
                     .modifier(SelectableText(enabled: selectable))
                     .padding(.horizontal, 10)
                     .padding(.vertical, 6)
@@ -1515,6 +1538,7 @@ private extension BookMarkdownBlockView {
         }()
         inlineText(text)
             .font(.system(size: scaled(size), weight: weight))
+            .fixedSize(horizontal: false, vertical: true)
             .padding(.top, scaled(topPad))
             .frame(maxWidth: .infinity, alignment: .leading)
             .modifier(SelectableText(enabled: selectable))
@@ -1532,6 +1556,7 @@ private extension BookMarkdownBlockView {
         var body: some View {
             if let attributed = Self.attributedString(from: html) {
                 Text(attributed)
+                    .fixedSize(horizontal: false, vertical: true)
                     .modifier(SelectableText(enabled: selectable))
                     .frame(maxWidth: .infinity, alignment: .leading)
             } else {
@@ -1540,6 +1565,7 @@ private extension BookMarkdownBlockView {
                 Text(html)
                     .font(SolaroFont.mono)
                     .foregroundStyle(SolaroColor.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
                     .modifier(SelectableText(enabled: selectable))
             }
         }

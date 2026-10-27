@@ -117,15 +117,22 @@ struct FixedQualifierTests {
         let hint = ComputeQualifierCatalog.redirect(
             for: "round", result: "price", object: "raw")
         #expect(hint?.contains("fixed") == true)
-        // `money` is the other name people reach for, and edit distance
-        // will never find `fixed` from it.
+        // `money` is the other name people reach for — and since GitLab #906
+        // the right answer for it is `as Currency`, not `fixed`: an exact
+        // amount has nothing to repair. `round` above still points at
+        // `fixed`, because rounding to N places is what it asks for.
         let money = ComputeQualifierCatalog.redirect(
             for: "money", result: "price", object: "raw")
-        #expect(money?.contains("fixed") == true)
+        #expect(money?.contains("as Currency") == true)
         // `Money` PascalCase is ARO-0014's domain type, not an
-        // operation, and still belongs in the `as` clause.
+        // operation, and still belongs in the `as` clause under its own
+        // name — capitalisation decides, as it always did.
         let type = ComputeQualifierCatalog.redirect(
             for: "Money", result: "price", object: "raw")
         #expect(type?.contains("as Money") == true)
+        // And the format's own spellings lead to themselves.
+        let currency = ComputeQualifierCatalog.redirect(
+            for: "Currency", result: "price", object: "raw")
+        #expect(currency?.contains("as Currency") == true)
     }
 }

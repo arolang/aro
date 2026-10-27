@@ -4,6 +4,7 @@
 // ============================================================
 
 import Foundation
+import AROVersion
 
 // MARK: - Plugin Installer
 
@@ -91,7 +92,7 @@ public final class PluginInstaller: Sendable {
 
         // Check ARO version compatibility
         if let requiredRange = manifest.aroVersion, let currentVersion = currentAROVersion {
-            guard AROVersionChecker.satisfies(version: currentVersion, constraint: requiredRange) else {
+            guard AROVersionChecker.runningVersionSatisfies(currentVersion, constraint: requiredRange) else {
                 throw InstallerError.incompatibleAROVersion(
                     plugin: manifest.name,
                     required: requiredRange,
@@ -180,7 +181,7 @@ public final class PluginInstaller: Sendable {
     /// Install a plugin from a local directory
     /// - Parameter source: Path to the plugin source directory
     /// - Returns: Installation result
-    public func installLocal(from source: URL) throws -> InstallResult {
+    public func installLocal(from source: URL, currentAROVersion: String? = nil) throws -> InstallResult {
         // Validate plugin.yaml exists
         let manifestPath = source.appendingPathComponent("plugin.yaml")
         guard FileManager.default.fileExists(atPath: manifestPath.path) else {
@@ -189,6 +190,21 @@ public final class PluginInstaller: Sendable {
 
         // Parse manifest
         let manifest = try PluginManifest.parse(from: manifestPath)
+
+        // The same check the git path makes (GitLab #883). A plugin declaring
+        // `aro-version: ">=2.0"` installed silently from a directory and
+        // failed later as whatever the incompatibility actually breaks — a
+        // missing action, a changed ABI — with nothing pointing at the
+        // requirement it had declared.
+        if let requiredRange = manifest.aroVersion, let currentVersion = currentAROVersion {
+            guard AROVersionChecker.runningVersionSatisfies(currentVersion, constraint: requiredRange) else {
+                throw InstallerError.incompatibleAROVersion(
+                    plugin: manifest.name,
+                    required: requiredRange,
+                    current: currentVersion
+                )
+            }
+        }
 
         // Check if already installed
         let pluginDir = pluginsDirectory.appendingPathComponent(manifest.name)

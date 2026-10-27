@@ -3,6 +3,7 @@
 // ARO Runtime - Dynamic Plugin Loader
 // ============================================================
 
+import AROToolchain
 import Foundation
 
 #if os(Windows)
@@ -82,6 +83,13 @@ public final class PluginLoader: @unchecked Sendable {
 
     /// Registered C plugin execute functions
     private var cPluginFunctions: [String: (execute: CPluginExecuteFunction, free: CPluginFreeFunction?)] = [:]
+
+    /// Per plugin: action name → the verbs it declares (GitLab #884).
+    ///
+    /// `callCPlugin` needs it to work out what else to call an action, for
+    /// SDKs that register their own function name rather than the declared
+    /// verb. See `PluginActionDispatch`.
+    private var cPluginVerbsByName: [String: [String: [String]]] = [:]
 
     // (Python plugin paths are stored in EmbeddedPythonPluginPaths.shared)
 
@@ -535,6 +543,12 @@ public final class PluginLoader: @unchecked Sendable {
 
                     // Register actions using shared parser
                     let parsedActions = PluginInfoParser.parseActionList(from: info)
+
+                    // Remember the manifest's name→verbs map so `callCPlugin`
+                    // can retry with the SDK's own function name when the
+                    // declared verb is not what the plugin dispatches on
+                    // (GitLab #884).
+                    cPluginVerbsByName[name.lowercased()] = parsedActions.verbsMap
                     var entries: [(verb: String, pluginName: String?, handler: @Sendable (ResultDescriptor, ObjectDescriptor, any ExecutionContext) async throws -> any Sendable)] = []
 
                     for actionName in parsedActions.names {
@@ -780,7 +794,11 @@ public final class PluginLoader: @unchecked Sendable {
     ) throws -> any Sendable {
         lock.lock()
         let pluginFuncs = cPluginFunctions[serviceName.lowercased()]
+        let verbsByName = cPluginVerbsByName[serviceName.lowercased()] ?? [:]
         lock.unlock()
+        if ProcessInfo.processInfo.environment["ARO_DEBUG"] != nil {
+            FileHandle.standardError.write("[callCPlugin] svc=\(serviceName) method=\(method) found=\(pluginFuncs != nil) keys=\(cPluginFunctions.keys.sorted())\n".data(using: .utf8)!)
+        }
 
         guard let pluginFuncs = pluginFuncs else {
             throw PluginError.serviceNotFound(serviceName)
@@ -792,24 +810,55 @@ public final class PluginLoader: @unchecked Sendable {
         let argsData = try JSONSerialization.data(withJSONObject: enrichedArgs)
         let argsJSON = String(data: argsData, encoding: .utf8) ?? "{}"
 
-        // Pass method directly to aro_plugin_execute
-        // For service routing, CPluginServiceWrapper prepends "service:" before calling here
-        let resultPtr = method.withCString { methodCStr in
-            argsJSON.withCString { argsCStr in
-                pluginFuncs.execute(methodCStr, argsCStr)
+        // Ask by the verb first, then by the names the SDK might actually
+        // dispatch on (GitLab #884).
+        //
+        // `aro-plugin-sdk-rust` writes its manifest from the declared
+        // `name:`/`verbs:` but registers only the Rust function name —
+        // snake_case of the action name — so a plugin advertising `ParseCSV`
+        // with verb `parsecsv` answers `Unknown action: parsecsv` and wants
+        // `parse_csv`. `NativePluginHost` has retried like this since the SDK
+        // shipped; this path, which is the one a **statically linked** plugin
+        // takes, did not — so `Examples/CSVProcessor` worked under `aro run`
+        // and failed under `aro build`.
+        //
+        // For a service call the wrapper has already prefixed `service:`,
+        // and no snake_case candidate will match that; the first attempt is
+        // the verb as given either way, so those are unaffected.
+        let candidates = PluginActionDispatch.candidates(
+            for: method, verbsByName: verbsByName)
+
+        var lastResultJSON: String?
+        for candidate in candidates {
+            let resultPtr = candidate.withCString { methodCStr in
+                argsJSON.withCString { argsCStr in
+                    pluginFuncs.execute(methodCStr, argsCStr)
+                }
             }
+            guard let resultPtr else { continue }
+            let resultJSON = String(cString: resultPtr)
+            pluginFuncs.free?(resultPtr)
+            lastResultJSON = resultJSON
+
+            // Keep trying while the plugin says it has no such action; any
+            // other answer — including a real error — is this candidate's.
+            if PluginActionDispatch.isUnknownAction(resultJSON) { continue }
+            return try decodeCPluginResult(resultJSON, serviceName: serviceName, method: method)
         }
 
-        // Check for nil result
-        guard let resultPtr = resultPtr else {
+        guard let resultJSON = lastResultJSON else {
             throw PluginError.executionFailed(serviceName, method: method, message: "Plugin returned null")
         }
+        // Every candidate was unknown: surface the plugin's own last words
+        // rather than a message about candidates it never asked for.
+        return try decodeCPluginResult(resultJSON, serviceName: serviceName, method: method)
+    }
 
-        // Free via defer to prevent leaks if subsequent parsing throws
-        defer { pluginFuncs.free?(resultPtr) }
-        let resultJSON = String(cString: resultPtr)
-
-        // Check for error in response
+    /// Turn one `aro_plugin_execute` response into a value, or throw the
+    /// error it carries.
+    private func decodeCPluginResult(
+        _ resultJSON: String, serviceName: String, method: String
+    ) throws -> any Sendable {
         if resultJSON.contains("\"error\":") {
             if let data = resultJSON.data(using: .utf8),
                let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
@@ -818,7 +867,6 @@ public final class PluginLoader: @unchecked Sendable {
             }
         }
 
-        // Parse result
         guard let resultData = resultJSON.data(using: .utf8),
               let result = try JSONSerialization.jsonObject(with: resultData) as? [String: Any] else {
             return resultJSON
@@ -1785,204 +1833,20 @@ public final class PluginLoader: @unchecked Sendable {
     // MARK: - Private
 
     /// Find the Swift executable (swift command) in PATH or common locations
+    /// The `swift` driver used to build a plugin's Swift package.
+    ///
+    /// One table, shared with `aro build`'s own plugin stage. Two lookups that
+    /// ranked the candidates differently is what made every plugin package
+    /// rebuild from scratch on a machine with more than one toolchain
+    /// (GitLab #902), and this one also spawned `which`/`where` to read a PATH
+    /// it could search in process.
     private func findSwiftExecutable() -> String? {
-        // Check for SWIFT environment variable first - allows CI to specify exact Swift
-        if let swiftEnv = ProcessInfo.processInfo.environment["SWIFT"],
-           !swiftEnv.isEmpty,
-           FileManager.default.isExecutableFile(atPath: swiftEnv) {
-            return swiftEnv
-        }
-
-        // Check SWIFTC and derive swift path from it
-        if let swiftcEnv = ProcessInfo.processInfo.environment["SWIFTC"],
-           !swiftcEnv.isEmpty,
-           swiftcEnv.hasSuffix("swiftc") {
-            // swiftc path like "/path/to/bin/swiftc" -> "/path/to/bin/swift"
-            let swiftPath = String(swiftcEnv.dropLast(1))  // Remove 'c'
-            if FileManager.default.isExecutableFile(atPath: swiftPath) {
-                return swiftPath
-            }
-        }
-
-        #if os(Windows)
-        // On Windows, use 'where' command to find swift.exe
-        let whereProcess = Process()
-        whereProcess.executableURL = URL(fileURLWithPath: "C:\\Windows\\System32\\where.exe")
-        whereProcess.arguments = ["swift"]
-
-        let pipe = Pipe()
-        whereProcess.standardOutput = pipe
-        whereProcess.standardError = FileHandle.nullDevice
-
-        do {
-            try whereProcess.run()
-            whereProcess.waitUntilExit()
-
-            if whereProcess.terminationStatus == 0 {
-                let data = pipe.fileHandleForReading.readDataToEndOfFile()
-                if let output = String(data: data, encoding: .utf8) {
-                    // 'where' may return multiple lines, take the first
-                    if let path = output.split(separator: "\r\n").first ?? output.split(separator: "\n").first,
-                       !path.isEmpty {
-                        return String(path).trimmingCharacters(in: .whitespacesAndNewlines)
-                    }
-                }
-            }
-        } catch {
-            // where failed, try common locations
-        }
-
-        // Check common Swift installation paths on Windows
-        let commonPaths = [
-            "C:\\Program Files\\Swift\\Toolchains\\0.0.0+Asserts\\usr\\bin\\swift.exe",
-            "C:\\Library\\Developer\\Toolchains\\unknown-Asserts-development.xctoolchain\\usr\\bin\\swift.exe"
-        ]
-
-        for path in commonPaths {
-            if FileManager.default.fileExists(atPath: path) {
-                return path
-            }
-        }
-
-        // Last resort: assume swift is in PATH
-        return "swift"
-        #else
-        // On Unix, use 'which' command to find swift
-        let whichProcess = Process()
-        whichProcess.executableURL = URL(fileURLWithPath: "/usr/bin/which")
-        whichProcess.arguments = ["swift"]
-
-        let pipe = Pipe()
-        whichProcess.standardOutput = pipe
-        whichProcess.standardError = FileHandle.nullDevice
-
-        do {
-            try whichProcess.run()
-            whichProcess.waitUntilExit()
-
-            if whichProcess.terminationStatus == 0 {
-                let data = pipe.fileHandleForReading.readDataToEndOfFile()
-                if let path = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
-                   !path.isEmpty {
-                    return path
-                }
-            }
-        } catch {
-            // which failed, try common locations
-        }
-
-        // Check common Swift installation paths
-        let commonPaths = [
-            "/usr/bin/swift",
-            "/usr/local/bin/swift",
-            "/usr/share/swift/usr/bin/swift",  // CI installation path
-            "/opt/swift/usr/bin/swift",
-            "/Library/Developer/Toolchains/swift-latest.xctoolchain/usr/bin/swift"
-        ]
-
-        for path in commonPaths {
-            if FileManager.default.isExecutableFile(atPath: path) {
-                return path
-            }
-        }
-
-        return nil
-        #endif
+        Toolchain.find("swift")
     }
 
-    /// Find the Swift compiler in PATH or common locations
+    /// The Swift compiler used to build loose `.swift` plugin sources.
     private func findSwiftCompiler() -> String? {
-        // Check for SWIFTC environment variable first - allows CI to specify exact compiler
-        if let swiftcEnv = ProcessInfo.processInfo.environment["SWIFTC"],
-           !swiftcEnv.isEmpty,
-           FileManager.default.isExecutableFile(atPath: swiftcEnv) {
-            return swiftcEnv
-        }
-
-        #if os(Windows)
-        // On Windows, use 'where' command to find swiftc.exe
-        let whereProcess = Process()
-        whereProcess.executableURL = URL(fileURLWithPath: "C:\\Windows\\System32\\where.exe")
-        whereProcess.arguments = ["swiftc"]
-
-        let pipe = Pipe()
-        whereProcess.standardOutput = pipe
-        whereProcess.standardError = FileHandle.nullDevice
-
-        do {
-            try whereProcess.run()
-            whereProcess.waitUntilExit()
-
-            if whereProcess.terminationStatus == 0 {
-                let data = pipe.fileHandleForReading.readDataToEndOfFile()
-                if let output = String(data: data, encoding: .utf8) {
-                    // 'where' may return multiple lines, take the first
-                    if let path = output.split(separator: "\r\n").first ?? output.split(separator: "\n").first,
-                       !path.isEmpty {
-                        return String(path).trimmingCharacters(in: .whitespacesAndNewlines)
-                    }
-                }
-            }
-        } catch {
-            // where failed, try common locations
-        }
-
-        // Check common Swift installation paths on Windows
-        let commonPaths = [
-            "C:\\Program Files\\Swift\\Toolchains\\0.0.0+Asserts\\usr\\bin\\swiftc.exe",
-            "C:\\Library\\Developer\\Toolchains\\unknown-Asserts-development.xctoolchain\\usr\\bin\\swiftc.exe"
-        ]
-
-        for path in commonPaths {
-            if FileManager.default.fileExists(atPath: path) {
-                return path
-            }
-        }
-
-        // Last resort: assume swiftc is in PATH
-        return "swiftc"
-        #else
-        // On Unix, use 'which' command to find swiftc
-        let whichProcess = Process()
-        whichProcess.executableURL = URL(fileURLWithPath: "/usr/bin/which")
-        whichProcess.arguments = ["swiftc"]
-
-        let pipe = Pipe()
-        whichProcess.standardOutput = pipe
-        whichProcess.standardError = FileHandle.nullDevice
-
-        do {
-            try whichProcess.run()
-            whichProcess.waitUntilExit()
-
-            if whichProcess.terminationStatus == 0 {
-                let data = pipe.fileHandleForReading.readDataToEndOfFile()
-                if let path = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
-                   !path.isEmpty {
-                    return path
-                }
-            }
-        } catch {
-            // which failed, try common locations
-        }
-
-        // Check common Swift installation paths
-        let commonPaths = [
-            "/usr/bin/swiftc",
-            "/usr/local/bin/swiftc",
-            "/usr/share/swift/usr/bin/swiftc",  // CI installation path
-            "/opt/swift/usr/bin/swiftc",
-            "/Library/Developer/Toolchains/swift-latest.xctoolchain/usr/bin/swiftc"
-        ]
-
-        for path in commonPaths {
-            if FileManager.default.isExecutableFile(atPath: path) {
-                return path
-            }
-        }
-
-        return nil
-        #endif
+        Toolchain.find("swiftc")
     }
 
     /// Check if source file is newer than compiled dylib
@@ -2542,10 +2406,18 @@ public final class PluginLoader: @unchecked Sendable {
     ///
     /// Use `aro plugins rebuild` to build them.
     ///
-    /// - Parameter directory: Application directory containing `plugins/` folder
+    /// - Parameter directory: the project root. The plugin directory is
+    ///   resolved from it by `PluginDirectory`, so a listing reports the same
+    ///   directory the loader will actually load from (#848). This appended
+    ///   the lowercase spelling directly, which agreed with the loader only on
+    ///   a case-insensitive filesystem: on Linux a plugin in `Plugins/` ran
+    ///   but was missing from `aro plugins list`.
     /// - Returns: Array of LocalPluginInfo
     public func listLocalPlugins(from directory: URL) throws -> [LocalPluginInfo] {
-        let pluginsDir = directory.appendingPathComponent("plugins")
+        guard let resolved = PluginDirectory.resolve(in: directory) else {
+            return []
+        }
+        let pluginsDir = resolved.url
 
         guard FileManager.default.fileExists(atPath: pluginsDir.path) else {
             return []
@@ -2598,7 +2470,7 @@ public final class PluginLoader: @unchecked Sendable {
         let swiftFiles = contents.filter { $0.pathExtension == "swift" }
         for swiftFile in swiftFiles {
             let pluginName = swiftFile.deletingPathExtension().lastPathComponent
-            let relativePath = "plugins/\(swiftFile.lastPathComponent)"
+            let relativePath = "\(pluginsDir.lastPathComponent)/\(swiftFile.lastPathComponent)"
 
             if let cached = pluginMetadata[pluginName] {
                 plugins.append(cached)
@@ -2623,7 +2495,7 @@ public final class PluginLoader: @unchecked Sendable {
             else { continue }
 
             let pluginName = item.lastPathComponent
-            let relativePath = "plugins/\(pluginName)"
+            let relativePath = "\(pluginsDir.lastPathComponent)/\(pluginName)"
 
             if let cached = pluginMetadata[pluginName] {
                 plugins.append(cached)

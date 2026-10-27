@@ -161,12 +161,16 @@ struct CallerScopedStorageTests {
 
     @Test("The partition helper refuses rather than falling back")
     func partitionHelperThrows() throws {
-        let registry = RepositoryScopeRegistry.shared
-        registry.reset()
-        defer { registry.reset() }
+        // The declaration goes into a registry this test owns, reached through a
+        // container of its own. Declaring into `RepositoryScopeRegistry.shared`
+        // is what made these assertions depend on which other suite happened to
+        // be running: `ConfigureScopeTests` cleared the declaration between the
+        // `declare` below and the reads under it (GitLab #890).
+        let registry = RepositoryScopeRegistry()
         registry.declare("cart-repository", scope: .session)
+        let container = RuntimeContainer(repositoryScopes: registry)
 
-        let anonymous = RuntimeContext(featureSetName: "Application-Start")
+        let anonymous = RuntimeContext(featureSetName: "Application-Start", container: container)
         #expect(throws: (any Error).self) {
             _ = try anonymous.repositoryPartition(of: "cart-repository")
         }
@@ -175,6 +179,7 @@ struct CallerScopedStorageTests {
         #expect(try anonymous.repositoryPartition(of: "catalogue-repository") == "")
 
         let alice = RuntimeContext(featureSetName: "addToCart",
+                                   container: container,
                                    caller: .session(id: "alice", connection: nil))
         #expect(try alice.repositoryPartition(of: "cart-repository") == "session:alice")
     }

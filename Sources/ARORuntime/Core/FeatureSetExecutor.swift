@@ -28,6 +28,46 @@ import AROParser
 /// when their futures are forced by downstream consumers, with no need
 /// for a separate DAG-builder.
 public final class FeatureSetExecutor: Sendable {
+
+    /// What `<terminal>` binds to when no `TerminalService` is registered.
+    private static let defaultTerminalCapabilities: [String: any Sendable] = [
+        "rows": 24, "columns": 80, "width": 80, "height": 24,
+        "supports_color": false, "supports_true_color": false,
+        "is_tty": false, "encoding": "UTF-8"
+    ]
+
+    /// The same dictionary derived from a live `TerminalService`, computed on
+    /// first use and kept (GitLab #703). `TerminalService.detectCapabilities`
+    /// already memoizes, so the answer cannot change under us.
+    private static let terminalCapabilities = AsyncOnce<[String: any Sendable]>()
+
+    /// Compute-once box for an async value.
+    ///
+    /// Two feature sets starting at the same moment may both compute; the
+    /// first stored answer wins and both see it. That is fine here — the
+    /// computation is idempotent and the alternative, a lock held across an
+    /// `await`, is not.
+    final class AsyncOnce<Value: Sendable>: @unchecked Sendable {
+        private let lock = NSLock()
+        private var stored: Value?
+
+        private func read() -> Value? {
+            lock.withLock { stored }
+        }
+
+        private func write(_ value: Value) -> Value {
+            lock.withLock {
+                if let raced = stored { return raced }
+                stored = value
+                return value
+            }
+        }
+
+        func value(_ compute: () async throws -> Value) async rethrows -> Value {
+            if let cached = read() { return cached }
+            return write(try await compute())
+        }
+    }
     // MARK: - Properties
 
     private let actionRegistry: ActionRegistry
@@ -42,6 +82,7 @@ public final class FeatureSetExecutor: Sendable {
     private let createVerbs: Set<String>
     private let mergeVerbs: Set<String>
     private let computeVerbs: Set<String>
+    private let transformVerbs: Set<String>
     private let extractVerbs: Set<String>
     private let queryVerbs: Set<String>
     private let deleteVerbs: Set<String>
@@ -65,6 +106,7 @@ public final class FeatureSetExecutor: Sendable {
         self.createVerbs = VerbSets.createVerbs
         self.mergeVerbs = VerbSets.mergeVerbs
         self.computeVerbs = VerbSets.computeVerbs
+        self.transformVerbs = VerbSets.transformVerbs
         self.extractVerbs = VerbSets.extractVerbs
         self.queryVerbs = VerbSets.queryVerbs
         self.deleteVerbs = VerbSets.deleteVerbs
@@ -148,37 +190,49 @@ public final class FeatureSetExecutor: Sendable {
         }
 
         // Also eagerly bind all other published variables for this business activity
-        // This handles cases where semantic analyzer misses dependencies in map literals
-        for (name, entry) in await globalSymbols.allSymbols() {
-            // Skip if already bound
-            if context.resolveAny(name) != nil {
+        // This handles cases where semantic analyzer misses dependencies in map literals.
+        //
+        // Indexed by activity rather than scanned (GitLab #703): this ran on
+        // every HTTP request, event and observer invocation, and walked every
+        // published symbol in the application to find the handful that belong
+        // to this activity.
+        //
+        // The already-bound test goes through `resolveAnyRaw` where the
+        // context allows it, for a reason beyond cost: `resolveAny` *forces* a
+        // pending future when a parent holds one, so asking "is this name
+        // taken?" could block on I/O that nothing in this feature set had
+        // asked for.
+        for (name, value) in await globalSymbols.symbols(
+            forBusinessActivity: context.businessActivity
+        ) {
+            if let runtime = context as? RuntimeContext {
+                if runtime.resolveAnyRaw(name) != nil { continue }
+            } else if context.resolveAny(name) != nil {
                 continue
             }
-            // Only bind if business activity matches
-            if !entry.businessActivity.isEmpty && !context.businessActivity.isEmpty &&
-               entry.businessActivity == context.businessActivity {
-                context.bind(name, value: entry.value)
-            }
+            context.bind(name, value: value)
         }
 
         // Bind terminal capabilities dict so ARO code can use <terminal: columns> etc.
+        //
+        // Built once, not per execution (GitLab #703). `detectCapabilities()`
+        // memoizes its answer, so the eight-key dictionary derived from it was
+        // the same object's worth of work on every HTTP request, event and
+        // observer invocation, plus an actor hop to ask for a cached value.
         if let terminalService = context.service(TerminalService.self) {
-            let caps = await terminalService.detectCapabilities()
-            let terminalDict: [String: any Sendable] = [
-                "rows": caps.rows, "columns": caps.columns,
-                "width": caps.columns, "height": caps.rows,
-                "supports_color": caps.supportsColor,
-                "supports_true_color": caps.supportsTrueColor,
-                "is_tty": caps.isTTY, "encoding": caps.encoding
-            ]
+            let terminalDict = try await Self.terminalCapabilities.value {
+                let caps = await terminalService.detectCapabilities()
+                return [
+                    "rows": caps.rows, "columns": caps.columns,
+                    "width": caps.columns, "height": caps.rows,
+                    "supports_color": caps.supportsColor,
+                    "supports_true_color": caps.supportsTrueColor,
+                    "is_tty": caps.isTTY, "encoding": caps.encoding
+                ]
+            }
             context.bind("terminal", value: terminalDict, allowRebind: true)
         } else {
-            let terminalDict: [String: any Sendable] = [
-                "rows": 24, "columns": 80, "width": 80, "height": 24,
-                "supports_color": false, "supports_true_color": false,
-                "is_tty": false, "encoding": "UTF-8"
-            ]
-            context.bind("terminal", value: terminalDict, allowRebind: true)
+            context.bind("terminal", value: Self.defaultTerminalCapabilities, allowRebind: true)
         }
 
         // Execute statements sequentially by source order. Independent I/O
@@ -577,10 +631,13 @@ public final class FeatureSetExecutor: Sendable {
         // Non-framework binds — including the action's own result — write
         // through to `outerContext`, so consumers are unaffected.
         let context: ExecutionContext
+        let scopeIsFresh: Bool
         if let runtime = outerContext as? RuntimeContext {
             context = runtime.createStatementScope()
+            scopeIsFresh = true
         } else {
             context = outerContext
+            scopeIsFresh = false
         }
 
         // Clear transient bindings from previous statements. These are
@@ -592,8 +649,18 @@ public final class FeatureSetExecutor: Sendable {
         // (`LLVMCodeGenerator.generateAROStatement`) has to sweep exactly the
         // same set and a second hand-maintained copy drifted for seven of them
         // (GitLab #552).
-        for key in FrameworkVariables.transientKeys {
-            context.unbind(key)
+        //
+        // Skipped when we just built the scope above, because then there is
+        // provably nothing to clear: a fresh `RuntimeContext` has empty
+        // `variables` and `immutableVariables`, and `unbind` touches only those
+        // two — it cannot shadow an inherited binding, which is exactly why
+        // `_expression_name_` needs the explicit shadow below. So the sweep was
+        // 21 lock/unlock pairs and 42 hash lookups per statement against an
+        // empty dictionary: 13.6% of the CPU of a 300 000-row loop with a
+        // three-statement body (GitLab #702). The non-fresh branch is the one
+        // that can hold a previous statement's modifiers, and still sweeps.
+        if !scopeIsFresh {
+            context.clearTransientFrameworkVariables()
         }
         // `unbind` only removes a binding from this scope, so it cannot hide an
         // inherited one. `_expression_name_` is the one name a parent scope may
@@ -663,6 +730,15 @@ public final class FeatureSetExecutor: Sendable {
                     updateVerbs.contains(lowerVerb) ||  // Update always needs execution (handles rebind internally)
                     (createVerbs.contains(lowerVerb) && !resultDescriptor.specifiers.isEmpty) ||
                     (computeVerbs.contains(lowerVerb) && !resultDescriptor.specifiers.isEmpty) ||
+                    // GitLab #643 made an unknown Transform format an error
+                    // instead of the identity — but only inside the action,
+                    // which a qualified `Transform` over an expression object
+                    // never reached. `Transform the <price: float> from
+                    // <text>.` bound the string unchanged and answered OK, so
+                    // the conversion silently did not happen and `<price> +
+                    // 0.4` failed as a type mismatch two lines later. Same
+                    // shape as #501, one verb along.
+                    (transformVerbs.contains(lowerVerb) && !resultDescriptor.specifiers.isEmpty) ||
                     (extractVerbs.contains(lowerVerb) && !resultDescriptor.specifiers.isEmpty)
                 if !needsExecution {
                     // The fast path bypasses the action — and used to bypass
@@ -723,6 +799,10 @@ public final class FeatureSetExecutor: Sendable {
         // by the route's limit, and reported against the statement that asked.
         // The materialization analysis normally prevents a streamed route from
         // ever reaching this, so it is the safety net rather than the path.
+        //
+        // This call is also where a deferred input to *this* statement stops
+        // being pending, which is what keeps `force()` off the cooperative pool
+        // (GitLab #707) — see the function's own note.
         try await materializeRequestBodyIfNeeded(
             statement: statement,
             verb: verb,
@@ -741,7 +821,11 @@ public final class FeatureSetExecutor: Sendable {
            !ActionRoleCatalog.mustRunForEffect(canonicalVerb),
            !testVerbs.contains(canonicalVerb),
            let owner = outerContext as? RuntimeContext,
-           let scope = context as? RuntimeContext {
+           let scope = context as? RuntimeContext,
+           !runsWithoutSuspending(canonicalVerb: canonicalVerb,
+                                  resultDescriptor: resultDescriptor,
+                                  objectDescriptor: objectDescriptor,
+                                  scope: scope) {
             scope.markDeferredScope()
             let future = deferredResult(
                 statement: statement,
@@ -910,7 +994,12 @@ public final class FeatureSetExecutor: Sendable {
     /// is where that gets reported instead of disappearing.
     private func drainDeferredResults(context: ExecutionContext) async throws {
         guard let runtime = context as? RuntimeContext else { return }
-        let drainError = runtime.drainPendingFutures()
+        // Awaiting, not forcing: exit drains everything still outstanding, so
+        // the blocking variant parked the handler's own cooperative thread once
+        // per unread future — at exactly the moment a loaded server has many
+        // handlers finishing at once (GitLab #707). The compiled binary keeps
+        // the blocking drain; `aro_context_drain_deferred` runs on a C thread.
+        let drainError = await runtime.drainPendingFuturesAwaiting()
         if let observed = runtime.takeDeferredFailure() {
             // Fire the error-any checkpoint here too. Under ARO-0088 deferral a
             // value-producing action that fails does not throw at
@@ -972,18 +1061,35 @@ public final class FeatureSetExecutor: Sendable {
     /// Rebinding actions replace a value in place; REQUEST actions always
     /// produce fresh external data and must override a parent binding so an
     /// event handler doesn't read the value Application-Start left behind.
+    /// Verbs whose result may replace an existing binding.
+    ///
+    /// `static let`, not two literals in the function body: this is called for
+    /// every non-effect statement, and rebuilding two `Set<String>`s per call
+    /// allocated for nothing (GitLab #709).
+    ///
+    /// The issue also suggested deriving the second list from
+    /// `VerbSets.requestVerbs`. It is *not* the same set — `VerbSets` has
+    /// `call`, `invoke`, `listen` and `exists`, this one has `load`, `find`,
+    /// `extract`, `get`, `receive` and `read` — so sharing it would change
+    /// which statements may rebind, which is a language change wearing an
+    /// optimization's clothes. Kept separate and named for what it is.
+    private static let rebindingVerbs: Set<String> = [
+        "accept", "update", "modify", "change", "set", "configure",
+        "delete", "remove", "destroy", "clear", "show",
+        "merge", "combine", "join", "concat"
+    ]
+
+    /// Reading verbs whose result may replace an existing binding. Distinct
+    /// from `VerbSets.requestVerbs`; see above.
+    private static let rebindingRequestVerbs: Set<String> = [
+        "retrieve", "fetch", "load", "find", "extract", "parse", "get",
+        "request", "probe", "receive", "read"
+    ]
+
     private func allowsRebinding(_ verb: String) -> Bool {
-        let rebindingVerbs: Set<String> = [
-            "accept", "update", "modify", "change", "set", "configure",
-            "delete", "remove", "destroy", "clear", "show",
-            "merge", "combine", "join", "concat"
-        ]
-        let requestVerbs: Set<String> = [
-            "retrieve", "fetch", "load", "find", "extract", "parse", "get",
-            "request", "probe", "receive", "read"
-        ]
         let lowerVerb = verb.lowercased()
-        return rebindingVerbs.contains(lowerVerb) || requestVerbs.contains(lowerVerb)
+        return Self.rebindingVerbs.contains(lowerVerb)
+            || Self.rebindingRequestVerbs.contains(lowerVerb)
     }
 
     /// Start a deferred action and hand back the handle to bind (ARO-0088 §2).
@@ -996,6 +1102,39 @@ public final class FeatureSetExecutor: Sendable {
     /// Failures are wrapped in the same `AROError` the eager path produces, at
     /// construction time, so the message names the statement that failed rather
     /// than the read that observed it (ARO-0088 §4).
+    /// Whether this statement would run to completion on the calling thread,
+    /// so deferring it could not overlap with anything.
+    ///
+    /// A `SynchronousAction` cannot suspend: `Compute the <len: length> from
+    /// <s>` is a handful of instructions. Wrapping one in an `AROFuture` costs
+    /// a task spawn on the action executor, a GCD dispatch, a lock, a
+    /// `DispatchGroup` wait and a thread hand-off — roughly 10–30 µs of
+    /// machinery around a nanosecond of work, and the next statement almost
+    /// always reads the result and pays the force immediately (GitLab #706).
+    ///
+    /// The exception is the input such an action *can* suspend on. A stream or
+    /// an unread request body makes `executeSynchronously` bail with
+    /// `NeedsAsyncExecution` and the async body take over, and that body is
+    /// worth overlapping — so a statement holding one still defers.
+    ///
+    /// Read with `resolveAnyRaw`: `resolveAny` forces a pending future, which
+    /// would turn a question about this statement into a wait on the previous
+    /// one.
+    private func runsWithoutSuspending(
+        canonicalVerb: String,
+        resultDescriptor: ResultDescriptor,
+        objectDescriptor: ObjectDescriptor,
+        scope: RuntimeContext
+    ) -> Bool {
+        guard ActionRunner.shared.hasSynchronousImplementation(canonicalVerb) else { return false }
+        for name in [objectDescriptor.base, resultDescriptor.base] {
+            guard let value = scope.resolveAnyRaw(name) else { continue }
+            if value is AnyStreamingValue { return false }
+            if value is any UnreadBody { return false }
+        }
+        return true
+    }
+
     private func deferredResult(
         statement: AROStatement,
         verb: String,
@@ -1010,9 +1149,13 @@ public final class FeatureSetExecutor: Sendable {
         let condition = statement.statementGuard.isPresent ? "when <condition>" : nil
         let featureSet = statementScope.featureSetName
         let activity = statementScope.businessActivity
-        let location = "\(statement.span.start.line):\(statement.span.start.column)"
-
-        return AROFuture(bindingName: resultDescriptor.base, sourceLocation: location) {
+        return AROFuture(
+            bindingName: resultDescriptor.base,
+            // Unformatted: every deferred statement passes one and only a
+            // slow-force warning ever reads it (GitLab #710).
+            sourceLine: statement.span.start.line,
+            sourceColumn: statement.span.start.column
+        ) {
             do {
                 return try await registry.execute(
                     verb: verb,
@@ -1096,8 +1239,10 @@ public final class FeatureSetExecutor: Sendable {
             guard asBool(conditionResult) else { return }
         }
 
-        // Get the internal value
-        guard var value = context.resolveAny(statement.internalVariable) else {
+        // Get the internal value. Awaiting resolve, not `resolveAny`: publishing
+        // a deferred result is a read of it, and a read must not park a
+        // cooperative-pool thread (GitLab #707).
+        guard var value = await context.resolveAnyAwaitingDeferred(statement.internalVariable) else {
             throw ActionError.undefinedVariable(statement.internalVariable)
         }
 
@@ -1138,8 +1283,10 @@ public final class FeatureSetExecutor: Sendable {
         _ statement: MatchStatement,
         context: ExecutionContext
     ) async throws {
-        // Resolve the subject value
-        guard var subjectValue = context.resolveAny(statement.subject.base) else {
+        // Resolve the subject value. Awaiting resolve: a `match` on a deferred
+        // result is a read, and reading it must not park a cooperative-pool
+        // thread (GitLab #707).
+        guard var subjectValue = await context.resolveAnyAwaitingDeferred(statement.subject.base) else {
             throw ActionError.undefinedVariable(statement.subject.base)
         }
 
@@ -1154,7 +1301,11 @@ public final class FeatureSetExecutor: Sendable {
                 // Check guard condition if present
                 if let guardCondition = caseClause.guardCondition {
                     let guardResult = try await expressionEvaluator.evaluate(guardCondition, context: context)
-                    guard let boolResult = guardResult as? Bool, boolResult else {
+                    // The shared rule (GitLab #644). This site accepted a
+                    // `Bool` and nothing else, so a guard that a compiled
+                    // binary carried across the C ABI as 0/1 failed here and
+                    // passed everywhere else.
+                    guard Self.strictBool(guardResult) == true else {
                         continue // Guard failed, try next case
                     }
                 }
@@ -1233,8 +1384,11 @@ public final class FeatureSetExecutor: Sendable {
             // Note: value is already any Sendable, so it can't be nil
             return false
         case .array, .object:
-            // Complex types - use string comparison for now
-            return String(describing: StatementModifiers.value(of: literal)) == String(describing: value)
+            // Structural comparison, not `String(describing:)` (GitLab #640).
+            // Swift's `Dictionary` description has no defined order, so
+            // `match <obj> { case { a: 1, b: 2 } … }` matched or failed from
+            // run to run, and `[1, 2]` never matched `[1.0, 2.0]`.
+            return AROValueEquality.equal(StatementModifiers.value(of: literal), value)
         case .regex(let pattern, let flags):
             guard let stringValue = value as? String else { return false }
             return regexMatches(stringValue, pattern: pattern, flags: flags)
@@ -1259,22 +1413,15 @@ public final class FeatureSetExecutor: Sendable {
     }
 
     /// Check if two values are equal
+    /// The same structural comparison `match` uses for literals (GitLab #640).
+    ///
+    /// This had the same `String(describing:)` fallback, so a `case <other>`
+    /// comparing two records answered from how Swift happened to print them
+    /// that run. It also missed `1` against `1.0`, which the shared version
+    /// handles because which of the two a value is depends on whether it came
+    /// from a literal, JSON or arithmetic — not on anything the author wrote.
     private func valuesEqual(_ a: any Sendable, _ b: any Sendable) -> Bool {
-        // Try various type comparisons
-        if let aString = a as? String, let bString = b as? String {
-            return aString == bString
-        }
-        if let aInt = a as? Int, let bInt = b as? Int {
-            return aInt == bInt
-        }
-        if let aDouble = a as? Double, let bDouble = b as? Double {
-            return aDouble == bDouble
-        }
-        if let aBool = a as? Bool, let bBool = b as? Bool {
-            return aBool == bBool
-        }
-        // Fall back to string comparison
-        return String(describing: a) == String(describing: b)
+        AROValueEquality.equal(a, b)
     }
 
     // MARK: - Require Statement Execution (ARO-0003)
@@ -1349,6 +1496,25 @@ public final class FeatureSetExecutor: Sendable {
     /// The classification is `StreamConsumptionPolicy`, the same table the
     /// compile-time analysis uses — one source of truth, so what the analyzer
     /// predicts and what the runtime does cannot drift apart.
+    ///
+    /// It carries a second duty, and the reads below must not be weakened to a
+    /// non-forcing `resolveAnyRaw` without moving it: these two names are the
+    /// statement's own result and object, so resolving them here is what the
+    /// *action* then finds already materialized (GitLab #707).
+    /// `resolveAnyAwaitingDeferred` rather than `resolveAny`, because this runs
+    /// on Swift's cooperative pool,
+    /// whose thread count is the core count — forcing here parked one of those
+    /// threads on a `DispatchGroup` for the whole of the deferred action's I/O,
+    /// and at as many concurrent handlers as cores the pool had none left to
+    /// finish the work that would release them. Measured on an 18-core machine:
+    /// 24 concurrent requests to a handler that reads a deferred `Request`
+    /// deadlocked outright, 22 of them timing out at 60 s with all 18
+    /// cooperative threads in `dispatch_group_wait`.
+    ///
+    /// Awaiting changes nothing about *what* is seen — the awaiting resolve
+    /// keeps the `bindingProducedWhileForcing` preference and the
+    /// `recordDeferredFailure` attribution — and nothing about *which* names are
+    /// waited for. Only the thread stops being parked.
     private func materializeRequestBodyIfNeeded(
         statement: AROStatement,
         verb: String,
@@ -1359,20 +1525,26 @@ public final class FeatureSetExecutor: Sendable {
             ofVerb: verb,
             resultQualifiers: statement.result.specifiers
         )
-        let description = "\(statement.action.verb) the <\(statement.result.base)> "
-            + "\(objectDescriptor.preposition.rawValue) the <\(objectDescriptor.fullName)>"
+        // Built only when a body is actually present. This function runs for
+        // every statement in the program; the description is read on the
+        // branches below, which a request body reaches and nothing else does
+        // (GitLab #710).
+        func describeStatement() -> String {
+            "\(statement.action.verb) the <\(statement.result.base)> "
+                + "\(objectDescriptor.preposition.rawValue) the <\(objectDescriptor.fullName)>"
+        }
 
         // The body can be in either slot: `Compute … from <upload>` puts it in
         // the object, `Log <upload> to the <console>` in the result.
-        if let body = context.resolveAny(objectDescriptor.base) as? any UnreadBody,
+        if let body = await context.resolveAnyAwaitingDeferred(objectDescriptor.base) as? any UnreadBody,
            !objectDescriptor.specifiers.isEmpty || consumption == .wholeValue {
-            let value = try await body.materializedValue(statement: description)
+            let value = try await body.materializedValue(statement: describeStatement())
             context.bind(objectDescriptor.base, value: value, allowRebind: true)
         }
 
-        if let body = context.resolveAny(statement.result.base) as? any UnreadBody,
+        if let body = await context.resolveAnyAwaitingDeferred(statement.result.base) as? any UnreadBody,
            !statement.result.specifiers.isEmpty || consumption == .wholeValue {
-            let value = try await body.materializedValue(statement: description)
+            let value = try await body.materializedValue(statement: describeStatement())
             context.bind(statement.result.base, value: value, allowRebind: true)
         }
     }
@@ -1444,7 +1616,10 @@ public final class FeatureSetExecutor: Sendable {
         // property access) or a general expression (GitLab #519).
         var collectionValue: any Sendable
         if let noun = loop.collection {
-            guard let resolved: any Sendable = context.resolveAny(noun.base) else {
+            // Awaiting resolve: iterating a deferred collection is a read, and
+            // the loop body cannot start before it anyway — so it is the same
+            // wait, off the cooperative pool (GitLab #707).
+            guard let resolved: any Sendable = await context.resolveAnyAwaitingDeferred(noun.base) else {
                 throw ActionError.undefinedVariable(noun.base)
             }
             collectionValue = resolved
@@ -1460,6 +1635,19 @@ public final class FeatureSetExecutor: Sendable {
             for specifier in noun.specifiers {
                 collectionValue = try accessCollectionProperty(specifier, on: collectionValue)
             }
+        } else if let rangeExpression = loop.collectionExpression as? RangeExpression, !loop.isParallel {
+            // ARO-0089 §3.3: the collection slot is the one place a range is
+            // *not* materialised. Driving the loop from the two endpoints is
+            // what makes `for each <n> in 1->10_000_000` cost O(1) memory
+            // instead of 10 million boxed Ints — which is the reason the
+            // feature was asked for (GitLab #546).
+            //
+            // A `parallel for each` falls through to the eager path: it hands
+            // items to a task group, which needs them as values. Same choice
+            // the stream path makes below, and for the same reason.
+            let range = try await expressionEvaluator.evaluateRange(rangeExpression, context: context)
+            try await executeForEachRange(loop, range: range, context: context)
+            return
         } else if let expression = loop.collectionExpression {
             // Evaluated exactly once, before the first iteration — re-evaluating
             // per element would change both the semantics and the cost.
@@ -1504,17 +1692,30 @@ public final class FeatureSetExecutor: Sendable {
             try await withThrowingTaskGroup(of: Void.self) { group in
                 var activeCount = 0
                 for (index, item) in items.enumerated() {
-                    // Create a child context for filter evaluation
-                    // This ensures the filter check doesn't violate immutability
-                    let filterContext = context.createChild(featureSetName: context.featureSetName)
-                    filterContext.bind(loop.itemVariable, value: item)
+                    // One child context per iteration, holding the loop
+                    // variables, used for the filter and then for the body.
+                    //
+                    // It used to be two: a `filterContext` built for every item
+                    // whether or not the loop had a filter, discarded, and a
+                    // second child built inside the task. That doubled the
+                    // per-iteration allocation of the hottest loop form for
+                    // nothing (GitLab #702) — the filter binds exactly the two
+                    // names the body binds and evaluating an expression binds
+                    // nothing else, which is why the sequential path below has
+                    // always run filter and body in one context. Each iteration
+                    // still gets its own, so immutability and concurrent bodies
+                    // are unaffected; what changes is that the body's context is
+                    // created on this (serial) side of `addTask` rather than
+                    // inside it.
+                    let iterationContext = context.createChild(featureSetName: context.featureSetName)
+                    iterationContext.bind(loop.itemVariable, value: item)
                     if let indexVar = loop.indexVariable {
-                        filterContext.bind(indexVar, value: index)
+                        iterationContext.bind(indexVar, value: index)
                     }
 
                     // Check filter condition if present
                     if let filter = loop.filter {
-                        let filterResult = try await expressionEvaluator.evaluate(filter, context: filterContext)
+                        let filterResult = try await expressionEvaluator.evaluate(filter, context: iterationContext)
                         guard let passes = filterResult as? Bool, passes else {
                             continue
                         }
@@ -1526,15 +1727,8 @@ public final class FeatureSetExecutor: Sendable {
                         // the one that also counts the handlers this body
                         // wakes. Nested work runs under this slot.
                         try await ApplicationLimits.withSlot {
-                            // Create a child context for this iteration
-                            let childContext = context.createChild(featureSetName: context.featureSetName)
-                            childContext.bind(loop.itemVariable, value: item)
-                            if let indexVar = loop.indexVariable {
-                                childContext.bind(indexVar, value: index)
-                            }
-
                             for bodyStatement in loop.body {
-                                try await self.executeStatement(bodyStatement, context: childContext)
+                                try await self.executeStatement(bodyStatement, context: iterationContext)
                             }
                         }
                     }
@@ -1591,6 +1785,61 @@ public final class FeatureSetExecutor: Sendable {
         }
     }
 
+    // MARK: - Range For-Each (ARO-0089)
+
+    /// Iterate a range without materialising it: O(1) memory, whatever the
+    /// span (ARO-0089 §3.3, GitLab #546).
+    ///
+    /// Deliberately a transcription of `executeForEachLazy` rather than a
+    /// call into it — the element source is two integers, not a stream, and
+    /// wrapping them in one would reintroduce the per-element allocation this
+    /// path exists to avoid. The semantics it has to match are the loop's,
+    /// not the stream's: `where` filtering, `at <index>`, `Break` leaving the
+    /// loop (GitLab #664) and a `Return` inside the body reaching the feature
+    /// set rather than only ending the loop (GitLab #665).
+    private func executeForEachRange(
+        _ loop: ForEachLoop,
+        range: AROIntRange,
+        context: ExecutionContext
+    ) async throws {
+        var index = 0
+        var element = range.element(at: index)
+        while let value = element {
+            // Cooperative scheduling, exactly as the array path does it: a
+            // 10-million-element range must not pin a core for its duration.
+            if index % 500 == 0 { await Task.yield() }
+
+            let iterationContext = context.createChild(featureSetName: context.featureSetName)
+            iterationContext.bind(loop.itemVariable, value: value)
+            if let indexVar = loop.indexVariable {
+                iterationContext.bind(indexVar, value: index)
+            }
+
+            var passes = true
+            if let filter = loop.filter {
+                let filterResult = try await expressionEvaluator.evaluate(filter, context: iterationContext)
+                passes = (filterResult as? Bool) == true
+            }
+
+            if passes {
+                do {
+                    for bodyStatement in loop.body {
+                        try await executeStatement(bodyStatement, context: iterationContext)
+                        if let response = iterationContext.getResponse() {
+                            context.setResponse(response)
+                            return
+                        }
+                    }
+                } catch is BreakSignal {
+                    break
+                }
+            }
+
+            index += 1
+            element = range.element(at: index)
+        }
+    }
+
     // MARK: - Lazy Streaming For-Each (ARO-0051)
 
     /// Iterate a lazy AROStream one element at a time without materializing the full collection.
@@ -1640,14 +1889,39 @@ public final class FeatureSetExecutor: Sendable {
 
     // MARK: - When Clause Helpers
 
-    /// Evaluate a value as a boolean for when clause conditions
-    /// Follows JavaScript-like truthiness rules for convenience
+    /// `AROTruthiness.strict` under the name the guard sites here call it by.
+    ///
+    /// The rule and the reasoning live in `AROTruthiness` (GitLab #644),
+    /// because five copies of it is what the bug was.
+    static func strictBool(_ value: any Sendable) -> Bool? {
+        AROTruthiness.strict(value)
+    }
+
+    /// Report a guard that could not be evaluated (GitLab #644).
+    ///
+    /// Every guard path swallowed this, so a misspelt field in a guard made
+    /// the handler silently cease to exist. Recoverable, because one broken
+    /// guard should not take the application down — but visible, because the
+    /// alternative is a program that does nothing and says nothing.
+    ///
+    /// `nonisolated`, and the bus is passed in: the subscription closures that
+    /// call this deliberately stay off the engine actor — the actor may itself
+    /// be blocked waiting for handlers, so hopping back would deadlock.
+    nonisolated static func reportGuardFailure(
+        _ featureSet: String, _ error: any Error, kind: String, bus: EventBus
+    ) {
+        bus.publish(ErrorOccurredEvent(
+            error: "guard of \(featureSet) could not be evaluated: \(error)",
+            context: featureSet,
+            recoverable: true
+        ))
+        FileHandle.standardError.write(Data((
+            "[ARO] Guard of \(featureSet) could not be evaluated: \(error) — "
+            + "the \(kind) did not run.\n").utf8))
+    }
+
     private func asBool(_ value: any Sendable) -> Bool {
-        if let b = value as? Bool { return b }
-        if let i = value as? Int { return i != 0 }
-        if let s = value as? String { return !s.isEmpty }
-        if let array = value as? [any Sendable] { return !array.isEmpty }
-        return true  // Non-nil values are truthy
+        Self.strictBool(value) ?? false
     }
 
     // MARK: - While Loop Execution (GitLab #131)

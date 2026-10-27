@@ -70,6 +70,28 @@ The worked examples in that help text are copy-and-paste ready, and they write
 the verb bare — `Set the <x> to 42.` — which is the only spelling the language
 accepts. Angle brackets mark the result and the object, never the action.
 
+## Standing Inside a Project
+
+A bare session knows the language and nothing about where you are. Hand it a project directory and it knows that too:
+
+```bash
+$ aro repl ./MyApp
+Project: MyApp
+  contract: 3 path(s) from openapi.yaml
+  stores: 12 row(s) in 2 repositories
+  templates: templates/
+  feature sets: 7 from 3 file(s)
+  lifecycle: 1 Application-Start/End not run
+```
+
+Those five lines are the whole difference, and each is something a cell can now do. The contract is registered, so routes and status names behave as they do under `aro run`. The `.store` seed rows are already in the repositories you `Retrieve` from. `templates/` is where `Transform the <page> from the <template: hi.tpl>.` looks. The project's plugins are loaded, so its own actions and qualifiers resolve. And its feature sets are added, so `Application.<Name>` calls work.
+
+Read the last line again, because it is a decision rather than a limitation: **`Application-Start` is found and not run.** A session is a place to try statements against an application, not a process that boots one. A REPL that bound a port and started a file watcher because you opened it would be a surprise you had to undo, and the count is printed so you can see the choice being made rather than wonder whether it happened.
+
+If something in the project is broken, you still get the rest. A malformed `openapi.yaml` is one warning line; the templates still load. That matters because a session is often where you go to find out *why* something is broken, and a tool that refuses to start on a broken project cannot be that.
+
+`aro kernel --project ./MyApp` does the same for a notebook front-end.
+
 ## Leaving
 
 When the conversation ends, you have two ways to depart:

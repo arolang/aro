@@ -60,8 +60,31 @@ struct ReplCellOutput: Codable, Equatable, Sendable {
     var errorValue: String?
     var traceback: [String]?
 
+    /// Stream name of the notice that closes a capped cell (GitLab #531).
+    ///
+    /// A reserved name rather than a new `Kind`: `kind` is a raw-value enum
+    /// and an unknown case would make the whole `.repl` fail to decode on a
+    /// build that predates it, which for a file format users hand-edit and
+    /// the Learning course ships is too high a price. An older SOLARO shows
+    /// this as an ordinary stream line, which reads correctly.
+    ///
+    /// The slash keeps it out of the space real stream names occupy
+    /// ("stdout" / "stderr"), so nothing can collide with it.
+    static let truncationStreamName = "aro/truncated"
+
+    /// Whether this is the notice the output cap appends, rather than
+    /// anything the program printed.
+    var isTruncationNotice: Bool {
+        kind == .stream && streamName == Self.truncationStreamName
+    }
+
     static func stream(name: String, text: String) -> ReplCellOutput {
         ReplCellOutput(kind: .stream, streamName: name, text: text)
+    }
+
+    static func truncationNotice(_ text: String) -> ReplCellOutput {
+        ReplCellOutput(kind: .stream,
+                       streamName: truncationStreamName, text: text)
     }
 
     static func result(plainText: String?, jsonValue: String?) -> ReplCellOutput {

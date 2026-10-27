@@ -119,7 +119,34 @@ public enum RuntimeDefaults {
     /// This is the default for routes that declare nothing. Override the
     /// default with `ARO_MAX_BODY` (`1MB`, `512KB`, `2097152`) or, from ARO,
     /// `Configure the <http-server: max-body> with "1MB".`
-    public nonisolated(unsafe) static var maxMaterializedBody: Int = {
+    /// Synchronised, because `Configure the <http-server: max-body>` writes
+    /// it from a feature set while the NIO event loops read it per request
+    /// (GitLab #645). It was a bare `nonisolated(unsafe) static var`: an
+    /// unsynchronised write racing concurrent reads, which is undefined
+    /// behaviour rather than merely a stale value.
+    ///
+    /// **It is process-wide, and the statement that sets it does not look
+    /// it.** `Configure the <http-server: max-body> with "4MB".` in one
+    /// feature set raises the ceiling for every route in the application,
+    /// including ones already serving. Declare a route's own limit with
+    /// `x-aro-max-body` in the contract — that is per-route and static — and
+    /// keep this for the application default, set once at startup.
+    public static var maxMaterializedBody: Int {
+        get {
+            maxBodyLock.lock()
+            defer { maxBodyLock.unlock() }
+            return _maxMaterializedBody
+        }
+        set {
+            maxBodyLock.lock()
+            defer { maxBodyLock.unlock() }
+            _maxMaterializedBody = newValue
+        }
+    }
+
+    private static let maxBodyLock = NSLock()
+
+    nonisolated(unsafe) private static var _maxMaterializedBody: Int = {
         if let raw = ProcessInfo.processInfo.environment["ARO_MAX_BODY"],
            let n = ByteSize.parse(raw), n > 0 { return n }
         return 1_000_000

@@ -88,12 +88,21 @@ final class REPLCellEngine: @unchecked Sendable {
         // A re-run replaces this cell's own bindings. Released before
         // execution so the rebind guard — and the runtime — see the
         // names as free, exactly as they were on the first run.
-        let before = Set(session.variableNames)
         if let cellID, let previous = bindingsByCell[cellID] {
-            for name in previous where before.contains(name) {
+            let bound = Set(session.variableNames)
+            for name in previous where bound.contains(name) {
                 session.unbindVariable(name)
             }
         }
+
+        // AFTER the release, not before it. Taking this snapshot first made
+        // the second run of a cell record an empty binding set — the names it
+        // bound were already in `before`, so `after.subtracting(before)` was
+        // empty — and with nothing recorded, the third run had nothing to
+        // release and failed as an immutable rebind. Re-running a cell is the
+        // one thing a notebook does more than anything else, so it worked
+        // twice and then broke.
+        let before = Set(session.variableNames)
 
         var display: [String: Any]?
 
@@ -199,11 +208,16 @@ final class REPLCellEngine: @unchecked Sendable {
         }
         definitions[name] = source
 
-        // A domain handler is live from this moment: an Emit in a later
-        // cell dispatches to it (ARO-0091 event dispatch). Say so —
-        // "Defined" alone reads as "parked".
-        if let eventType = REPLSession.domainHandlerEventType(for: activity) {
-            note("Defined (\(name): \(activity)) — fires on <\(eventType): event>\n")
+        // Say what the definition will DO, not merely that it was taken.
+        // A dispatched handler is live from this moment — an Emit, Store,
+        // Accept, Notify or file change in a later cell reaches it
+        // (ARO-0091 event dispatch) — and "Defined" alone reads as
+        // "parked". A family this session cannot deliver says so instead:
+        // it used to get the same cheerful line as a working one, so a
+        // notebook could define a socket, WebSocket or KeyPress handler and
+        // wait forever with nothing to search for (GitLab #688).
+        if let advice = REPLSession.definitionAdvice(for: activity) {
+            note("Defined (\(name): \(activity)) — \(advice)\n")
         } else {
             note("Defined (\(name): \(activity))\n")
         }

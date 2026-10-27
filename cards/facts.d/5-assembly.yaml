@@ -1,0 +1,68 @@
+# Written during assembly, to replace cards dropped as duplicates between
+# the domain files. Checked against a build from HEAD rather than the
+# installed release, which lags the tree.
+facts:
+- category: Philosophy
+  headline: Cannot retrieve the user from the user-repository where id = 530.
+  explanation: Errors are the runtime's job, not the program's. It reconstructs the statement that failed
+    and fills in the values it had, so the message is the line you wrote with the data that broke it.
+    There are no error-handling branches to write, or to read past.
+- category: Philosophy
+  headline: Retrieve the <users> from the <user-repository> where <id> is <id>.
+  explanation: A Retrieve that matches nothing is not a failure. It binds an empty list, and with a where
+    clause matching exactly one row it binds that record rather than a one-element list. Guard on the
+    result; the statement will not fail for you.
+- category: Types
+  headline: Compute the <count> as Float from the <total>.
+  explanation: A result type uses `as`, not the qualifier slot, because the qualifier slot already selects
+    an operation. Asking for one named Float instead gets an error naming the closest real qualifier.
+- category: Metrics
+  headline: 'Return an <OK: status> with <metrics: prometheus>.'
+  explanation: Execution counts and timings are collected without instrumenting anything. The qualifier
+    picks the rendering - prometheus, plain, short or table - so one binding serves a scrape endpoint
+    and a human reading a terminal.
+- category: Operators
+  headline: 'Return an <OK: status> for the <page> when <path> starts with "/api".'
+  explanation: 'The affix operators are literal, which is the point of having them - matches with a caret-anchored
+    pattern would also accept a near miss. `starts` and `ends` are not reserved: only a following `with`,
+    in operator position, makes them operators.'
+- category: Data
+  headline: 'Compute the <changed: symmetric-difference> from <before> with <after>.'
+  explanation: The elements in exactly one of the two collections - what was added or removed, without
+    saying which. The four set operations share one shape, so intersect, difference and union read the
+    same way.
+- category: Files
+  headline: 'Compute the <path: path-join> from <dir> with <name>.'
+  explanation: 'Path qualifiers touch no filesystem. An absolute right-hand side does not reset the path:
+    joining /uploads to /etc/passwd gives /uploads/etc/passwd, deliberately unlike Python, because the
+    call this exists for is joining a trusted directory to an untrusted name.'
+- category: Expressions
+  headline: 'Compute the <parts: captures> from <line> by /(?<k>\w+)=(?<v>.*)/.'
+  explanation: Named groups arrive under their names, numbered ones under 1, 2, and the whole match under
+    match. A non-match binds an empty record rather than failing - the same answer a Retrieve gives when
+    nothing matches.
+- category: Expressions
+  headline: 'Compute the <parts: url-parts> from <link>.'
+  explanation: Binds scheme, host, port, path, query and fragment as a record. The URL qualifiers are
+    a family - url-encode, url-decode, url-resolve, url-defragment - so a crawler assembles and normalises
+    addresses without a regex.
+- category: Syntax
+  headline: 'Compute the <safe: html-escape> from <input>.'
+  explanation: A template whose path ends .html escapes what it prints; .tpl, .txt and .md do not. So
+    a .tpl emitting HTML still needs this, and escaping an already-escaping template is how a reader ends
+    up seeing &amp;lt;.
+- category: Data
+  headline: 'Compute the <tags: unique> from <all>.'
+  explanation: 'Removes duplicates with the first occurrence winning, so order survives. Equality is the
+    language''s own: numbers compare across Int and Double, a Bool is never a number, and a string is
+    never either.'
+- category: DevOps
+  headline: Tag the <release> for the <git> with "v1.0.0".
+  explanation: Version control is native through libgit2 rather than shelling out. The bare git object
+    discovers the enclosing repository upward from the working directory, exactly as the CLI does, and
+    every git action emits an event.
+- category: DevOps
+  headline: 'Clone the <repo> from the <git> with { url: "https://example.test/r.git", path: "./cloned"
+    }.'
+  explanation: An optional branch key checks that ref out at clone time. Push and Pull need the git CLI
+    for their network half, while status, log, staging and committing are all in-process.

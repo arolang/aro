@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>HTML Parsing - ARO Programming Language</title>
+{{head}}
+    <style>
+        .doc-page {
+            padding: 120px 24px 80px;
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
+        .doc-header {
+            margin-bottom: 48px;
+        }
+
+        .doc-header h1 {
+            font-size: clamp(2rem, 5vw, 3rem);
+            font-weight: 700;
+            margin-bottom: 16px;
+            letter-spacing: -0.02em;
+        }
+
+        .doc-header .lead {
+            font-size: 1.25rem;
+            color: var(--color-text-muted);
+            line-height: 1.7;
+        }
+
+        .doc-page h2 {
+            font-size: 1.8rem;
+            font-weight: 600;
+            margin: 48px 0 16px;
+            padding-top: 24px;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .doc-page h3 {
+            font-size: 1.3rem;
+            font-weight: 600;
+            margin: 32px 0 12px;
+            color: var(--color-secondary);
+        }
+
+        .doc-page p {
+            font-size: 1.1rem;
+            color: var(--color-text-muted);
+            line-height: 1.8;
+            margin-bottom: 16px;
+        }
+
+        .doc-page code {
+            font-family: var(--font-mono);
+            background: var(--color-bg-alt);
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-size: 0.9rem;
+            color: var(--color-secondary);
+        }
+
+        .doc-page pre {
+            background: var(--color-bg-alt);
+            border-radius: var(--radius-md);
+            padding: 24px;
+            overflow-x: auto;
+            margin: 24px 0;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .doc-page pre code {
+            background: none;
+            padding: 0;
+            font-size: 0.9rem;
+            line-height: 1.7;
+            color: var(--color-text);
+        }
+
+        .doc-page ul {
+            color: var(--color-text-muted);
+            margin: 16px 0 16px 24px;
+            line-height: 1.8;
+        }
+
+        .doc-page li {
+            margin-bottom: 8px;
+        }
+
+        .doc-page strong {
+            color: var(--color-text);
+        }
+
+        .doc-page em {
+            color: var(--color-secondary);
+            font-style: normal;
+        }
+
+        .doc-page table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 24px 0;
+        }
+
+        .doc-page th, .doc-page td {
+            padding: 12px 16px;
+            text-align: left;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .doc-page th {
+            background: var(--color-bg-alt);
+            font-weight: 600;
+            color: var(--color-text);
+        }
+
+        .doc-page td {
+            color: var(--color-text-muted);
+        }
+
+        .doc-page td code {
+            font-size: 0.85rem;
+        }
+
+        .highlight-box {
+            background: rgba(124, 58, 237, 0.1);
+            border: 1px solid rgba(124, 58, 237, 0.3);
+            border-radius: var(--radius-md);
+            padding: 24px;
+            margin: 32px 0;
+        }
+
+        .highlight-box h4 {
+            color: var(--color-primary);
+            font-size: 1.1rem;
+            margin-bottom: 12px;
+        }
+
+        .highlight-box p {
+            margin-bottom: 0;
+        }
+
+        .code-comment { color: #6b7280; }
+        .code-keyword { color: #7c3aed; font-weight: 600; }
+        .code-string { color: #10b981; }
+        .code-feature { color: #f472b6; }
+        .code-result { color: #06b6d4; }
+        .code-prompt { color: #f59e0b; font-weight: 600; }
+        .code-output { color: #10b981; }
+
+        .back-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            color: var(--color-text-muted);
+            text-decoration: none;
+            font-size: 0.95rem;
+            margin-bottom: 24px;
+            transition: color 0.2s;
+        }
+
+        .back-link:hover {
+            color: var(--color-primary);
+        }
+
+        .doc-screenshot {
+            width: 100%;
+            border-radius: var(--radius-md);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            margin: 24px 0 8px;
+            display: block;
+        }
+
+        .doc-screenshot-caption {
+            font-size: 0.95rem;
+            color: var(--color-text-muted);
+            margin-bottom: 32px;
+        }
+    </style>
+</head>
+<body>
+    <nav class="nav">
+        <div class="nav-content">
+            <a href="/aro/" class="logo">
+                <span class="logo-aro">ARO</span>
+            </a>
+            <div class="nav-links">
+                <a href="../fdd.html">The FDD Story</a>
+                <a href="../getting-started.html">Get Started</a>
+                <a href="../solaro.html">Solaro IDE</a>
+                <a href="../docs.html" style="color: var(--color-text);">Docs</a>
+                <a href="../disclaimer.html">Motivation</a>
+                <a href="../download.html">Download</a>
+                <a href="https://github.com/arolang/aro" class="nav-github">
+                    <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+                    <span class="github-stars">
+                        <svg viewBox="0 0 16 16"><path d="M8 .25a.75.75 0 01.673.418l1.882 3.815 4.21.612a.75.75 0 01.416 1.279l-3.046 2.97.719 4.192a.75.75 0 01-1.088.791L8 12.347l-3.766 1.98a.75.75 0 01-1.088-.79l.72-4.194L.818 6.374a.75.75 0 01.416-1.28l4.21-.611L7.327.668A.75.75 0 018 .25z"/></svg>
+                        <span class="github-stars-count"></span>
+                    </span>
+                </a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="doc-page">
+        <a href="../docs.html" class="back-link">&#x2190; Back to Documentation</a>
+
+        <header class="doc-header">
+            <h1>HTML Parsing</h1>
+            <p class="lead">Fetch a page, then ask it a question. <code>Parse</code> turns HTML into links, text, Markdown or any CSS selection &mdash; including attributes.</p>
+        </header>
+
+        <h2>One verb, routed by the qualifier</h2>
+        <p>
+            <code>Parse</code> decides what to do from the <strong>result qualifier</strong>,
+            never by sniffing the input. That makes the statement readable on its own:
+        </p>
+<pre><code><span class="code-feature">(indexPage: Crawler)</span> {
+    <span class="code-keyword">Request</span> the <span class="code-result">&lt;page&gt;</span> from the <span class="code-result">&lt;http-client&gt;</span> with <span class="code-string">"https://example.com"</span>.
+    <span class="code-keyword">Parse</span> the <span class="code-result">&lt;links: links&gt;</span> from the <span class="code-result">&lt;page: body&gt;</span>.
+    <span class="code-keyword">Return</span> an <span class="code-result">&lt;OK: status&gt;</span> with <span class="code-result">&lt;links&gt;</span>.
+}</code></pre>
+
+        <table>
+            <thead><tr><th>Qualifier</th><th>Gives you</th></tr></thead>
+            <tbody>
+                <tr><td><code>links</code></td><td>Every <code>href</code> on the page, as a list of strings</td></tr>
+                <tr><td><code>text</code></td><td>The body's text, as a list of strings</td></tr>
+                <tr><td><code>content</code></td><td><code>{ title, content }</code> &mdash; the title and cleaned body text</td></tr>
+                <tr><td><code>markdown</code></td><td><code>{ title, markdown }</code> &mdash; the body converted to Markdown</td></tr>
+                <tr><td><code>page</code> / <code>html</code></td><td><code>{ title, markdown, links }</code> &mdash; all three at once</td></tr>
+                <tr><td><code>select</code></td><td>A CSS selection, text or attributes (below)</td></tr>
+                <tr><td><code>json</code></td><td>Strict JSON &mdash; a structured value, or a descriptive error</td></tr>
+                <tr><td><code>link-header</code></td><td>An RFC&nbsp;8288 <code>Link</code> header, keyed by <code>rel</code></td></tr>
+            </tbody>
+        </table>
+
+        <p>
+            An <strong>unqualified</strong> <code>Parse</code> is an alias of
+            <code>Extract</code> &mdash; reading a field off an already-structured value is
+            <code>Extract</code>'s job, not a parse format. Any other qualifier is an error
+            naming the valid ones, rather than a guess.
+        </p>
+
+        <h2>Reading attributes with <code>select</code></h2>
+        <p>
+            The fixed qualifiers answer the four questions their names ask.
+            <code>select</code> answers the rest. The <code>with</code> clause is an ordinary
+            CSS selector, optionally followed by <code>@attribute</code>:
+        </p>
+<pre><code><span class="code-keyword">Parse</span> the <span class="code-result">&lt;hrefs: select&gt;</span> from the <span class="code-result">&lt;page&gt;</span> with <span class="code-string">"a@href"</span>.
+<span class="code-keyword">Parse</span> the <span class="code-result">&lt;srcs: select&gt;</span>  from the <span class="code-result">&lt;page&gt;</span> with <span class="code-string">"img@src"</span>.
+<span class="code-keyword">Parse</span> the <span class="code-result">&lt;desc: select&gt;</span>  from the <span class="code-result">&lt;page&gt;</span> with <span class="code-string">"meta[name=description]@content"</span>.
+<span class="code-keyword">Parse</span> the <span class="code-result">&lt;headings: select&gt;</span> from the <span class="code-result">&lt;page&gt;</span> with <span class="code-string">"h2"</span>.</code></pre>
+
+        <ul>
+            <li><strong>With <code>@</code></strong> &mdash; the attribute's value, per matching element.</li>
+            <li><strong>Without</strong> &mdash; the element's text.</li>
+        </ul>
+
+        <p>
+            One qualifier covers both, so nobody has to remember two names for "the link
+            texts" and "the link targets".
+        </p>
+
+        <h3>An element without the attribute contributes nothing</h3>
+        <p>Given <code>&lt;a href="/one"&gt;One&lt;/a&gt; &lt;a&gt;Not a link&lt;/a&gt; &lt;a href="/two"&gt;Two&lt;/a&gt;</code>:</p>
+<pre><code><span class="code-keyword">Parse</span> the <span class="code-result">&lt;texts: select&gt;</span> from the <span class="code-result">&lt;page&gt;</span> with <span class="code-string">"a"</span>.        <span class="code-comment">(* 3 items *)</span>
+<span class="code-keyword">Parse</span> the <span class="code-result">&lt;hrefs: select&gt;</span> from the <span class="code-result">&lt;page&gt;</span> with <span class="code-string">"a@href"</span>.   <span class="code-comment">(* 2 items *)</span></code></pre>
+        <p>
+            The result is the attributes that <strong>exist</strong>, not a list with holes
+            where they do not. A list with holes is only useful if you are correlating it
+            against another list by index &mdash; and for that, CSS already says what you
+            meant:
+        </p>
+<pre><code><span class="code-keyword">Parse</span> the <span class="code-result">&lt;texts: select&gt;</span> from the <span class="code-result">&lt;page&gt;</span> with <span class="code-string">"a[href]"</span>.
+<span class="code-keyword">Parse</span> the <span class="code-result">&lt;hrefs: select&gt;</span> from the <span class="code-result">&lt;page&gt;</span> with <span class="code-string">"a[href]@href"</span>.
+<span class="code-comment">(* same length, same order, aligned by construction *)</span></code></pre>
+        <p>
+            An attribute that is <em>present but empty</em> &mdash;
+            <code>&lt;input value=""&gt;</code> &mdash; is reported as the empty string rather
+            than dropped. Dropping it would conflate "no value" with "an empty value", and
+            only the first is a missing attribute.
+        </p>
+
+        <div class="highlight-box">
+            <h4>The attribute comes from the <em>last</em> <code>@</code></h4>
+            <p>
+                An attribute name cannot contain one and a CSS selector can, so
+                <code>[data-x="a@b"]@href</code> selects on <code>data-x</code> and reads
+                <code>href</code>. A trailing <code>@</code>, a leading <code>@</code>, or
+                something after it that is not an attribute name leaves the whole string as
+                the selector &mdash; so a malformed one is reported by the parser rather than
+                silently selecting something else.
+            </p>
+        </div>
+
+        <h2>Where the content comes from</h2>
+        <p>
+            <code>content</code>, <code>markdown</code> and <code>page</code> take the
+            document's main body in priority order &mdash; <code>&lt;main&gt;</code>, then
+            <code>&lt;article&gt;</code>, then <code>&lt;body&gt;</code>. Whitespace is
+            normalised, empty segments are dropped, and script and style elements are ignored.
+        </p>
+        <p>
+            <code>markdown</code> preserves document structure: headings become
+            <code>#</code>&hellip;<code>######</code>, links become
+            <code>[text](url)</code>, images <code>![alt](src)</code>,
+            <code>&lt;strong&gt;</code> becomes <code>**bold**</code>,
+            <code>&lt;pre&gt;&lt;code&gt;</code> becomes a fenced block, and lists, tables,
+            blockquotes and rules all carry over.
+        </p>
+
+        <h2>A crawler, end to end</h2>
+<pre><code><span class="code-feature">(crawl: Crawler takes &lt;url&gt;)</span> {
+    <span class="code-keyword">Extract</span> the <span class="code-result">&lt;start&gt;</span> from the <span class="code-result">&lt;parameter: url&gt;</span>.
+    <span class="code-keyword">Request</span> the <span class="code-result">&lt;response&gt;</span> from the <span class="code-result">&lt;http-client&gt;</span> with <span class="code-result">&lt;start&gt;</span>.
+
+    <span class="code-comment">(* title and body in one parse *)</span>
+    <span class="code-keyword">Parse</span> the <span class="code-result">&lt;page: page&gt;</span> from the <span class="code-result">&lt;response: body&gt;</span>.
+    <span class="code-keyword">Extract</span> the <span class="code-result">&lt;title&gt;</span> from the <span class="code-result">&lt;page: title&gt;</span>.
+
+    <span class="code-comment">(* relative hrefs are resolved against the page, then normalised *)</span>
+    <span class="code-keyword">Parse</span> the <span class="code-result">&lt;hrefs: select&gt;</span> from the <span class="code-result">&lt;response: body&gt;</span> with <span class="code-string">"a[href]@href"</span>.
+    for each <span class="code-result">&lt;href&gt;</span> in <span class="code-result">&lt;hrefs&gt;</span> {
+        <span class="code-keyword">Compute</span> the <span class="code-result">&lt;absolute: url-resolve&gt;</span> from <span class="code-result">&lt;href&gt;</span> with { base: <span class="code-result">&lt;start&gt;</span> }.
+        <span class="code-keyword">Compute</span> the <span class="code-result">&lt;canonical: url-normalize&gt;</span> from <span class="code-result">&lt;absolute&gt;</span>.
+        <span class="code-keyword">Store</span> the <span class="code-result">&lt;canonical&gt;</span> into the <span class="code-result">&lt;visited-repository&gt;</span>.
+    }
+
+    <span class="code-keyword">Return</span> an <span class="code-result">&lt;OK: status&gt;</span> with { title: <span class="code-result">&lt;title&gt;</span>, found: <span class="code-result">&lt;hrefs&gt;</span> }.
+}</code></pre>
+        <p>
+            <code>url-resolve</code> and <code>url-normalize</code> are what make a crawler's
+            "have I seen this?" answerable &mdash; two spellings of one address compare equal
+            after normalising. See <a href="computations.html">Computations</a>.
+        </p>
+
+        <div class="highlight-box">
+            <h4>XML is not implemented</h4>
+            <p>
+                There is no <code>ParseXml</code> and no XPath. The proposal was once titled
+                "HTML/XML" and listed XML as something that <em>could</em> be added, which read
+                as a promise of a parser that does not exist; it was retitled rather than left
+                to mislead. <code>Parse</code> handles HTML, JSON and the <code>Link</code>
+                header.
+            </p>
+            <p>
+                The full specification is
+                <a href="https://github.com/arolang/aro/blob/main/Proposals/ARO-0011-html-xml-parsing.md">ARO-0011:
+                HTML Parsing</a>. The historical <code>ParseHtml</code> spelling still works as
+                a legacy alias, but <code>Parse</code> with a qualifier is the current form.
+            </p>
+        </div>
+    </main>
+
+{{footer}}
+</body>
+</html>

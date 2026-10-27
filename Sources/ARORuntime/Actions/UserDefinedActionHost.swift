@@ -276,13 +276,15 @@ public final class UserDefinedActionHost: @unchecked Sendable {
     /// Matches the plugin convention: `status` and `reason` become top-level
     /// keys alongside whatever fields `Return ... with <data>.` produced.
     ///
-    /// The field values come from `structuredData` where `Return` recorded it,
-    /// so a returned list stays a list and a returned record stays a record
-    /// (GitLab #504). `data` — flattened for HTTP, where nested records become
-    /// dot-notation keys and lists become JSON text — is laid down first, so a
-    /// response built by something other than `Return` still carries its
-    /// fields, and the dot-notation keys stay available to anything that reads
-    /// them.
+    /// The field values are the payload, so a returned list stays a list and a
+    /// returned record stays a record (GitLab #504).
+    ///
+    /// This used to lay down the flattened rendering first and then override
+    /// it with the structured copy, which left the dot-notation keys
+    /// (`who.name` beside `who`) in the dict. Nothing read them: a nested
+    /// field is reached by walking the record (`<result: who.name>` is a
+    /// property path, not a key), so the payload alone is the same call site
+    /// without the second rendering (GitLab #711).
     private func flatten(response: Response) -> [String: any Sendable] {
         var dict: [String: any Sendable] = [
             "status": response.status,
@@ -290,12 +292,7 @@ public final class UserDefinedActionHost: @unchecked Sendable {
         if !response.reason.isEmpty {
             dict["reason"] = response.reason
         }
-        for (key, anySendable) in response.data {
-            if let value: any Sendable = anySendable.get() {
-                dict[key] = value
-            }
-        }
-        for (key, value) in response.structuredData {
+        for (key, value) in response.payload {
             dict[key] = value
         }
         return dict

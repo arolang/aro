@@ -29,9 +29,15 @@ public struct ResponseFormatter: Sendable {
             "reason": response.reason
         ]
 
-        if !response.data.isEmpty {
+        // `data` renders the payload's flat form on each access (GitLab #711),
+        // so read it once. This is the printer the issue means by "render the
+        // flattened form on demand": the dot-notation keys and JSON-text
+        // collections are this output's shape, and `Examples/ContextAware`
+        // asserts them.
+        let data = response.data
+        if !data.isEmpty {
             var dataDict: [String: Any] = [:]
-            for (key, value) in response.data {
+            for (key, value) in data {
                 dataDict[key] = unwrapValue(value)
             }
             json["data"] = dataDict
@@ -45,8 +51,10 @@ public struct ResponseFormatter: Sendable {
         var lines: [String] = []
         lines.append("[\(response.status)] \(response.reason)")
 
-        if !response.data.isEmpty {
-            let flattenedPairs = flattenForHuman(response.data, prefix: "")
+        // One flattening per printed response (GitLab #711).
+        let data = response.data
+        if !data.isEmpty {
+            let flattenedPairs = flattenForHuman(data, prefix: "")
             for (key, value) in flattenedPairs.sorted(by: { $0.0 < $1.0 }) {
                 lines.append("  \(key): \(value)")
             }
@@ -116,10 +124,32 @@ public struct ResponseFormatter: Sendable {
             return String(int)
         case let double as Double:
             return AroNumberFormatting.string(for: double)
+        case let exact as AROCurrency:
+            // An exact amount prints what it is (GitLab #906). No 15-digit
+            // absorption is needed: there is no artifact to absorb, and
+            // re-rendering through Double would put one back.
+            return exact.description
         case let bool as Bool:
             return bool ? "true" : "false"
         case let response as Response:
             return "[\(response.status)] \(response.reason)"
+        case let dict as [String: any Sendable]:
+            // A record inside a collection (GitLab #822).
+            //
+            // There was no case for this, so `Group the <by-status> from the
+            // <orders> by "status".` printed each order as
+            // `["amount": 100, "id": 1, "status": "active"]` — Swift's
+            // `Dictionary` description, whose key order is unspecified and
+            // changes between runs. `Examples/GroupDemo`'s `expected.txt`
+            // asserts only the group keys for exactly that reason.
+            //
+            // Rendered inline with sorted keys rather than as the multi-line
+            // block a top-level record gets, because this one is an element
+            // of a list and the list needs to stay on its line.
+            let pairs = dict.keys.sorted().map { "\($0): \(formatSimpleValueForHuman(dict[$0]!))" }
+            return "{\(pairs.joined(separator: ", "))}"
+        case let array as [any Sendable]:
+            return "[\(array.map { formatSimpleValueForHuman($0) }.joined(separator: ", "))]"
         default:
             return String(describing: value)
         }
@@ -131,8 +161,10 @@ public struct ResponseFormatter: Sendable {
         var pairs: [(String, String)] = []
         pairs.append(("reason", "String(\"\(response.reason)\")"))
 
-        if !response.data.isEmpty {
-            let flattened = flattenForDeveloper(response.data, prefix: "")
+        // One flattening per printed response (GitLab #711).
+        let data = response.data
+        if !data.isEmpty {
+            let flattened = flattenForDeveloper(data, prefix: "")
             pairs.append(contentsOf: flattened.sorted(by: { $0.0 < $1.0 }))
         }
 
@@ -227,6 +259,11 @@ public struct ResponseFormatter: Sendable {
             return String(int)
         case let double as Double:
             return AroNumberFormatting.string(for: double)
+        case let exact as AROCurrency:
+            // An exact amount prints what it is (GitLab #906). No 15-digit
+            // absorption is needed: there is no artifact to absorb, and
+            // re-rendering through Double would put one back.
+            return exact.description
         case let bool as Bool:
             return bool ? "true" : "false"
         case let dict as [String: any Sendable]:
@@ -295,6 +332,10 @@ public struct ResponseFormatter: Sendable {
             return int
         case let double as Double:
             return double
+        case let exact as AROCurrency:
+            // Left as itself; `toJSONString` routes a payload holding one
+            // through ARO's own JSON writer (GitLab #906).
+            return exact
         case let bool as Bool:
             return bool
         case let dict as [String: any Sendable]:
@@ -319,6 +360,20 @@ public struct ResponseFormatter: Sendable {
     }
 
     private static func toJSONString(_ value: Any) -> String {
+        // GitLab #906: an exact amount cannot go through
+        // `JSONSerialization` — it is not a type that writer knows, and
+        // widening it to `Double` first is the precision loss `Currency`
+        // exists to prevent. A payload holding one is written by ARO's own
+        // JSON writer instead, which spells it exactly.
+        //
+        // Only such a payload. Plain `Double`s still go through
+        // `JSONSerialization` here, so HTTP bodies keep rendering them at 17
+        // significant digits while file JSON renders them shortest-round-trip
+        // — that inconsistency is GitLab #908, and is deliberately not
+        // touched here.
+        if ResponsePayload.containsExactAmount(value) {
+            return FormatSerializer.serializeExactJSON(value)
+        }
         do {
             let data = try JSONSerialization.data(withJSONObject: value, options: [.sortedKeys])
             return String(data: data, encoding: .utf8) ?? "{}"

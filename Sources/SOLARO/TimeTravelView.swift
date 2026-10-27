@@ -333,7 +333,8 @@ struct TimeTravelView: View {
                 Text(branchError)
                     .font(SolaroFont.monoCaption)
                     .foregroundStyle(SolaroColor.stateError)
-                    .lineLimit(3)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .textSelection(.enabled)
             }
         }
     }

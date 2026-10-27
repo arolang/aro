@@ -36,6 +36,35 @@ struct JSONREPLRequest: Decodable {
     /// (GitLab #544). Absent for a plain REPL line, which keeps the
     /// session-wide immutability rule.
     let cellId: String?
+    /// Whether this `execute` may ask the client a question —
+    /// `Prompt`, `Select`, `Ask` (GitLab #690). Named after Jupyter's
+    /// `allow_stdin`, which is the same promise, so a kernel can pass
+    /// its front-end's answer straight through.
+    ///
+    /// **Absent means false.** A client that has never heard of
+    /// `input_request` would otherwise be sent one and never reply, and
+    /// the cell would wait out the whole timeout before failing. Opting
+    /// in costs one field; the honest refusal is the default.
+    let allowStdin: Bool?
+    /// The answer, on a request of type `input_reply`. Its `id` is the
+    /// id of the `execute` that asked.
+    let value: String?
+    /// `"error"` on an `input_reply` means the client will not answer
+    /// (the user dismissed the prompt). The statement then fails the way
+    /// it fails when nobody can answer, instead of waiting.
+    let status: String?
+    /// Directory a relative path in this cell resolves against.
+    ///
+    /// A notebook's own folder, which is what a reader means by `"./data.csv"`
+    /// or `<git: "..">` when they are looking at the file — and what
+    /// `Learning/validate.py` has always used (it runs with `cwd=Learning/`).
+    /// A front-end that serves several notebooks from one session cannot
+    /// express that with the process's working directory, because they are in
+    /// different folders (GitLab #915).
+    ///
+    /// Absent means the session's own default: the project directory for
+    /// `aro repl <dir>`, otherwise the process's working directory.
+    let baseDir: String?
 }
 
 // MARK: - Responses
@@ -107,5 +136,32 @@ enum JSONREPLEncoder {
 
     static func stream(id: Int, name: String, text: String) -> String {
         line(["type": "stream", "id": id, "name": name, "text": text])
+    }
+
+    /// A question from the server, mid-`execute` (GitLab #690).
+    ///
+    /// Deliberately shaped like Jupyter's `input_request` — `prompt` and
+    /// `password`, answered by an `input_reply` carrying `value` — so a
+    /// kernel sitting between the two is a relay and not a translator,
+    /// and a reader of one protocol already knows the other.
+    ///
+    /// It arrives *between* a request and its `result`, which is the one
+    /// place the protocol's "exactly one result per request" rule needed
+    /// a companion message rather than a new request type.
+    static func inputRequest(id: Int, prompt: String, password: Bool) -> String {
+        line(["type": "input_request", "id": id, "prompt": prompt, "password": password])
+    }
+
+    /// Output produced while no cell was executing.
+    ///
+    /// Carries **no** `id`, because there is no cell it belongs to, and an
+    /// `origin` so a front-end can render it somewhere of its own rather than
+    /// guess. A `File Event Handler` woken by a file dropped while the session
+    /// idles is the case this exists for: attributing its output to the last
+    /// cell that happened to run says something false about causation, and a
+    /// front-end that had already finalised that cell would misplace or drop
+    /// it (GitLab #913).
+    static func backgroundStream(name: String, text: String) -> String {
+        line(["type": "stream", "origin": "background", "name": name, "text": text])
     }
 }

@@ -4,11 +4,13 @@
 // call site (ARO-0081 §5, GitLab #504)
 // ============================================================
 //
-// `Return` flattens its payload for transport: nested records become
-// dot-notation keys, collections become their JSON text. That is what an HTTP
-// response needs and what a caller in the same process must never see — a
-// returned list used to arrive as a 51-character string, so `length` counted
-// characters and `for each` ran once over one string.
+// A response renders its payload flattened for transport — nested records
+// become dot-notation keys, collections become their JSON text — and that is
+// what an HTTP response needs and what a caller in the same process must never
+// see: a returned list used to arrive as a 51-character string, so `length`
+// counted characters and `for each` ran once over one string. The flattening
+// is `Response.data`, computed on demand since GitLab #711; the payload the
+// call site reads is `Response.payload`.
 //
 // These tests pin the call-site contract per shape: list, empty list, nested
 // record, scalar — plus the guarantee that the transport-shaped `data` is
@@ -40,9 +42,9 @@ struct UserDefinedActionReturnShapeTests {
         return response
     }
 
-    /// The value a caller would bind: structured where `Return` recorded it.
+    /// The value a caller would bind: the payload (GitLab #711).
     private func field(_ response: Response, _ key: String) -> (any Sendable)? {
-        if let structured = response.structuredData[key] { return structured }
+        if let structured = response.payload[key] { return structured }
         return response.data[key]?.get()
     }
 
@@ -228,7 +230,7 @@ struct UserDefinedActionReturnShapeTests {
         // … and nested records are dot-notation keys.
         #expect(response.data["who.name"]?.get() == "Ada")
         // The structured copy carries the values themselves.
-        #expect((response.structuredData["items"] as? [any Sendable])?.count == 3)
-        #expect((response.structuredData["who"] as? [String: any Sendable])?["name"] as? String == "Ada")
+        #expect((response.payload["items"] as? [any Sendable])?.count == 3)
+        #expect((response.payload["who"] as? [String: any Sendable])?["name"] as? String == "Ada")
     }
 }

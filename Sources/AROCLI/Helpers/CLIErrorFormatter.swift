@@ -25,11 +25,23 @@ enum CLIErrorFormatter {
            let description = localized.errorDescription {
             return description
         }
+        // A type that writes its own `description` means it, on every host.
+        // Darwin surfaces that sentence through `localizedDescription`;
+        // corelibs-foundation does not, so a Linux runner printed
+        // "The operation could not be completed. (ARORuntime.ExpressionError
+        // error 0.)" where a Mac printed "Undefined variable: x" — an author
+        // reading a CI log learned nothing from their program (train:oracle,
+        // the sequel to #900). Reading the conformance directly deletes the
+        // platform difference instead of special-casing one wording.
+        if let described = error as? any CustomStringConvertible {
+            return described.description
+        }
         // NSError-backed values also carry a usable localizedDescription; the
         // fallback interpolation is last resort for plain enums with no
         // conformance, where the case name is genuinely all there is.
         let localized = error.localizedDescription
-        if !localized.isEmpty, !localized.hasPrefix("The operation couldn’t be completed") {
+        if !localized.isEmpty, !localized.hasPrefix("The operation couldn’t be completed"),
+           !localized.hasPrefix("The operation could not be completed") {
             return localized
         }
         return "\(error)"

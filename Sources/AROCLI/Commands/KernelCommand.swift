@@ -16,7 +16,7 @@
 import ArgumentParser
 import Foundation
 
-struct KernelCommand: ParsableCommand {
+struct KernelCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "kernel",
         abstract: "Run the native Jupyter kernel, or install its kernelspec",
@@ -43,7 +43,11 @@ struct KernelCommand: ParsableCommand {
             help: "Jupyter connection file (passed by the front-end)")
     var connectionFile: String?
 
-    func run() throws {
+    @Option(name: .customLong("project"),
+            help: "Project directory the notebook belongs to (GitLab #691)")
+    var project: String?
+
+    func run() async throws {
         guard let connectionFile else {
             throw ValidationError("""
                 Missing --connection-file. This form is invoked by Jupyter; \
@@ -57,7 +61,18 @@ struct KernelCommand: ParsableCommand {
         guard connection.signatureScheme == "hmac-sha256" || connection.key.isEmpty else {
             throw ValidationError("Unsupported signature scheme '\(connection.signatureScheme)'.")
         }
-        let server = try JupyterKernelServer(connection: connection)
+        // The project is wired in before the kernel serves its first
+        // execute_request, so a cell never sees a half-prepared session.
+        var session: REPLSession?
+        if let project {
+            let prepared = REPLSession()
+            let context = await REPLProjectContext.load(
+                directory: project, into: prepared)
+            FileHandle.standardError.write(Data((context.summary + "\n").utf8))
+            session = prepared
+        }
+        let server = try JupyterKernelServer(
+            connection: connection, session: session)
         server.run()
     }
 }

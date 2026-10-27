@@ -13,7 +13,7 @@ This proposal defines ARO's type system, which follows a minimalist philosophy: 
 
 ARO's type system is designed around three core principles:
 
-1. **Simplicity**: Four primitive types and two collection types cover most needs
+1. **Simplicity**: Five primitive types and two collection types cover most needs
 2. **External Definitions**: Complex types come from OpenAPI, not from ARO code
 3. **Fail Fast**: No null checks or optional handling; errors are immediate and descriptive
 
@@ -27,9 +27,9 @@ ARO's type system is designed around three core principles:
 |   | String       |       | openapi.yaml     |    |
 |   | Integer      |       |   components:    |    |
 |   | Float        |       |     schemas:     |    |
-|   | Boolean      |       |       User       |    |
-|   +--------------+       |       Order      |    |
-|                          |       Product    |    |
+|   | Currency     |       |       User       |    |
+|   | Boolean      |       |       Order      |    |
+|   +--------------+       |       Product    |    |
 |   +--------------+       +------------------+    |
 |   | List<T>      |              |                |
 |   | Map<K,V>     |              v                |
@@ -42,14 +42,19 @@ ARO's type system is designed around three core principles:
 
 ## Primitive Types
 
-ARO provides four built-in primitive types:
+ARO provides five built-in primitive types:
 
 | Type | Description | Literal Examples |
 |------|-------------|-----------------|
 | `String` | Text values | `"hello"`, `'world'` |
 | `Integer` | Whole numbers | `42`, `-17`, `0xFF` |
-| `Float` | Decimal numbers | `3.14`, `2.5e10` |
+| `Float` | Decimal numbers, binary (IEEE 754) | `3.14`, `2.5e10` |
+| `Currency` | Decimal numbers, exact (base 10) | `19.99`, `7.20` |
 | `Boolean` | True/False | `true`, `false` |
+
+`Currency` has no literal form of its own, and that is deliberate: a bare
+`19.99` in source is a `Float`, exactly as it was. The format is requested
+where a value is *computed*, with the `as` clause.
 
 ### Examples
 
@@ -64,6 +69,105 @@ ARO provides four built-in primitive types:
     Return an <OK: status> for the <demo>.
 }
 ```
+
+### `Currency`: exact decimal arithmetic
+
+`Float` is binary floating point, and binary floating point cannot represent
+`2.40`. So three items at that price is not what anyone would write down:
+
+```aro
+Compute the <loose-total> from <qty> * <price>.               (* 7.199999999999999 *)
+Compute the <line-total> as Currency from <qty> * <price>.    (* 7.20 *)
+```
+
+`Currency` is a **number**, not a rendering: it serialises as a JSON, CSV and
+YAML number at full precision, so the amount that leaves in a data product is
+the amount that was computed. (A rendered string would print correctly and then
+quote itself into the file, which is a different wrong answer — ARO-0019
+§3.2.1 settled that for `fixed` and the same holds here.)
+
+An amount carries a **scale**: the number of decimal places it has. The scale
+comes from the operands rather than being invented, which is the rule SQL
+`NUMERIC` and `BigDecimal` follow:
+
+| Operation | Result scale | Exact? |
+|-----------|--------------|--------|
+| `a + b`, `a - b` | the wider of the two | yes |
+| `a * b` | the two scales added, trailing zeros dropped to the wider operand's | yes |
+| `a / b` | six places, then trailing zeros dropped to the wider operand's | **no** — see below |
+| `a % b` | the wider of the two | yes |
+| `-a` | unchanged | yes |
+
+**Division is the one operation that cannot be exact**, so it has a stated
+rule rather than a silent one: computed at **six decimal places** and rounded
+**half-up**. Six is four more than any circulating currency's minor unit, so an
+intermediate division never decides the cents; `fixed` decides them at the end,
+where the author asks for it. `6.00 / 2` is `3.00` and `10.00 / 3` is
+`3.333333` — visibly not exact, which is the honest report.
+
+Exactness is **contagious**. A statement that reads an exact amount stays
+exact without repeating the annotation:
+
+```aro
+Compute the <line-total> as Currency from <qty> * <price>.
+Compute the <with-fee> from <line-total> + 1.05.              (* still exact *)
+```
+
+That is what lets a pipeline compute an amount **once** and have every
+aggregate downstream agree about it: `sum` of a column of exact amounts is
+exact, and so is `min`, `max` and a comparison in a `where` or `when` clause.
+
+An amount carries at most **18 decimal places**, and its scaled value is a
+64-bit integer. An operation that cannot be represented within those is a
+runtime error naming the operation — never a wrapped or quietly rounded
+result. Multiplication reaches the scale limit first, because the scales add.
+
+#### `Decimal` is the same format
+
+`as Decimal` is accepted and means exactly `as Currency`. It was accepted
+before this proposal too, and mapped to `Float` — the word that promises
+exactness delivering binary floating point, which is the sharpest edge the
+type system had (GitLab #906). Making it mean what it says fixes that without
+breaking the programs that already write it.
+
+Prefer `Currency` in new code: it says *why* the exactness is wanted, and it is
+the word a reader looks for when the subject is money.
+
+#### `Currency` carries no currency code
+
+It is a **precision format**, not a currency. `as Currency` will add a USD
+amount to a EUR one without complaint, because it does not know which is which.
+
+That is the smaller of the two possible designs and it is the one taken, for
+four reasons:
+
+1. **The code already has a home.** ARO-0014's `Money` is an object with
+   `amount` and `currency`, declared in `openapi.yaml`. Putting a code in the
+   number format as well would give two places that can disagree.
+2. **The annotation sits where there is nothing to name it from.**
+   `as Currency` appears on a computed result — `<qty> * <price>` — and no code
+   appears in that expression. It would have to be guessed or defaulted, and a
+   guessed code is how a USD total acquires a EUR label.
+3. **Mixed-currency addition is a domain rule**, enforced where the domain
+   shapes live. A format that refuses `+` needs a code on *every* amount,
+   literals included, which means either `as Currency("EUR")` on every
+   statement of a single-currency application — nearly all of them — or a
+   default code, which is a silent wrong answer.
+4. **It composes.** Hold `Money.amount` as a `Currency` and the code stays
+   beside it in the record, where the contract already put it.
+
+The first reading is the one the name suggests, so: if you need the arithmetic
+to refuse a mismatch, model the amount as ARO-0014 `Money` and check the
+`currency` field. Cross-currency checking in the format itself is tracked
+separately.
+
+#### Integer minor units are still available
+
+Holding money as whole cents in an `Integer` and dividing once at the end
+remains the stricter choice for a ledger, and ARO-0019 §3.2.1 still recommends
+it there: an `Integer` cannot acquire a fractional place at all, and equality
+over it needs no rule. `Currency` is for the far more common case where the
+amounts are written in major units and the arithmetic has to be right.
 
 ---
 
@@ -334,6 +438,7 @@ For clarity, especially when disambiguating from qualifier syntax, use `as`:
 (* Using 'as' for type annotations *)
 Filter the <active-users> as List<User> from the <users> where <active> is true.
 Reduce the <total> as Float from the <orders> with sum(<amount>).
+Reduce the <revenue> as Currency from the <orders> with sum(<amount>).
 Map the <names> as List<String> from the <users: name>.
 ```
 
@@ -351,7 +456,8 @@ Create the <items> with [1, 2, 3].       // items: List<Integer>
 
 Use explicit annotations when:
 
-1. **Specifying numeric precision**: `<total> as Float` when you need decimals
+1. **Specifying numeric precision**: `<total> as Float` when you need decimals,
+   `<total> as Currency` when the decimals have to be exact (money)
 2. **Documentation**: Making types explicit for readability
 3. **Overriding inference**: When the default type is not what you need
 
@@ -366,7 +472,7 @@ result_clause = "<" , qualified_noun , ">" , [ "as" , type_annotation ] ;
 
 type_annotation = type_name ;
 
-type_name = "String" | "Integer" | "Float" | "Boolean"
+type_name = "String" | "Integer" | "Float" | "Currency" | "Decimal" | "Boolean"
           | "List" , "<" , type_name , ">"
           | "Map" , "<" , type_name , "," , type_name , ">"
           | openapi_schema_name ;

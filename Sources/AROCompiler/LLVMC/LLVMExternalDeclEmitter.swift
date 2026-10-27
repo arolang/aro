@@ -28,6 +28,10 @@ public final class LLVMExternalDeclEmitter {
     private var _registerNotificationHandler: Function?
     private var _registerUserAction: Function?
     private var _registerFeatureSetMetadata: Function?
+    // Test-harness binaries only (GitLab #694) — see `aro build --tests`.
+    private var _registerFeatureSetBody: Function?
+    private var _testRunCase: Function?
+    private var _testReport: Function?
     private var _logWarning: Function?
     private var _contextCreate: Function?
     private var _contextCreateNamed: Function?
@@ -62,6 +66,7 @@ public final class LLVMExternalDeclEmitter {
     private var _variableBindArray: Function?
     private var _variableBindValue: Function?
     private var _variableUnbind: Function?
+    private var _contextClearTransients: Function?
     private var _variableResolve: Function?
     private var _variableResolveString: Function?
     private var _variableResolveInt: Function?
@@ -203,6 +208,29 @@ public final class LLVMExternalDeclEmitter {
         _registerFeatureSetMetadata = ctx.module.declareFunction(
             "aro_register_feature_set_metadata",
             types.voidFunctionType(parameters: [ptr, ptr])
+        )
+
+        // The three entry points a test-harness binary's main calls
+        // (GitLab #694). Declared unconditionally — an unused declaration costs
+        // nothing in the IR, and keeping the externals table free of build-mode
+        // branches is worth more than the three lines it would save.
+        //
+        // void @aro_register_feature_set_body(ptr runtime, ptr name, ptr body)
+        _registerFeatureSetBody = ctx.module.declareFunction(
+            "aro_register_feature_set_body",
+            types.voidFunctionType(parameters: [ptr, ptr, ptr])
+        )
+
+        // i32 @aro_test_run_case(ptr ctx, ptr name, ptr activity, ptr body)
+        _testRunCase = ctx.module.declareFunction(
+            "aro_test_run_case",
+            types.functionType(parameters: [ptr, ptr, ptr, ptr], returning: i32)
+        )
+
+        // i32 @aro_test_report()
+        _testReport = ctx.module.declareFunction(
+            "aro_test_report",
+            types.functionType(parameters: [], returning: i32)
         )
 
         // void @aro_log_warning(ptr)
@@ -396,6 +424,12 @@ public final class LLVMExternalDeclEmitter {
         _variableUnbind = ctx.module.declareFunction(
             "aro_variable_unbind",
             types.voidFunctionType(parameters: [ptr, ptr])
+        )
+
+        // void @aro_context_clear_transients(ptr)
+        _contextClearTransients = ctx.module.declareFunction(
+            "aro_context_clear_transients",
+            types.voidFunctionType(parameters: [ptr])
         )
 
         // ptr @aro_variable_resolve(ptr, ptr)
@@ -617,6 +651,9 @@ public final class LLVMExternalDeclEmitter {
     public var registerNotificationHandler: Function { _registerNotificationHandler! }
     public var registerUserAction: Function { _registerUserAction! }
     public var registerFeatureSetMetadata: Function { _registerFeatureSetMetadata! }
+    public var registerFeatureSetBody: Function { _registerFeatureSetBody! }
+    public var testRunCase: Function { _testRunCase! }
+    public var testReport: Function { _testReport! }
     public var logWarning: Function { _logWarning! }
     public var contextCreate: Function { _contextCreate! }
     public var contextCreateNamed: Function { _contextCreateNamed! }
@@ -701,6 +738,7 @@ public final class LLVMExternalDeclEmitter {
     public var variableBindArray: Function { _variableBindArray! }
     public var variableBindValue: Function { _variableBindValue! }
     public var variableUnbind: Function { _variableUnbind! }
+    public var contextClearTransients: Function { _contextClearTransients! }
     public var variableResolve: Function { _variableResolve! }
     public var variableResolveString: Function { _variableResolveString! }
     public var variableResolveInt: Function { _variableResolveInt! }

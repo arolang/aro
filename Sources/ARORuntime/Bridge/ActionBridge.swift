@@ -66,7 +66,17 @@ private func convertValueToJSON(_ value: any Sendable) -> Any {
 }
 
 /// Convert C result descriptor to Swift ResultDescriptor
-func toResultDescriptor(_ ptr: UnsafeRawPointer) -> ResultDescriptor {
+///
+/// `asType` is NOT in the C struct — it has three fields and the LLVM type
+/// mirrors them — so the statement's `as <Type>` annotation arrives as the
+/// `_as_type_` modifier instead, and `asType:` reads it from the context
+/// (GitLab #906). Without it `result.asType` was always `nil` in compiled
+/// code, which made `ResultTypeCoercion` a guaranteed no-op there: `as Float`,
+/// `as Integer` and `as Currency` all worked under `aro run` and did nothing
+/// under `aro build`.
+func toResultDescriptor(
+    _ ptr: UnsafeRawPointer, asType: String? = nil
+) -> ResultDescriptor {
     // Read raw C struct with proper alignment:
     // struct AROResultDescriptor {
     //     const char* base;        // offset 0, 8 bytes
@@ -91,7 +101,16 @@ func toResultDescriptor(_ ptr: UnsafeRawPointer) -> ResultDescriptor {
 
     let dummyLocation = SourceLocation(line: 0, column: 0, offset: 0)
     let dummySpan = SourceSpan(at: dummyLocation)
-    return ResultDescriptor(base: base, specifiers: specifiers, span: dummySpan)
+    return ResultDescriptor(
+        base: base, specifiers: specifiers, span: dummySpan, asType: asType)
+}
+
+/// The statement's `as <Type>` annotation, from the `_as_type_` modifier the
+/// code generator binds before the action call (GitLab #906).
+func compiledAsType(_ context: ExecutionContext) -> String? {
+    guard let value = context.resolveAny("_as_type_") as? String,
+          !value.isEmpty else { return nil }
+    return value
 }
 
 /// Convert C object descriptor to Swift ObjectDescriptor
@@ -174,7 +193,8 @@ private func executeAction(
           let result = resultPtr,
           let object = objectPtr else { return nil }
 
-    let resultDesc = toResultDescriptor(result)
+    let resultDesc = toResultDescriptor(
+        result, asType: compiledAsType(ctxHandle.context))
     let objectDesc = toObjectDescriptor(object)
 
     // Deferred execution in compiled binaries (ARO-0088 §2, §7).
@@ -571,12 +591,27 @@ public func aro_action_emit(
     _ resultPtr: UnsafeRawPointer?,
     _ objectPtr: UnsafeRawPointer?
 ) -> UnsafeMutableRawPointer? {
-    // Synchronous emit: wait for all handlers to complete before returning.
-    // This matches interpreter-mode EmitAction which uses publishAndTrack (waits for handlers).
-    // Required for correct sequential semantics: e.g., LoadTimeline emits PostReceived events
-    // and must wait for each Store handler to complete before updating totalPosts in UIState,
-    // so the timeline observer renders with all posts already in the repository.
+    // `Emit` hands the event over and continues; it does not wait for handlers
+    // (ARO-0088 §7, GitLab #905). The waiting it used to do lives in `Deliver`.
+    //
+    // The comment here used to justify the waiting with a program that needed
+    // it — a timeline emitting `PostReceived` and relying on each `Store`
+    // handler having finished before it read the total. That program is
+    // exactly what `Deliver` is for, and saying so in one verb is better than
+    // every emitter paying for it.
     return executeAction(verb: "emit", contextPtr: contextPtr, resultPtr: resultPtr, objectPtr: objectPtr)
+}
+
+@_cdecl("aro_action_deliver")
+public func aro_action_deliver(
+    _ contextPtr: UnsafeMutableRawPointer?,
+    _ resultPtr: UnsafeRawPointer?,
+    _ objectPtr: UnsafeRawPointer?
+) -> UnsafeMutableRawPointer? {
+    // The awaited delivery (GitLab #905). Both verbs reach the same action
+    // table as the interpreter, so neither mode can drift from the other
+    // about which of the two waits.
+    return executeAction(verb: "deliver", contextPtr: contextPtr, resultPtr: resultPtr, objectPtr: objectPtr)
 }
 
 @_cdecl("aro_action_send")

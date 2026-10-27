@@ -37,7 +37,7 @@ is put together. 0006 explains why there is no error handling to learn.
 | 22 | [State Guards](ARO-0022-state-guards.md) | Handler filtering with `field:value`, state observers |
 | 81 | [User-Defined Actions](ARO-0081-user-defined-actions.md) | `Application.<Name>` callable feature sets, recursion |
 | 88 | [Concurrency Model](ARO-0088-concurrency-model.md) | Statement overlap, ordered effects, `parallel for each` |
-| 89 | [Ranges](ARO-0089-ranges.md) | `1..10` / `1..<10` as lazy values — **draft, not implemented** |
+| 89 | [Ranges](ARO-0089-ranges.md) | `1->10` as a value, both ends included; the `for each` slot iterates one in O(1) |
 
 ## Language Features
 
@@ -140,7 +140,7 @@ prints the live table, including each action's valid prepositions.
 | REQUEST | Clone, Exists, Extract, List, ParseDispatch, Probe, Prompt, Pull, Read, Receive, Request, Retrieve, Select, Stat, Stream |
 | OWN | Accept, Assert, Attach, Call, Clear, Compare, Compute, Configure, Create, Delete, Execute, Filter, GitCheckout, Given, Group, Include, Join, Map, Merge, ParseHtml, Reduce, Reverse, Show, Sleep, Sort, Split, Stage, Then, Transform, Update, Validate, When |
 | RESPONSE | Append, Broadcast, Log, Notify, Render, Repaint, Return, Send, Store, Throw, Write |
-| EXPORT | Emit, GitCommit, Publish, Push, Schedule, Tag |
+| EXPORT | Deliver, Emit, GitCommit, Publish, Push, Schedule, Tag |
 | SERVER | Close, Connect, Copy, Listen, Make, Move, Start, Stop, Touch, WaitForEvents |
 
 <!-- END GENERATED ROLE SUMMARY -->

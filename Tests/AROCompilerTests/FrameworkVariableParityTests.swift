@@ -17,12 +17,19 @@
 //
 // interpreted `cd`, compiled `c-d`.
 //
-// Both lists are now `FrameworkVariables.transientKeys`, which
-// makes the Swift-level agreement trivially true — so these tests
-// assert the thing that is not trivial: that the *emitted IR*
-// really unbinds every name in it. A key added to the constant but
-// dropped somewhere between the generator and the module fails
-// here rather than in a user's binary.
+// Both lists are now `FrameworkVariables.transientKeys`, and since
+// GitLab #714 the compiled path does not spell the sweep out in IR
+// at all: it emits one `aro_context_clear_transients` call, and the
+// runtime side of that bridge calls the same
+// `clearTransientFrameworkVariables()` the interpreter calls. So
+// "the emitted program clears every name in the constant" is no
+// longer something a test can lose — one function reads the
+// constant, at run time, in both modes.
+//
+// What a test can still lose is the *call*. A statement that never
+// clears inherits the previous statement's modifiers, which is
+// exactly #552 again, so that is what these assert: every statement
+// emits the sweep, and it emits it before the modifiers it binds.
 
 import Foundation
 import Testing
@@ -45,6 +52,19 @@ struct FrameworkVariableParityTests {
                 "compilation failed: \(errors.map(\.message).joined(separator: "; "))")
         let generator = LLVMCodeGenerator()
         return try generator.generate(program: result.analyzedProgram).irText
+    }
+
+    /// Every call the module makes, in emission order, as bare function names.
+    private func callSequence(inIR ir: String) -> [String] {
+        var calls: [String] = []
+        for rawLine in ir.split(separator: "\n") {
+            guard let marker = rawLine.range(of: "call ") else { continue }
+            guard let at = rawLine[marker.upperBound...].firstIndex(of: "@") else { continue }
+            let rest = rawLine[rawLine.index(after: at)...]
+            guard let open = rest.firstIndex(of: "(") else { continue }
+            calls.append(String(rest[..<open]))
+        }
+        return calls
     }
 
     /// The variable names the module actually calls `aro_variable_unbind` on.
@@ -97,14 +117,46 @@ struct FrameworkVariableParityTests {
 
     // MARK: - The parity invariant
 
-    @Test("Compiled statements unbind every framework variable interpreted ones clear")
-    func everyTransientKeyIsUnbound() throws {
+    @Test("Every statement clears its framework variables before binding new ones")
+    func everyStatementSweeps() throws {
+        let calls = callSequence(inIR: try generateIR(Self.probe))
+        let sweeps = calls.filter { $0 == "aro_context_clear_transients" }
+
+        // The probe has seven statements. The bound is a floor rather than an
+        // equality: a `when` guard or a loop can legitimately add prologues,
+        // and this test exists to catch the sweep disappearing, not to pin the
+        // generator's shape.
+        #expect(sweeps.count >= 7,
+                Comment(rawValue: "only \(sweeps.count) sweeps for a seven-statement"
+                        + " program — a statement that does not clear inherits the"
+                        + " previous one's modifiers (#552)"))
+
+        // Order is the whole point: clearing after binding would erase the
+        // statement's own `with` clause instead of the previous statement's.
+        let firstSweep = calls.firstIndex(of: "aro_context_clear_transients")
+        let firstBind = calls.firstIndex { $0.hasPrefix("aro_variable_bind") }
+        if let firstSweep, let firstBind {
+            #expect(firstSweep < firstBind,
+                    "the sweep runs after the first modifier binding, which would clear the statement's own clause")
+        }
+    }
+
+    @Test("The sweep is not spelled out one unbind call at a time")
+    func theSweepIsNotEmittedNameByName() throws {
+        // 21 `aro_variable_unbind` calls before every statement was the cost
+        // #714 was filed about: each one a C-ABI crossing, a `String(cString:)`
+        // and a dictionary removal that almost always found nothing.
+        //
+        // `aro_variable_unbind` itself stays — loop variables and pipeline
+        // bindings are unbound by name — so this asserts about the operands,
+        // not about the call. The string constants also stay: `bindQueryModifiers`
+        // still binds `_where_field_` and friends by name.
         let unbound = unboundNames(inIR: try generateIR(Self.probe))
-        let missing = FrameworkVariables.transientKeys.filter { !unbound.contains($0) }
-        let complaint = "compiled mode never clears " + missing.joined(separator: ", ")
-            + " — these leak into the next statement, so `aro build` and `aro run`"
-            + " will disagree about any program that reuses the clause (#552)"
-        #expect(missing.isEmpty, Comment(rawValue: complaint))
+        let sweptByName = FrameworkVariables.transientKeys.filter { unbound.contains($0) }
+        #expect(sweptByName.isEmpty,
+                Comment(rawValue: "the per-name sweep is back for "
+                        + sweptByName.joined(separator: ", ")
+                        + " — that is 21 bridge calls per statement (#714)"))
     }
 
     @Test("Neither list is empty, so an empty-set parity pass cannot be vacuous")
@@ -116,32 +168,6 @@ struct FrameworkVariableParityTests {
         #expect(Set(FrameworkVariables.transientKeys).count
                 == FrameworkVariables.transientKeys.count,
                 "duplicate entry in transientKeys")
-    }
-
-    // MARK: - The specific leaks #552 names
-
-    @Test("The `with` clause the join repro leaks on is cleared",
-          arguments: ["_with_", "_to_", "_against_", "_literal_",
-                      "_expression_", "_expression_name_", "_result_expression_"])
-    func namedLeakIsCleared(key: String) throws {
-        // The seven names compiled mode used to carry into the next statement.
-        // `_with_` is the one the issue's repro trips over; the rest are the
-        // same bug waiting for a caller.
-        let unbound = unboundNames(inIR: try generateIR(Self.probe))
-        #expect(unbound.contains(key), "\(key) is never unbound in compiled mode")
-    }
-
-    @Test("The query modifiers that were already cleared stay cleared",
-          arguments: ["_where_field_", "_where_op_", "_where_value_", "_where_tree_",
-                      "_by_pattern_", "_by_flags_", "_by_field_", "_by_var_",
-                      "_by_order_", "_matching_", "_recursive_",
-                      "_aggregation_type_", "_aggregation_field_", "_default_value_"])
-    func previouslyClearedKeyStillCleared(key: String) throws {
-        // Moving the list behind a shared constant must not drop anything the
-        // hand-written list already had — each of these was added by its own
-        // bug report.
-        let unbound = unboundNames(inIR: try generateIR(Self.probe))
-        #expect(unbound.contains(key), "\(key) regressed out of the unbind list")
     }
 }
 

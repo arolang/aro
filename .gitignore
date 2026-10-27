@@ -246,6 +246,14 @@ Train/script/output/
 /Tests/IntegrationTestsRunner/silver/
 /Tests/IntegrationTestsRunner/gold/
 
+# Written by Examples/CurrencyAmounts, for the same reason (GitLab #906):
+# it writes a CSV and a JSON file so the exactness can be asserted where
+# GitLab #517 found it wrong — in a file a person opens.
+/out/
+/Tests/IntegrationTestsRunner/out/
+/Examples/CurrencyAmounts/out/
+/Examples/CurrencyAmounts/CurrencyAmounts
+
 # Artefacts examples leave in the repository root when run from it
 # (DirectoryReplicator writes foo/ and baz/, StreamingDemo writes
 # events.jsonl). GitLab #817.

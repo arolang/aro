@@ -34,6 +34,7 @@
  "debug",
  "delay",
  "delete",
+ "deliver",
  "derive",
  "destroy",
  "disconnect",

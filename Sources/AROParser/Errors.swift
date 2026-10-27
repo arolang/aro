@@ -35,6 +35,11 @@ public enum LexerError: CompilerError {
     /// the diagnostic names the replacement instead of leaving the lexer
     /// to read `"""` as two empty strings and cascade from there.
     case tripleQuotedStringRemoved(at: SourceLocation)
+    /// ARO-0089 §4.1: `1..10`, `1..<10`, `1...10` — a range reached for with
+    /// dots. The operator is `->`, and the lexer has to say so: left alone,
+    /// dots in expression position read as statement terminators and the
+    /// parser reports a missing verb on the next line (GitLab #546).
+    case dotRangeOperator(String, at: SourceLocation)
 
     public var location: SourceLocation? {
         switch self {
@@ -44,6 +49,7 @@ public enum LexerError: CompilerError {
         case .invalidNumber(_, let loc): return loc
         case .invalidUnicodeEscape(_, let loc): return loc
         case .tripleQuotedStringRemoved(let loc): return loc
+        case .dotRangeOperator(_, let loc): return loc
         }
     }
 
@@ -61,6 +67,8 @@ public enum LexerError: CompilerError {
             return "Invalid unicode escape sequence '\\u{\(hex)}'"
         case .tripleQuotedStringRemoved:
             return "Triple-quoted strings were removed — a plain \"…\" string spans multiple lines"
+        case .dotRangeOperator(let spelling, _):
+            return "'\(spelling)' is not a range operator — a range is written with an arrow, as in 1->10"
         }
     }
 
@@ -78,6 +86,7 @@ public enum LexerError: CompilerError {
         case .invalidNumber(let num, _): return .invalidNumber(num, at: location)
         case .invalidUnicodeEscape(let hex, _): return .invalidUnicodeEscape(hex, at: location)
         case .tripleQuotedStringRemoved: return .tripleQuotedStringRemoved(at: location)
+        case .dotRangeOperator(let spelling, _): return .dotRangeOperator(spelling, at: location)
         }
     }
 }
@@ -237,24 +246,47 @@ public struct Diagnostic: Sendable, CustomStringConvertible {
         case consequential
     }
 
+    /// A stable identity for a kind of diagnostic (GitLab #675).
+    ///
+    /// Consumers used to recognise a diagnostic by matching its text:
+    /// `message.hasPrefix("External dependency")`,
+    /// `message.contains("is defined but never used")`. Both of those
+    /// warnings have been reworded before, and the next rewording silently
+    /// re-enables the noise the filter exists to suppress — silently, because
+    /// a filter that stops matching does not fail, it just stops filtering.
+    ///
+    /// Only kinds something actually dispatches on need a code. A diagnostic
+    /// with `nil` here is not second-class; it is one nobody has had to
+    /// recognise yet, and the message stays free to be rewritten.
+    public enum Code: String, Sendable {
+        /// `Require the <x> from the <SomeFeatureSet>.` where nothing
+        /// publishes `x`.
+        case unpublishedDependency
+        /// A binding no later statement reads.
+        case unusedVariable
+    }
+
     public let severity: Severity
     public let message: String
     public let location: SourceLocation?
     public let hints: [String]
     public let category: Category
+    public let code: Code?
 
     public init(
         severity: Severity,
         message: String,
         location: SourceLocation? = nil,
         hints: [String] = [],
-        category: Category = .rootCause
+        category: Category = .rootCause,
+        code: Code? = nil
     ) {
         self.severity = severity
         self.message = message
         self.location = location
         self.hints = hints
         self.category = category
+        self.code = code
     }
     
     public var description: String {
@@ -297,12 +329,36 @@ extension Array where Element == Diagnostic {
             case .consequential: return 1
             }
         }
+        // Source position within a class, emission order only to break a tie.
+        //
+        // Ranking by (severity, category, emission index) was stable but not
+        // deterministic: it preserved whatever order the producer emitted, and
+        // producers that walk a `Dictionary` have no order to preserve. Swift
+        // seeds its hasher per process, so `DataFlowAnalyzer`'s unused-variable
+        // and unpublished-dependency passes shuffled their findings on every
+        // run of an unmodified binary, and `aro check` printed the same
+        // diagnostics in a different order each time (GitLab #892).
+        //
+        // Sorting here rather than in each producer fixes every one at once,
+        // including the ones nobody has noticed yet — a diagnostic's position
+        // in a file is a property of the diagnostic, not of the order the
+        // analyzer happened to find it.
+        //
+        // A diagnostic with no location sorts after the located ones in its
+        // class, keeping whole-file findings ("no Application-Start") below the
+        // lines they are about rather than interleaved by an offset of zero.
+        func key(_ e: (offset: Int, element: Diagnostic)) -> (Int, Int, Int, Int, Int, Int) {
+            let d = e.element
+            // `located` first, so a diagnostic with no position sorts after
+            // the ones that have one rather than ahead of line 1.
+            let located = d.location == nil ? 1 : 0
+            return (severityRank(d.severity), categoryRank(d.category),
+                    located, d.location?.line ?? 0, d.location?.column ?? 0,
+                    e.offset)
+        }
+
         return self.enumerated()
-            .sorted { lhs, rhs in
-                let l = (severityRank(lhs.element.severity), categoryRank(lhs.element.category), lhs.offset)
-                let r = (severityRank(rhs.element.severity), categoryRank(rhs.element.category), rhs.offset)
-                return l < r
-            }
+            .sorted { key($0) < key($1) }
             .map(\.element)
     }
 }
@@ -350,18 +406,22 @@ public final class DiagnosticCollector: @unchecked Sendable {
         _ message: String,
         at location: SourceLocation? = nil,
         hints: [String] = [],
-        category: Diagnostic.Category = .rootCause
+        category: Diagnostic.Category = .rootCause,
+        code: Diagnostic.Code? = nil
     ) {
-        add(Diagnostic(severity: .error, message: message, location: location, hints: hints, category: category))
+        add(Diagnostic(severity: .error, message: message, location: location,
+                       hints: hints, category: category, code: code))
     }
 
     public func warning(
         _ message: String,
         at location: SourceLocation? = nil,
         hints: [String] = [],
-        category: Diagnostic.Category = .rootCause
+        category: Diagnostic.Category = .rootCause,
+        code: Diagnostic.Code? = nil
     ) {
-        add(Diagnostic(severity: .warning, message: message, location: location, hints: hints, category: category))
+        add(Diagnostic(severity: .warning, message: message, location: location,
+                       hints: hints, category: category, code: code))
     }
     
     public func note(_ message: String, at location: SourceLocation? = nil) {

@@ -387,7 +387,7 @@ where_field     = "<" , field_name , ">" | field_name ;
 field_reference = "<" , field_name , ">" ;
 field_name      = identifier , { "-" , identifier } ;
 
-operator = "is" | "is" , "not" | "==" | "!="
+operator = "is" | "is" , "not" | "==" | "=" | "!="
          | "<" | "<=" | ">" | ">="
          | "in" | "between" | "contains" | "starts" , "with" | "ends" , "with" ;
 
@@ -510,4 +510,5 @@ components:
 | 2.1 | 2026-04-02 | Added Group action for partitioning collections by field value. |
 | 2.2 | 2026-08 | §1.3: documents the `with <field>` projection spelling and states that Map has no per-element binding — a `with` expression is a check-time error (GitLab #465). |
 | 2.3 | 2026-09 | §2.2: where clauses implement the documented `and`/`or` chaining with parentheses (`and` binds tighter), `between` desugars to two inclusive comparisons, malformed clauses fail `aro check`, and `Delete … where` stays single-predicate (GitLab #498). |
+| 2.4 | 2026-10 | §Grammar: `=` is listed as the synonym for `==` it has always been — the spelling every `where` clause in `Examples/` uses (GitLab #678). |
 | 2.4 | 2026-09 | §2.0: a where-clause field may be written bare (`where status = "active"`) or bracketed (`where <status> = "active"`) — the spelling the proposals have always printed now parses. Order-by and aggregate field references stay bracketed (GitLab #545). |

@@ -22,6 +22,7 @@ import Crypto
 /// - Returns: The operation name to use
 private func resolveOperationName(
     from result: ResultDescriptor,
+    object: ObjectDescriptor,
     knownOperations: Set<String>,
     fallback: String
 ) -> String {
@@ -32,7 +33,29 @@ private func resolveOperationName(
     }
 
     // Priority 2: Base name if it's a known operation (legacy syntax: <operation>)
-    if knownOperations.contains(result.base.lowercased()) {
+    //
+    // Only when the object is something to *apply* an operation to. Where the
+    // object slot holds an expression, the user has written arithmetic and the
+    // result's name is a name:
+    //
+    //     Compute the <difference> from <x> - <y>.
+    //
+    // `difference` is also a set operation (ARO-0042), and reading it as one
+    // made that statement mean subtraction interpreted and a set difference
+    // compiled — which then failed for want of a `with` clause while the
+    // binary still exited `[OK]` (GitLab #903).
+    //
+    // The interpreter never saw it: `FeatureSetExecutor`'s fast path binds an
+    // expression and skips the action when the result carries no qualifier, so
+    // only the compiled path reached here. Fixing it in the action rather than
+    // in that fast path is what makes the two modes agree by construction —
+    // whoever dispatches, the answer is the same.
+    //
+    // `Compute the <length> from <text>.` is unaffected: a bare variable
+    // reference is not an expression object, so the legacy spelling still
+    // resolves its operation from the name.
+    if !object.isExpressionValue,
+       knownOperations.contains(result.base.lowercased()) {
         return result.base
     }
 
@@ -283,6 +306,7 @@ public struct ComputeAction: SynchronousAction {
         // result identifier.
         let computationName = resolveOperationName(
             from: result,
+            object: object,
             knownOperations: Self.knownComputationNames,
             fallback: "identity"
         )
@@ -898,8 +922,30 @@ public struct ComputeAction: SynchronousAction {
         if let d = value as? Double { return d }
         if let i = value as? Int { return Double(i) }
         if let f = value as? Float { return Double(f) }
+        if let c = value as? AROCurrency { return c.doubleValue }
         if let s = value as? String { return Double(s) }
         return nil
+    }
+
+    /// True when the aggregate must be exact (GitLab #906): either an element
+    /// already is an amount, or the statement asked with `as Currency`.
+    ///
+    /// One `Currency` in a column is enough — a pipeline that computed
+    /// `line_total` exactly must not lose it in the `sum` that reads the
+    /// column back. The annotation covers the other direction: a column of
+    /// `Double`s read out of a file, which the author wants added in base 10
+    /// rather than summed in binary and converted afterwards.
+    ///
+    /// The annotation is read from `_as_type_` rather than from the result
+    /// descriptor because the qualifier operations are not handed one. Both
+    /// execution modes bind that name, so this answers the same in `aro run`
+    /// and in a compiled binary.
+    private static func wantsExact(
+        _ items: [any Sendable], _ context: ExecutionContext
+    ) -> Bool {
+        if items.contains(where: { $0 is AROCurrency }) { return true }
+        guard let asType = context.resolveAny("_as_type_") as? String else { return false }
+        return ResultTypeCoercion.requestsExact(asType)
     }
 
     /// Every element of `input` as a list, for the collection ops.
@@ -920,6 +966,27 @@ public struct ComputeAction: SynchronousAction {
         if input is AnyStreamingValue { throw NeedsAsyncExecution() }
         let items = elements(input)
         guard !items.isEmpty else { return 0 }
+
+        // An exact column sums exactly (GitLab #906). Addition of amounts is
+        // the operation money most needs to be right, and this is the path a
+        // gold-layer aggregate takes.
+        if wantsExact(items, context) {
+            var total = AROCurrency(0)
+            for item in items {
+                guard let amount = AROCurrency.from(item) else {
+                    throw ActionError.typeMismatch(
+                        expected: "Number",
+                        actual: String(describing: type(of: item)),
+                        variable: "sum")
+                }
+                do { total = try total.adding(amount) }
+                catch let error as AROCurrencyError {
+                    throw ActionError.runtimeError(error.description)
+                }
+            }
+            return total
+        }
+
         var total = 0.0
         var allIntegral = true
         for item in items {
@@ -944,6 +1011,32 @@ public struct ComputeAction: SynchronousAction {
         guard !items.isEmpty else {
             throw ActionError.validationFailed("avg of an empty collection is undefined")
         }
+
+        // An exact column averages exactly as far as it can: the sum is
+        // exact, and the division follows `AROCurrency`'s stated rule — six
+        // decimal places, half-up (GitLab #906). A mean is not generally
+        // representable at the operands' scale, so the alternative is a
+        // silent rounding, and this one is at least written down.
+        if wantsExact(items, context) {
+            var total = AROCurrency(0)
+            for item in items {
+                guard let amount = AROCurrency.from(item) else {
+                    throw ActionError.typeMismatch(
+                        expected: "Number",
+                        actual: String(describing: type(of: item)),
+                        variable: "avg")
+                }
+                do { total = try total.adding(amount) }
+                catch let error as AROCurrencyError {
+                    throw ActionError.runtimeError(error.description)
+                }
+            }
+            do { return try total.divided(by: AROCurrency(items.count)) }
+            catch let error as AROCurrencyError {
+                throw ActionError.runtimeError(error.description)
+            }
+        }
+
         var total = 0.0
         for item in items {
             guard let value = numeric(item) else {
@@ -966,31 +1059,16 @@ public struct ComputeAction: SynchronousAction {
             return String(str.filter { seen.insert($0).inserted })
         }
         guard let items = input as? [any Sendable] else { return input }
-        var seen = Set<String>()
+        var seen = Set<AROValueKey>()
         var out: [any Sendable] = []
         for item in items {
-            // Key on the rendered form: the element type is `any
-            // Sendable`, which is not Hashable, and every value the
-            // runtime carries renders stably.
-            let key = identityKey(item)
-            if seen.insert(key).inserted { out.append(item) }
+            // The element type is `any Sendable`, which is not Hashable, so
+            // it is reduced to one that is. This used to serialise each
+            // element to JSON with `.sortedKeys` — 100 000 JSON documents for
+            // 100 000 records (GitLab #712).
+            if seen.insert(AROValueKey(item)).inserted { out.append(item) }
         }
         return out
-    }
-
-    /// Stable string key for an arbitrary runtime value.
-    private static func identityKey(_ value: any Sendable) -> String {
-        if let str = value as? String { return "s:\(str)" }
-        if let int = value as? Int { return "n:\(Double(int))" }
-        if let dbl = value as? Double { return "n:\(dbl)" }
-        if let bool = value as? Bool { return "b:\(bool)" }
-        if JSONSerialization.isValidJSONObject(value),
-           let data = try? JSONSerialization.data(withJSONObject: value,
-                                                  options: [.sortedKeys]),
-           let json = String(data: data, encoding: .utf8) {
-            return "j:\(json)"
-        }
-        return "d:\(String(describing: value))"
     }
 
     /// The lines of a text, as a list.
@@ -1108,6 +1186,18 @@ public struct ComputeAction: SynchronousAction {
         guard places >= 0, places <= 15 else {
             throw ActionError.validationFailed(
                 "fixed expects 0…15 decimal places, got \(places)")
+        }
+
+        // An exact amount rescales exactly and stays exact (GitLab #906).
+        // `fixed` keeps its job — settling on a presentation scale — but on a
+        // `Currency` it is no longer a repair: there is nothing to repair, so
+        // it rounds half-up to `places` and hands back an amount, not the
+        // nearest Double to one.
+        if let exact = input as? AROCurrency {
+            do { return try exact.rescaled(to: places) }
+            catch let error as AROCurrencyError {
+                throw ActionError.runtimeError(error.description)
+            }
         }
 
         let value: Double
@@ -1277,6 +1367,7 @@ public struct ComputeAction: SynchronousAction {
         // the other side, and the body's size never becomes the process's.
         let asyncComputationName = resolveOperationName(
             from: result,
+            object: object,
             knownOperations: Self.knownComputationNames,
             fallback: "identity"
         )
@@ -1480,7 +1571,7 @@ public struct ComputeAction: SynchronousAction {
 
     /// Multiset intersection: elements in both, preserving duplicates up to min count
     private func multisetIntersect(_ a: [any Sendable], _ b: [any Sendable]) -> [any Sendable] {
-        var bCounts: [String: Int] = [:]
+        var bCounts: [AROValueKey: Int] = [:]
         for item in b {
             let key = hashKey(for: item)
             bCounts[key, default: 0] += 1
@@ -1499,7 +1590,7 @@ public struct ComputeAction: SynchronousAction {
 
     /// Multiset difference: elements in A minus occurrences in B
     private func multisetDifference(_ a: [any Sendable], _ b: [any Sendable]) -> [any Sendable] {
-        var bCounts: [String: Int] = [:]
+        var bCounts: [AROValueKey: Int] = [:]
         for item in b {
             let key = hashKey(for: item)
             bCounts[key, default: 0] += 1
@@ -1596,20 +1687,17 @@ public struct ComputeAction: SynchronousAction {
         return counts
     }
 
-    /// Create a hash key for any Sendable value (for multiset counting)
-    private func hashKey(for value: any Sendable) -> String {
-        if let dict = value as? [String: any Sendable] {
-            // Sort keys for consistent hashing
-            let sorted = dict.keys.sorted().map { key -> String in
-                let v = dict[key]!
-                return "\(key):\(hashKey(for: v))"
-            }
-            return "{\(sorted.joined(separator: ","))}"
-        }
-        if let arr = value as? [any Sendable] {
-            return "[\(arr.map { hashKey(for: $0) }.joined(separator: ","))]"
-        }
-        return String(describing: value)
+    /// A hashable stand-in for a value, for set membership and multiset
+    /// counting.
+    ///
+    /// This used to build a recursive `String(describing:)` per element, so
+    /// `intersect` formatted both operands in full before comparing anything
+    /// (GitLab #712). It also made `1`, `"1"` and — through
+    /// `String(describing:)` — `true` and `"true"` the same element;
+    /// `AROValueKey` follows the language's equality instead, so a string is
+    /// never a number and a Bool is never either.
+    private func hashKey(for value: any Sendable) -> AROValueKey {
+        AROValueKey(value)
     }
 
     /// Strict equality check for two values
@@ -1670,7 +1758,7 @@ public struct ValidateAction: ActionImplementation {
 
         // Validation rule from result specifiers or base (for backward compatibility)
         let knownRules: Set<String> = ["required", "exists", "nonempty", "email", "numeric"]
-        let ruleName = resolveOperationName(from: result, knownOperations: knownRules, fallback: "required")
+        let ruleName = resolveOperationName(from: result, object: object, knownOperations: knownRules, fallback: "required")
 
         // Built-in validations
         let isValid: Bool
@@ -1704,8 +1792,19 @@ public struct ValidateAction: ActionImplementation {
             }
 
         default:
-            // Unknown rule - assume valid
-            isValid = true
+            // An unknown rule does not pass (GitLab #643).
+            //
+            // It used to set `isValid = true`, so `Validate the <ok: emial>
+            // for the <address>.` — a typo — reported success for every input.
+            // This is the same hole GitLab #486 closed for Compute
+            // qualifiers: an invented name that compiles, checks green and
+            // produces a confident wrong answer. A validation that always
+            // passes is worse than no validation, because the program reads
+            // as though it checked something.
+            throw ActionError.invalidInput(
+                "'\(ruleName)' is not a validation rule "
+                + "(\(knownRules.sorted().joined(separator: ", ")))",
+                received: ruleName)
         }
 
         return ValidationResult(isValid: isValid, rule: ruleName)
@@ -1851,7 +1950,7 @@ public struct TransformAction: ActionImplementation {
 
         // Transformation type from result specifiers or base (for backward compatibility)
         let knownTransforms: Set<String> = ["string", "int", "integer", "double", "float", "bool", "boolean", "json", "identity"]
-        let transformType = resolveOperationName(from: result, knownOperations: knownTransforms, fallback: "identity")
+        let transformType = resolveOperationName(from: result, object: object, knownOperations: knownTransforms, fallback: "identity")
 
         switch transformType.lowercased() {
         case "string":
@@ -1887,8 +1986,16 @@ public struct TransformAction: ActionImplementation {
             return value
 
         default:
-            // value is already `any Sendable`
-            return value
+            // An unknown format is an error, not the identity (GitLab #643).
+            //
+            // `Transform the <x: jsn> from <y>.` used to return `<y>`
+            // unchanged and answer OK, so a typo became a silent no-op that
+            // `aro check` was happy with — and the program carried the
+            // untransformed value onward as though it had been converted.
+            throw ActionError.invalidInput(
+                "'\(transformType)' is not a Transform format "
+                + "(\(knownTransforms.sorted().joined(separator: ", ")))",
+                received: transformType)
         }
     }
 
@@ -2017,7 +2124,7 @@ public struct CreateAction: ActionImplementation {
         // Get end date from _to_ (the 'to' clause)
         // Debug: Log _to_ resolution for ARO-0041 diagnostics (enable with ARO_DEBUG=1)
         let endValue = context.resolveAny("_to_")
-        if endValue == nil && ProcessInfo.processInfo.environment["ARO_DEBUG"] != nil {
+        if endValue == nil && RuntimeEnvironment.isDebug {
             FileHandle.standardError.write(Data("[CreateAction] DEBUG: _to_ is nil - date range 'to' clause not bound\n".utf8))
         }
         guard let endValue, let endDate = getARODate(from: endValue) else {
@@ -2120,7 +2227,7 @@ public struct SortAction: ActionImplementation {
         // §Ordering) wins over the result qualifier form
         // `<sorted: descending>`; both default ascending.
         let knownOrders: Set<String> = ["ascending", "descending"]
-        let qualifierOrder = resolveOperationName(from: result, knownOperations: knownOrders, fallback: "ascending")
+        let qualifierOrder = resolveOperationName(from: result, object: object, knownOperations: knownOrders, fallback: "ascending")
         let order = (context.resolveAny("_by_order_") as? String) ?? qualifierOrder
         let ascending = order.lowercased() != "descending"
 

@@ -55,11 +55,58 @@ struct ReplNotebookView: View {
             }
         }
         .background(SolaroColor.backdrop)
+        .environment(\.openURL, OpenURLAction(handler: followLink))
         .onAppear { notebook.undoManager = undoManager }
         .onChange(of: undoManager) { _, manager in
             notebook.undoManager = manager
         }
         .onDisappear { notebook.saveNow() }
+    }
+
+    /// Where a markdown link in a notebook cell goes.
+    ///
+    /// The Learning course is written as a course: lessons cite each other
+    /// (`[04](04-immutability.repl)`) and cite the specification
+    /// (`[ARO-0088 §7](../Proposals/ARO-0088-concurrency-model.md)`). Both read
+    /// as links and neither went anywhere, so a cross-reference was a thing to
+    /// retype into a file browser.
+    ///
+    /// Three destinations, decided by what the link actually points at:
+    ///
+    /// * **A web address** opens in the default browser, which is
+    ///   `.systemAction` — SwiftUI's own behaviour, kept rather than replaced.
+    /// * **A file inside the project** opens in SOLARO. That is what makes a
+    ///   reference to another notebook open the notebook rather than hand a
+    ///   `.repl` file to whatever the OS thinks owns the extension.
+    /// * **A file outside the project** goes to the default application for
+    ///   its type, since SOLARO only edits what the open project contains.
+    ///
+    /// A path that resolves to nothing is handed back to the system rather than
+    /// swallowed: a broken link should fail visibly, the way it does elsewhere.
+    /// The decision lives in `NotebookLinkRouter`, which is a pure function
+    /// over the URL and two directories and is tested as one (GitLab #899).
+    /// What is left here is the three side effects it names — and those are
+    /// the half that genuinely needs a running app to verify.
+    private func followLink(_ url: URL) -> OpenURLAction.Result {
+        let destination = NotebookLinkRouter.destination(
+            for: url,
+            notebookDirectory: notebook.url.deletingLastPathComponent(),
+            projectRoot: notebook.project.rootPath)
+
+        switch destination {
+        case .systemAction:
+            return .systemAction
+
+        case .openInWorkspace(let target):
+            // The same route a double-clicked file in Finder takes.
+            NotificationCenter.default.post(
+                name: .solaroFocusFile, object: nil, userInfo: ["url": target])
+            return .handled
+
+        case .openExternally(let target):
+            NSWorkspace.shared.open(target)
+            return .handled
+        }
     }
 
     private func loadErrorView(_ message: String) -> some View {
@@ -889,23 +936,68 @@ private struct ReplCellRow: View {
 private struct ReplCellOutputsView: View {
     let cell: ReplNotebookCell
 
+    /// Tallest an output area gets before it becomes a scrollable box
+    /// (GitLab #531). Chosen to show a screenful of a chatty cell without
+    /// pushing the next cell off the page — about 20 monospaced lines.
+    private static let maxHeight: CGFloat = 320
+
+    /// Measured height of the outputs themselves, which is what decides
+    /// whether the box needs to scroll.
+    ///
+    /// Measured rather than estimated from the text: counting lines would
+    /// walk up to a megabyte of string on every body evaluation, and the
+    /// body runs once per stream chunk of *any* running cell (GitLab #540).
+    @State private var contentHeight: CGFloat = 0
+
+    private var needsScrolling: Bool { contentHeight > Self.maxHeight }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             Rectangle()
                 .fill(SolaroColor.divider)
                 .frame(height: 1)
-            VStack(alignment: .leading, spacing: SolaroSpace.s) {
-                ForEach(Array(cell.outputs.enumerated()), id: \.offset) { _, output in
-                    // `.equatable()` so an output that hasn't changed
-                    // skips its body entirely while a *sibling* cell
-                    // streams and invalidates the whole column
-                    // (GitLab #540).
-                    ReplCellOutputView(output: output).equatable()
-                }
-                footer
+            ScrollView(.vertical) {
+                outputStack
+                    .onGeometryChange(for: CGFloat.self) { proxy in
+                        proxy.size.height
+                    } action: { height in
+                        contentHeight = height
+                    }
             }
-            .padding(SolaroSpace.m)
+            // Short output keeps its natural height and the notebook keeps
+            // the scroll wheel; only a tall one becomes a box that scrolls
+            // under the pointer.
+            .frame(height: min(max(contentHeight, 1), Self.maxHeight))
+            .scrollDisabled(!needsScrolling)
+            .overlay(alignment: .bottom) {
+                if needsScrolling { moreBelowHint }
+            }
         }
+    }
+
+    private var outputStack: some View {
+        VStack(alignment: .leading, spacing: SolaroSpace.s) {
+            ForEach(Array(cell.outputs.enumerated()), id: \.offset) { _, output in
+                // `.equatable()` so an output that hasn't changed
+                // skips its body entirely while a *sibling* cell
+                // streams and invalidates the whole column
+                // (GitLab #540).
+                ReplCellOutputView(output: output).equatable()
+            }
+            footer
+        }
+        .padding(SolaroSpace.m)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// A scrollable box with no edge is a box that looks like it ends where
+    /// the text happens to stop. This says otherwise.
+    private var moreBelowHint: some View {
+        LinearGradient(
+            colors: [SolaroColor.surface.opacity(0), SolaroColor.surface],
+            startPoint: .top, endPoint: .bottom)
+            .frame(height: 18)
+            .allowsHitTesting(false)
     }
 
     @ViewBuilder
@@ -940,10 +1032,15 @@ private struct ReplCellOutputView: View, Equatable {
         case .stream:
             Text((output.text ?? "").trimmingTrailingNewline)
                 .font(SolaroFont.monoCaption)
-                .foregroundStyle(output.streamName == "stderr"
+                // The cap's own notice is not something the program printed,
+                // so it reads as chrome rather than as stderr (GitLab #531).
+                .foregroundStyle(output.isTruncationNotice
+                                 ? SolaroColor.textTertiary
+                                 : output.streamName == "stderr"
                                  ? SolaroColor.stateWarn
                                  : SolaroColor.textSecondary)
                 .textSelection(.enabled)
+                .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
         case .result:
             resultView
@@ -966,6 +1063,7 @@ private struct ReplCellOutputView: View, Equatable {
                 .font(SolaroFont.mono)
                 .foregroundStyle(SolaroColor.textPrimary)
                 .textSelection(.enabled)
+                .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
@@ -980,12 +1078,14 @@ private struct ReplCellOutputView: View, Equatable {
                     .font(SolaroFont.monoCaption.weight(.semibold))
                     .foregroundStyle(SolaroColor.stateError)
                     .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             if let traceback = output.traceback, traceback.count > 1 {
                 Text(traceback.dropFirst().joined(separator: "\n"))
                     .font(SolaroFont.monoCaption)
                     .foregroundStyle(SolaroColor.textSecondary)
                     .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
         .padding(SolaroSpace.s)
@@ -1152,7 +1252,7 @@ private struct ReplDisplayTableView: View {
                                 Text(cellValue)
                                     .font(SolaroFont.monoCaption)
                                     .foregroundStyle(SolaroColor.textPrimary)
-                                    .lineLimit(3)
+                                    .fixedSize(horizontal: false, vertical: true)
                                     .textSelection(.enabled)
                                     .padding(.horizontal, SolaroSpace.s)
                                     .padding(.vertical, 4)

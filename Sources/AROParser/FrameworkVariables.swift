@@ -56,12 +56,28 @@ public enum FrameworkVariables {
     /// list at the top of every statement. Add a modifier variable here and
     /// both modes pick it up; add it to only one of them and
     /// `FrameworkVariableParityTests` fails.
+    /// The noun the parser puts in the object slot when the object is a
+    /// compound expression, and the framework variable its value arrives in.
+    ///
+    /// Named because three different places test for it by hand and one of
+    /// them is the difference between arithmetic and a set operation
+    /// (GitLab #903).
+    public static let expressionValue = "_expression_"
+
     public static let transientKeys: [String] = [
         // Value sources — literal, evaluated expression, sink expression
         "_literal_",
         "_expression_",
         "_expression_name_",
         "_result_expression_",
+
+        // The statement's `as <Type>` annotation (GitLab #906). The
+        // interpreter reads it off the AST, but a compiled binary has no AST:
+        // the C result descriptor carries base + specifiers and nothing else,
+        // so `as Float` had no way to reach `aro_evaluate_expression` and was
+        // dropped on that path entirely. Carried as a modifier instead, which
+        // is what every other per-statement clause already does.
+        "_as_type_",
 
         // ARO-0018 aggregation
         "_aggregation_type_",

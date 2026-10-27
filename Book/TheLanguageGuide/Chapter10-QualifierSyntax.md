@@ -267,11 +267,14 @@ Filter the <active-users> as List<User> from the <users> where <active> is true.
 
 (* Reduce with type for precision *)
 Reduce the <total> as Float from the <orders> with sum(<amount>).
+
+(* ...and `as Currency` when the decimals are money and have to be exact *)
+Reduce the <revenue> as Currency from the <orders> with sum(<amount>).
 ```
 
 Type annotations are **optional** because ARO infers result types from the operation. Use explicit types when:
 
-1. You need a specific numeric precision (Float vs Integer)
+1. You need a specific numeric precision — `Float` or `Integer`, or `Currency` for exact base-10 money (Chapter 41)
 2. You want documentation in the code
 3. You're overriding default inference
 

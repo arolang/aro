@@ -28,7 +28,7 @@ see the [Wiki](https://github.com/arolang/aro/wiki) and the
 - **Plugin System**: Load Swift, Rust, C/C++, and Python plugins from a `Plugins/` directory. Plugins can register actions and value qualifiers.
 - **Native Compilation**: `aro build` lowers to LLVM IR, links against `AROCRuntime`, and produces standalone binaries that bundle plugins.
 - **Store Files** (ARO-0073): YAML-seeded, file-backed repositories whose writability is controlled by filesystem permissions.
-- **Testing Framework**: BDD-style feature sets with `Given` / `When` / `Then` (`aro test`).
+- **Testing Framework**: BDD-style feature sets with `Given` / `When` / `Then` (`aro test`), runnable against the interpreter or a native binary (`aro test --compiled`).
 - **LSP Server** (ARO-0034): Diagnostics and navigation for editor integration.
 - **Package Manager** (ARO-0045): `aro add` / `aro remove` for plugin packages described in `plugin.yaml`.
 
@@ -139,7 +139,7 @@ below. Every `ARO-NNNN` reference in the repository must resolve to a file there
 |---|----------|-------------|
 | 0001 | Language Fundamentals | Core syntax, literals, expressions, scoping |
 | 0002 | Control Flow | `when` guards, `match`, iteration, `while` |
-| 0003 | Type System | Types, OpenAPI integration, schemas |
+| 0003 | Type System | Primitives (`String`, `Integer`, `Float`, `Currency`, `Boolean`), OpenAPI integration, schemas |
 | 0004 | Actions | Action roles, built-in actions, extensions |
 | 0005 | Application Architecture | App structure, lifecycle (concurrency: see 0088) |
 | 0006 | Error Philosophy | "Code is the error message" |
@@ -156,7 +156,7 @@ below. Every `ARO-NNNN` reference in the repository must resolve to a file there
 | 0022 | State Guards | Handler filtering with `field:value` |
 | 0081 | User-Defined Actions | `Application.<Name>` callable feature sets, recursion |
 | 0088 | Concurrency Model | Statement overlap, ordered effects, `parallel for each` |
-| 0089 | Ranges | `1..10` as a lazy value — **draft, not implemented** |
+| 0089 | Ranges | `1->10` as a value, both ends included; the `for each` slot iterates one in O(1) |
 
 ### Tooling & Developer Experience
 
@@ -245,8 +245,11 @@ aro build ./MyApp         # Compile to native binary (LLVM IR + link)
 aro compile ./MyApp       # Compile and report diagnostics
 aro check ./MyApp         # Errors, warnings, per-route request-body analysis
 aro diff --graph a..b     # Compare feature-set graphs between two revisions
-aro test ./MyApp          # Run colocated test feature sets
-aro repl                  # Interactive REPL (--json for a machine-readable one)
+aro test ./MyApp          # Run colocated test feature sets (interpreter)
+aro test --compiled ./MyApp   # Run the same tests through a native binary (ARO-0015 §3.4)
+aro repl [./MyApp]        # Interactive REPL (--json for a machine-readable one);
+                          # a project directory wires in its contract, stores,
+                          # templates, plugins and feature sets (ARO-0091)
 aro kernel install        # Register the native Jupyter kernel (ZMQ, no Python)
 aro new plugin <name> --lang swift   # Scaffold a plugin
 aro add <package>         # Install a plugin from a Git repository
@@ -313,7 +316,7 @@ Tests are feature sets whose business activity ends in `Test`:
 }
 ```
 
-Run tests with `aro test ./Examples/Calculator`.
+Run tests with `aro test ./Examples/Calculator`, or `aro test --compiled ./Examples/Calculator` to assert the same behaviour in a native binary.
 
 ### As a Library
 
@@ -499,7 +502,6 @@ direction:
 
 ### In Progress / Proposed
 
-- ARO-0089: Ranges — `1..10` as a lazy value (specified, not implemented)
 - Type narrowing (ARO-0071)
 - Continued LLVM expression optimization (ARO-0070)
 

@@ -28,6 +28,17 @@ public struct AskCommand: AsyncParsableCommand {
               aro ask /docs ./MyApp
               aro ask                                            # interactive REPL
 
+            CONTRIBUTING REPAIRS (opt-in):
+              aro ask --export-training path/to/Train/seeds/ask_feedback
+
+            When `aro ask` has to fix its own answer, the broken version, the
+            diagnostic and the fix are appended to .context.repairs.jsonl here.
+            That is a preference pair with its reason attached, and the export
+            is how one reaches the training pipeline: it re-validates the pair
+            against this build, strips paths and usernames, and labels it with
+            the diagnostic it repaired. Nothing leaves this directory unless
+            you run it.
+
             BACKEND SELECTION (automatic):
               1. $ARO_ASK_ENDPOINT  (OpenAI-compatible URL)
               2. llama-server       (GGUF via llama.cpp)
@@ -70,6 +81,12 @@ public struct AskCommand: AsyncParsableCommand {
     @Option(name: .long, help: "File to focus on: its current content is injected into every request so the model treats it as \"the open file\". In the REPL, change it with /file <path>.")
     public var file: String?
 
+    @Option(name: .long, help: "Export this session's repair log as training seeds into DIR, then exit. Re-validates every repair against this build, strips paths and usernames, and labels each one with the diagnostic it fixed.")
+    public var exportTraining: String?
+
+    @Option(name: .long, help: "Where to look for .context.repairs.jsonl when exporting (default: the current directory, plus one level of subdirectories).")
+    public var exportFrom: String?
+
     public func run() async throws {
         // Backends read ARO_ASK_VERBOSE from the environment to decide
         // whether to surface model-load and runner output. The flag is
@@ -77,6 +94,14 @@ public struct AskCommand: AsyncParsableCommand {
         if verbose { setenv("ARO_ASK_VERBOSE", "1", 1) }
 
         let cwd = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+
+        // Offline, and before anything touches a model: an export reads files
+        // and writes files, and loading 6 GB of weights to do it would be
+        // absurd (GitLab #800).
+        if let destination = exportTraining {
+            try runExportTraining(destination: destination, cwd: cwd)
+            return
+        }
 
         let firstWord = prompt.first ?? ""
 
@@ -106,6 +131,65 @@ public struct AskCommand: AsyncParsableCommand {
             // should not have to strip a bill off the end (GitLab #878).
             FileHandle.standardError.write(
                 Data("\n\(await session.statisticsSummary())\n".utf8))
+        }
+    }
+
+    // MARK: - Training export (#800)
+
+    /// Collect `.context.repairs.jsonl` into training seeds.
+    ///
+    /// Opt-in, and loud about what it took: a repair log is a transcript of
+    /// somebody's project, so the command prints what it collected and where
+    /// it put it rather than copying quietly.
+    private func runExportTraining(destination: String, cwd: URL) throws {
+        let searchRoot = exportFrom.map { URL(fileURLWithPath: $0) } ?? cwd
+        let logs = RepairLogExport.findLogs(under: searchRoot)
+
+        guard !logs.isEmpty else {
+            print("No \(RepairLogExport.logFileName) under \(searchRoot.path).")
+            print("A repair log is written when `aro ask` fixes its own answer —")
+            print("ask it to write some ARO that does not check the first time.")
+            return
+        }
+
+        print("Reading \(logs.count) repair log\(logs.count == 1 ? "" : "s"):")
+        for log in logs { print("  \(log.path)") }
+
+        var summary = RepairExportSummary()
+        let seeds = RepairLogExport.collect(from: logs, summary: &summary)
+
+        guard !seeds.isEmpty else {
+            print("\nRead \(summary.read) repair\(summary.read == 1 ? "" : "s"), exported none.")
+            printDropCounts(summary)
+            return
+        }
+
+        let target = try RepairLogExport.write(
+            seeds, to: URL(fileURLWithPath: destination))
+
+        print("\nRead \(summary.read), exported \(summary.exported) → \(target.path)")
+        printDropCounts(summary)
+        print("\nBy diagnostic:")
+        for (name, count) in summary.byDiagnostic.sorted(by: { $0.value > $1.value }) {
+            print("  \(name.padding(toLength: 24, withPad: " ", startingAt: 0)) \(count)")
+        }
+        print("""
+
+            Paths, home directories and usernames were stripped. Read the file \
+            before committing it — it came from your own sessions, and only you \
+            can say whether what is left is shareable.
+            """)
+    }
+
+    private func printDropCounts(_ summary: RepairExportSummary) {
+        if summary.droppedFixStillFails > 0 {
+            print("  \(summary.droppedFixStillFails) dropped: the recorded fix does not check clean in this build")
+        }
+        if summary.droppedBrokenAlreadyPassed > 0 {
+            print("  \(summary.droppedBrokenAlreadyPassed) dropped: the 'broken' side checks clean now")
+        }
+        if summary.droppedEmpty > 0 {
+            print("  \(summary.droppedEmpty) dropped: empty, unchanged, or no ARO in the answer")
         }
     }
 

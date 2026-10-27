@@ -60,10 +60,28 @@ public final class AROLanguageServer: Sendable {
         /// rebuild is cheap, but doing it per keystroke would not be.
         private var declaredActions: UserActionRegistry?
 
+        /// The contract's per-route body limits, keyed by the directory of the
+        /// file being edited.
+        ///
+        /// Cached for the same reason `declaredActions` is: the inlay-hint
+        /// handler asks on every viewport scroll, and answering meant walking
+        /// up to six directories × three filenames of `fileExists` and then
+        /// parsing `openapi.yaml` from disk (GitLab #720). The contract's
+        /// modification date is kept with the answer, so an edit to the
+        /// contract is picked up without waiting for an invalidation signal.
+        private var bodyLimits: [String: BodyLimitsEntry] = [:]
+
+        private struct BodyLimitsEntry {
+            let contract: URL?
+            let modified: Date?
+            let limits: RouteBodyLimits
+        }
+
         func setRoots(_ urls: [URL]) {
             lock.lock(); defer { lock.unlock() }
             roots = urls
             declaredActions = nil
+            bodyLimits = [:]
         }
 
         var allRoots: [URL] {
@@ -71,10 +89,47 @@ public final class AROLanguageServer: Sendable {
             return roots
         }
 
-        /// Drop the cache; the next compile rescans.
+        /// Drop the caches; the next compile rescans.
+        ///
+        /// The body limits go too: a `didSave` or a watched-file change may
+        /// have created an `openapi.yaml` where the last walk found none, and
+        /// a cached "no contract here" answer has no modification date to
+        /// notice that with.
         func invalidateDeclaredActions() {
             lock.lock(); defer { lock.unlock() }
             declaredActions = nil
+            bodyLimits = [:]
+        }
+
+        /// The per-route body limits that apply to `file`.
+        func currentBodyLimits(near file: URL?) -> RouteBodyLimits {
+            let key = file?.deletingLastPathComponent().path ?? ""
+
+            lock.lock()
+            let cached = bodyLimits[key]
+            let currentRoots = roots
+            lock.unlock()
+
+            if let cached, let contract = cached.contract,
+               let modified = try? FileManager.default.attributesOfItem(
+                   atPath: contract.path)[.modificationDate] as? Date,
+               modified == cached.modified {
+                return cached.limits
+            }
+            // A cached answer of "no contract" stands until something
+            // invalidates it — there is no file to date-stamp.
+            if let cached, cached.contract == nil { return cached.limits }
+
+            let contract = RouteBodyLimits.contract(near: file, roots: currentRoots)
+            let limits = contract.flatMap { RouteBodyLimits.load(from: $0) } ?? .empty
+            let modified = contract.flatMap {
+                try? FileManager.default.attributesOfItem(atPath: $0.path)[.modificationDate] as? Date
+            }
+
+            lock.lock()
+            bodyLimits[key] = BodyLimitsEntry(contract: contract, modified: modified, limits: limits)
+            lock.unlock()
+            return limits
         }
 
         /// The workspace's declared actions, scanning on first use.
@@ -223,44 +278,31 @@ public final class AROLanguageServer: Sendable {
 
     // MARK: - Stdio Transport
 
-    /// Run the language server using stdio transport
-    public func runStdio() async throws {
-        log("ARO Language Server starting...")
-
-        // Read using FileHandle's bytes async sequence for proper async handling
-        var buffer = Data()
-        let input = FileHandle.standardInput
-        let output = FileHandle.standardOutput
-
-        // Set stdin to non-blocking might help with VSCode spawning
-        let flags = fcntl(input.fileDescriptor, F_GETFL)
-        if flags != -1 {
-            _ = fcntl(input.fileDescriptor, F_SETFL, flags & ~O_NONBLOCK)
-        }
-
-        while true {
-            // Read available data
-            let data = input.availableData
-            if data.isEmpty {
-                log("EOF received, shutting down")
-                break
-            }
-            buffer.append(data)
-
-            // Try to parse complete messages
-            while let message = try extractMessage(from: &buffer) {
-                log("Received message: \(String(data: message.prefix(200), encoding: .utf8) ?? "...")")
-                let response = await handleMessage(message)
-                if let response = response {
-                    log("Sending response: \(String(data: response.prefix(200), encoding: .utf8) ?? "...")")
-                    try sendMessage(response, to: output)
-                }
-            }
-        }
-    }
-
-    /// Run the language server synchronously (for compatibility with child process spawning)
-    public func runStdioSync() {
+    /// Run the language server over stdio. The only transport.
+    ///
+    /// There used to be two: this blocking POSIX-read loop and an `async`
+    /// twin, each with its own message decoder, its own pair of dispatch
+    /// tables and its own full set of handlers — some 550 lines duplicated
+    /// almost verbatim. Nothing ever called the async one. `aro lsp` is the
+    /// single entry point every client uses (the VS Code and IntelliJ
+    /// extensions and SOLARO all spawn it), and `LSPCommand` has only ever
+    /// called this loop, so the async half was answering no messages at all
+    /// while looking exactly as authoritative as the half that was
+    /// (GitLab #736).
+    ///
+    /// Duplication like that does not stay duplicated. The dead half had
+    /// quietly grown the better `didOpen`, `didClose` and `didSave`
+    /// behaviour, which the live half therefore did not have; those are
+    /// ported into the handlers below, and this file now has one place
+    /// where each of them can be got wrong.
+    ///
+    /// `nonisolated` is redundant today — the class carries no actor
+    /// isolation — but it is the property the deletion was meant to
+    /// preserve: an async message loop, if anyone wants one later, wraps
+    /// this transport rather than reimplementing the handlers, and putting
+    /// the server on a global actor would now fail to compile here instead
+    /// of silently making the handlers unreachable from `async` code.
+    nonisolated public func runStdio() {
         // Ignore signals that can crash the process when spawned by VSCode
         signal(SIGPIPE, SIG_IGN)
 
@@ -283,7 +325,7 @@ public final class AROLanguageServer: Sendable {
             // Process complete messages
             while let message = try? extractMessage(from: &buffer) {
                 log("Received message: \(String(data: message.prefix(200), encoding: .utf8) ?? "...")")
-                if let response = handleMessageSync(message) {
+                if let response = handleMessage(message) {
                     log("Sending response: \(String(data: response.prefix(200), encoding: .utf8) ?? "...")")
                     try? sendMessage(response, to: output)
                 }
@@ -291,14 +333,22 @@ public final class AROLanguageServer: Sendable {
         }
     }
 
-    /// Handle message synchronously without any async/await.
+    /// Answer one JSON-RPC message, returning the response to write back
+    /// (or `nil` for a notification, which is never answered).
     ///
-    /// Dispatch is table-driven (see ``syncRequestHandlers`` and
-    /// ``syncNotificationHandlers``): the method name is looked up in the
+    /// Dispatch is table-driven (see ``requestHandlers`` and
+    /// ``notificationHandlers``): the method name is looked up in the
     /// appropriate table and the stored closure is invoked. A handful of
     /// lifecycle methods (`initialize`, `initialized`, `shutdown`, `exit`)
     /// carry special return/side-effect semantics and are handled inline.
-    private func handleMessageSync(_ data: Data) -> Data? {
+    ///
+    /// Nothing here suspends, so an async loop can call it directly; see
+    /// ``runStdio()`` on why that matters.
+    ///
+    /// Internal rather than private so the tests can drive real JSON-RPC
+    /// through the real tables, which is the level the two transports
+    /// diverged at.
+    nonisolated func handleMessage(_ data: Data) -> Data? {
         guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let method = json["method"] as? String else {
             return nil
@@ -326,15 +376,15 @@ public final class AROLanguageServer: Sendable {
         }
 
         // Notifications: handled for side effects, never answered.
-        if let handler = syncNotificationHandlers[method] {
-            handler(params)
+        if let handler = Self.notificationHandlers[method] {
+            handler(self, params)
             return nil
         }
 
         // Requests: produce a result that is wrapped in a success response
         // when the message carries an id.
-        if let handler = syncRequestHandlers[method] {
-            let result = handler(params)
+        if let handler = Self.requestHandlers[method] {
+            let result = handler(self, params)
             if let id = id {
                 return createSuccessResponse(id: id, result: result)
             }
@@ -348,63 +398,64 @@ public final class AROLanguageServer: Sendable {
         return nil
     }
 
-    // MARK: - Sync Dispatch Tables
+    // MARK: - Dispatch Tables
 
-    /// Request methods routed on the synchronous transport. Each closure maps
-    /// the raw `params` to a JSON-serialisable result (or `nil`). The result
-    /// is wrapped in a JSON-RPC success response by ``handleMessageSync``.
-    private var syncRequestHandlers: [String: @Sendable (Any?) -> Any?] {
-        [
-            "initialize": { [self] in handleInitializeSync(params: $0) },
-            "textDocument/hover": { [self] in handleHoverSync(params: $0) },
-            "textDocument/definition": { [self] in handleDefinitionSync(params: $0) },
-            "textDocument/documentHighlight": { [self] in handleDocumentHighlightSync(params: $0) },
-            "textDocument/completion": { [self] in handleCompletionSync(params: $0) },
-            "textDocument/references": { [self] in handleReferencesSync(params: $0) },
-            "textDocument/documentSymbol": { [self] in handleDocumentSymbolSync(params: $0) },
-            "workspace/symbol": { [self] in handleWorkspaceSymbolSync(params: $0) },
-            "textDocument/formatting": { [self] in handleFormattingSync(params: $0) },
-            "textDocument/prepareRename": { [self] in handlePrepareRenameSync(params: $0) },
-            "textDocument/rename": { [self] in handleRenameSync(params: $0) },
-            "textDocument/foldingRange": { [self] in handleFoldingRangeSync(params: $0) },
-            "textDocument/semanticTokens/full": { [self] in handleSemanticTokensSync(params: $0) },
-            "textDocument/signatureHelp": { [self] in handleSignatureHelpSync(params: $0) },
-            "textDocument/codeAction": { [self] in handleCodeActionSync(params: $0) },
-            "textDocument/inlayHint": { [self] in handleInlayHintSync(params: $0) }
-        ]
-    }
-
-    /// Notification methods routed on the synchronous transport. Handled for
-    /// their side effects; no response is ever produced.
+    /// Request methods the server answers. Each closure maps the raw `params`
+    /// to a JSON-serialisable result (or `nil`). The result is wrapped in a
+    /// JSON-RPC success response by ``handleMessage``.
+    /// Built once for the process, not once per message.
     ///
-    /// `textDocument/didSave` and `$/cancelRequest` are registered as no-ops:
-    /// on the previous synchronous path they matched the notification group but
-    /// fell through the inner switch's `default`, so they were silently
-    /// acknowledged without touching the document manager.
-    private var syncNotificationHandlers: [String: @Sendable (Any?) -> Void] {
-        [
-            "textDocument/didOpen": { [self] in handleDidOpenSync(params: $0) },
-            "textDocument/didChange": { [self] in handleDidChangeSync(params: $0) },
-            "textDocument/didClose": { [self] in handleDidCloseSync(params: $0) },
-            // Not a full no-op any more: a save may have changed an `Action`
-            // header on disk, so the workspace action cache is dropped
-            // (GitLab #589). Diagnostics on this path are still published by
-            // the next compile.
-            "textDocument/didSave": { [self] _ in workspaceState.invalidateDeclaredActions() },
-            // A file created or deleted outside the editor changes which
-            // actions the workspace declares, and no `didOpen`/`didSave`
-            // announces it (GitLab #589). Clients only send this when they
-            // watch files, so it is a bonus signal, not the primary one.
-            "workspace/didChangeWatchedFiles": { [self] _ in
-                workspaceState.invalidateDeclaredActions()
-            },
-            "$/cancelRequest": { _ in }
-        ]
-    }
+    /// These were computed properties, so every JSON-RPC message — every
+    /// keystroke's `didChange`, every viewport scroll's `inlayHint` — built a
+    /// 16-entry dictionary of freshly allocated closures just to look one
+    /// name up in it (GitLab #720). The table is a property of the protocol,
+    /// not of a server instance, so it is `static` and the instance arrives as
+    /// an argument; that also keeps the closures from capturing `self`, which
+    /// a stored `let` on a class would have made a retain cycle.
+    private static let requestHandlers: [String: @Sendable (AROLanguageServer, Any?) -> Any?] = [
+        "initialize": { $0.handleInitialize(params: $1) },
+        "textDocument/hover": { $0.handleHover(params: $1) },
+        "textDocument/definition": { $0.handleDefinition(params: $1) },
+        "textDocument/documentHighlight": { $0.handleDocumentHighlight(params: $1) },
+        "textDocument/completion": { $0.handleCompletion(params: $1) },
+        "textDocument/references": { $0.handleReferences(params: $1) },
+        "textDocument/documentSymbol": { $0.handleDocumentSymbol(params: $1) },
+        "workspace/symbol": { $0.handleWorkspaceSymbol(params: $1) },
+        "textDocument/formatting": { $0.handleFormatting(params: $1) },
+        "textDocument/prepareRename": { $0.handlePrepareRename(params: $1) },
+        "textDocument/rename": { $0.handleRename(params: $1) },
+        "textDocument/foldingRange": { $0.handleFoldingRange(params: $1) },
+        "textDocument/semanticTokens/full": { $0.handleSemanticTokens(params: $1) },
+        "textDocument/signatureHelp": { $0.handleSignatureHelp(params: $1) },
+        "textDocument/codeAction": { $0.handleCodeAction(params: $1) },
+        "textDocument/inlayHint": { $0.handleInlayHint(params: $1) }
+    ]
 
-    // MARK: - Synchronous Handlers
+    /// Notification methods the server acts on. Handled for their side
+    /// effects; no response is ever produced.
+    private static let notificationHandlers: [String: @Sendable (AROLanguageServer, Any?) -> Void] = [
+        "textDocument/didOpen": { $0.handleDidOpen(params: $1) },
+        "textDocument/didChange": { $0.handleDidChange(params: $1) },
+        "textDocument/didClose": { $0.handleDidClose(params: $1) },
+        "textDocument/didSave": { $0.handleDidSave(params: $1) },
+        // A file created or deleted outside the editor changes which
+        // actions the workspace declares, and no `didOpen`/`didSave`
+        // announces it (GitLab #589). Clients only send this when they
+        // watch files, so it is a bonus signal, not the primary one.
+        "workspace/didChangeWatchedFiles": { server, _ in
+            server.workspaceState.invalidateDeclaredActions()
+        },
+        // A deliberate no-op rather than an omission: requests are answered
+        // on the read loop's own thread, so by the time a cancellation
+        // arrives the request it names has already been answered. Listed
+        // here so it is acknowledged instead of falling through to
+        // "Method not found".
+        "$/cancelRequest": { _, _ in }
+    ]
 
-    private func handleInitializeSync(params: Any?) -> [String: Any] {
+    // MARK: - Handlers
+
+    private func handleInitialize(params: Any?) -> [String: Any] {
         log("Initialize request received")
         captureWorkspaceRoots(from: params)
         return [
@@ -500,17 +551,28 @@ public final class AROLanguageServer: Sendable {
         }
     }
 
-    private func handleDidOpenSync(params: Any?) {
+    /// Compile the newly opened document and publish its diagnostics.
+    ///
+    /// The publish is the part that used to be missing on this path
+    /// (GitLab #736): the handler took the compiled state back from the
+    /// manager and threw it away. `DocumentManager` only calls its
+    /// `onCompile` callback for the *debounced* compile — `open` returns its
+    /// result to the caller instead, precisely so the caller can publish it
+    /// — so opening a file with an error in it produced no squiggle at all
+    /// until the first keystroke. The deleted async handler had it right; it
+    /// just was not the handler anyone reached.
+    private func handleDidOpen(params: Any?) {
         guard let dict = params as? [String: Any],
               let textDocument = dict["textDocument"] as? [String: Any],
               let uri = textDocument["uri"] as? String,
               let text = textDocument["text"] as? String,
               let version = textDocument["version"] as? Int else { return }
         log("Document opened: \(uri)")
-        _ = documentManager.openSync(uri: uri, content: text, version: version)
+        let state = documentManager.open(uri: uri, content: text, version: version)
+        publishDiagnostics(for: uri, state: state)
     }
 
-    private func handleDidChangeSync(params: Any?) {
+    private func handleDidChange(params: Any?) {
         guard let dict = params as? [String: Any],
               let textDocument = dict["textDocument"] as? [String: Any],
               let uri = textDocument["uri"] as? String,
@@ -536,49 +598,94 @@ public final class AROLanguageServer: Sendable {
                 changes.append(TextDocumentContentChangeEvent(range: nil, rangeLength: nil, text: text))
             }
         }
-        _ = documentManager.applyChangesSync(uri: uri, changes: changes, version: version)
+        // #352: `applyChanges` updates the stored text immediately but
+        // *debounces* the compile, and the returned state therefore carries
+        // the new text with the previous compilation result. Fresh
+        // diagnostics are published by the manager's `onCompile` callback
+        // once the debounced compile lands; publishing the interim state
+        // here would re-emit the stale diagnostics on every keystroke, so
+        // this is the one document notification that deliberately does not
+        // publish.
+        _ = documentManager.applyChanges(uri: uri, changes: changes, version: version)
     }
 
-    private func handleDidCloseSync(params: Any?) {
+    /// Forget the document and clear its diagnostics.
+    ///
+    /// The clear is the second thing this path was missing (GitLab #736):
+    /// a client keeps showing whatever was last published for a URI, so
+    /// closing a file with errors left its entries sitting in the problems
+    /// list, attributed to a document the server no longer has.
+    private func handleDidClose(params: Any?) {
         guard let dict = params as? [String: Any],
               let textDocument = dict["textDocument"] as? [String: Any],
               let uri = textDocument["uri"] as? String else { return }
         log("Document closed: \(uri)")
-        documentManager.closeSync(uri: uri)
+        documentManager.close(uri: uri)
+        publishDiagnostics(for: uri, diagnostics: [])
     }
 
-    private func handleHoverSync(params: Any?) -> [String: Any]? {
+    /// A save may have put an `Action` header on disk, so drop the workspace
+    /// action cache and recompile.
+    ///
+    /// Recompiling *every* open document rather than just the saved one is
+    /// the point (GitLab #589): the squiggle that needs clearing is on the
+    /// file that *calls* `Application.<Name>`, and that file was compiled
+    /// against the stale registry — publishing only this document's
+    /// diagnostics would leave the caller marked red until somebody thought
+    /// to go and edit it. Open documents are few, and the rescan behind
+    /// this is parse-only and cached.
+    ///
+    /// The live path used to stop after the cache invalidation, which
+    /// dropped the stale answer but never asked the question again
+    /// (GitLab #736). Only the dead async twin did the recompile.
+    private func handleDidSave(params: Any?) {
+        guard let dict = params as? [String: Any],
+              let textDocument = dict["textDocument"] as? [String: Any],
+              let uri = textDocument["uri"] as? String else { return }
+        log("Document saved: \(uri)")
+
+        workspaceState.invalidateDeclaredActions()
+
+        for (openUri, state) in documentManager.all() {
+            let recompiled = documentManager.update(
+                uri: openUri, content: state.content, version: state.version
+            )
+            publishDiagnostics(for: openUri, state: recompiled ?? state)
+        }
+    }
+
+    private func handleHover(params: Any?) -> [String: Any]? {
         guard let dict = params as? [String: Any],
               let textDocument = dict["textDocument"] as? [String: Any],
               let uri = textDocument["uri"] as? String,
               let position = dict["position"] as? [String: Any],
               let line = position["line"] as? Int,
               let character = position["character"] as? Int,
-              let state = documentManager.getSync(uri: uri) else { return nil }
+              let state = documentManager.get(uri: uri) else { return nil }
         let lspPosition = Position(line: line, character: character)
         return hoverHandler.handle(position: lspPosition, content: state.content, compilationResult: state.compilationResult)
     }
 
-    private func handleDefinitionSync(params: Any?) -> [String: Any]? {
+    private func handleDefinition(params: Any?) -> [String: Any]? {
         guard let dict = params as? [String: Any],
               let textDocument = dict["textDocument"] as? [String: Any],
               let uri = textDocument["uri"] as? String,
               let position = dict["position"] as? [String: Any],
               let line = position["line"] as? Int,
               let character = position["character"] as? Int,
-              let state = documentManager.getSync(uri: uri) else { return nil }
+              let state = documentManager.get(uri: uri) else { return nil }
         let lspPosition = Position(line: line, character: character)
         return definitionHandler.handle(uri: uri, position: lspPosition, content: state.content, compilationResult: state.compilationResult)
     }
 
-    private func handleDocumentHighlightSync(params: Any?) -> [[String: Any]]? {
+    private func handleDocumentHighlight(params: Any?) -> [[String: Any]]? {
         guard let dict = params as? [String: Any],
               let textDocument = dict["textDocument"] as? [String: Any],
               let uri = textDocument["uri"] as? String,
               let position = dict["position"] as? [String: Any],
               let line = position["line"] as? Int,
               let character = position["character"] as? Int,
-              let state = documentManager.getSync(uri: uri) else { return nil }
+              let state = documentManager.get(uri: uri) else { return nil }
 
         let lspPosition = Position(line: line, character: character)
         let lines = LineIndex(state.content)
@@ -624,49 +731,19 @@ public final class AROLanguageServer: Sendable {
         position: SourceLocation,
         isActionVerb: inout Bool
     ) -> String? {
-        for statement in statements {
-            if let aro = statement as? AROStatement {
-                if aro.action.span.contains(position) {
-                    isActionVerb = true
-                    return aro.action.verb
-                }
-                if aro.result.span.contains(position) {
-                    return aro.result.base
-                }
-                if aro.object.noun.span.contains(position) {
-                    return aro.object.noun.base
-                }
-            } else if let forEachLoop = statement as? ForEachLoop {
-                if let found = findHighlightTargetInStatements(forEachLoop.body, position: position, isActionVerb: &isActionVerb) {
-                    return found
-                }
-            } else if let rangeLoop = statement as? RangeLoop {
-                if let found = findHighlightTargetInStatements(rangeLoop.body, position: position, isActionVerb: &isActionVerb) {
-                    return found
-                }
-            } else if let whileLoop = statement as? WhileLoop {
-                if let found = findHighlightTargetInStatements(whileLoop.body, position: position, isActionVerb: &isActionVerb) {
-                    return found
-                }
-            } else if let matchStmt = statement as? MatchStatement {
-                for caseClause in matchStmt.cases {
-                    if let found = findHighlightTargetInStatements(caseClause.body, position: position, isActionVerb: &isActionVerb) {
-                        return found
-                    }
-                }
-            } else if let pipeline = statement as? PipelineStatement {
-                for stage in pipeline.stages {
-                    if stage.action.span.contains(position) {
-                        isActionVerb = true
-                        return stage.action.verb
-                    }
-                    if stage.result.span.contains(position) {
-                        return stage.result.base
-                    }
-                    if stage.object.noun.span.contains(position) {
-                        return stage.object.noun.base
-                    }
-                }
+        // GitLab #723: highlighting an occurrence inside `when { … }` found
+        // nothing, because the chain here descended into loops, match cases
+        // and pipelines but not into a `when` block or a match's `otherwise`.
+        for aro in AROStatementWalk.flatten(statements) {
+            if aro.action.span.contains(position) {
+                isActionVerb = true
+                return aro.action.verb
+            }
+            if aro.result.span.contains(position) {
+                return aro.result.base
+            }
+            if aro.object.noun.span.contains(position) {
+                return aro.object.noun.base
             }
         }
         return nil
@@ -681,44 +758,17 @@ public final class AROLanguageServer: Sendable {
     ) -> [[String: Any]] {
         var highlights: [[String: Any]] = []
 
-        for statement in statements {
-            if let aro = statement as? AROStatement {
-                if isActionVerb {
-                    if aro.action.verb.lowercased() == name.lowercased() {
-                        highlights.append(makeHighlight(lines: lines, span: aro.action.span, kind: 1))
-                    }
-                } else {
-                    if aro.result.base == name {
-                        highlights.append(makeHighlight(lines: lines, span: aro.result.span, kind: 2))  // Write
-                    }
-                    if aro.object.noun.base == name {
-                        highlights.append(makeHighlight(lines: lines, span: aro.object.noun.span, kind: 3))  // Read
-                    }
+        for aro in AROStatementWalk.flatten(statements) {
+            if isActionVerb {
+                if aro.action.verb.lowercased() == name.lowercased() {
+                    highlights.append(makeHighlight(lines: lines, span: aro.action.span, kind: 1))
                 }
-            } else if let forEachLoop = statement as? ForEachLoop {
-                highlights.append(contentsOf: collectHighlightsInStatements(forEachLoop.body, name: name, isActionVerb: isActionVerb, lines: lines))
-            } else if let rangeLoop = statement as? RangeLoop {
-                highlights.append(contentsOf: collectHighlightsInStatements(rangeLoop.body, name: name, isActionVerb: isActionVerb, lines: lines))
-            } else if let whileLoop = statement as? WhileLoop {
-                highlights.append(contentsOf: collectHighlightsInStatements(whileLoop.body, name: name, isActionVerb: isActionVerb, lines: lines))
-            } else if let matchStmt = statement as? MatchStatement {
-                for caseClause in matchStmt.cases {
-                    highlights.append(contentsOf: collectHighlightsInStatements(caseClause.body, name: name, isActionVerb: isActionVerb, lines: lines))
+            } else {
+                if aro.result.base == name {
+                    highlights.append(makeHighlight(lines: lines, span: aro.result.span, kind: 2))  // Write
                 }
-            } else if let pipeline = statement as? PipelineStatement {
-                for stage in pipeline.stages {
-                    if isActionVerb {
-                        if stage.action.verb.lowercased() == name.lowercased() {
-                            highlights.append(makeHighlight(lines: lines, span: stage.action.span, kind: 1))
-                        }
-                    } else {
-                        if stage.result.base == name {
-                            highlights.append(makeHighlight(lines: lines, span: stage.result.span, kind: 2))
-                        }
-                        if stage.object.noun.base == name {
-                            highlights.append(makeHighlight(lines: lines, span: stage.object.noun.span, kind: 3))
-                        }
-                    }
+                if aro.object.noun.base == name {
+                    highlights.append(makeHighlight(lines: lines, span: aro.object.noun.span, kind: 3))  // Read
                 }
             }
         }
@@ -737,71 +787,71 @@ public final class AROLanguageServer: Sendable {
         ]
     }
 
-    private func handleCompletionSync(params: Any?) -> [String: Any]? {
+    private func handleCompletion(params: Any?) -> [String: Any]? {
         guard let dict = params as? [String: Any],
               let textDocument = dict["textDocument"] as? [String: Any],
               let uri = textDocument["uri"] as? String,
               let position = dict["position"] as? [String: Any],
               let line = position["line"] as? Int,
               let character = position["character"] as? Int,
-              let state = documentManager.getSync(uri: uri) else { return nil }
+              let state = documentManager.get(uri: uri) else { return nil }
         let context = dict["context"] as? [String: Any]
         let triggerCharacter = context?["triggerCharacter"] as? String
         let lspPosition = Position(line: line, character: character)
         return completionHandler.handle(position: lspPosition, content: state.content, compilationResult: state.compilationResult, triggerCharacter: triggerCharacter)
     }
 
-    private func handleReferencesSync(params: Any?) -> [[String: Any]]? {
+    private func handleReferences(params: Any?) -> [[String: Any]]? {
         guard let dict = params as? [String: Any],
               let textDocument = dict["textDocument"] as? [String: Any],
               let uri = textDocument["uri"] as? String,
               let position = dict["position"] as? [String: Any],
               let line = position["line"] as? Int,
               let character = position["character"] as? Int,
-              let state = documentManager.getSync(uri: uri) else { return nil }
+              let state = documentManager.get(uri: uri) else { return nil }
         let lspPosition = Position(line: line, character: character)
         return referencesHandler.handle(uri: uri, position: lspPosition, content: state.content, compilationResult: state.compilationResult)
     }
 
-    private func handleDocumentSymbolSync(params: Any?) -> [[String: Any]]? {
+    private func handleDocumentSymbol(params: Any?) -> [[String: Any]]? {
         guard let dict = params as? [String: Any],
               let textDocument = dict["textDocument"] as? [String: Any],
               let uri = textDocument["uri"] as? String,
-              let state = documentManager.getSync(uri: uri) else { return nil }
+              let state = documentManager.get(uri: uri) else { return nil }
         return documentSymbolHandler.handle(content: state.content, compilationResult: state.compilationResult)
     }
 
-    private func handleWorkspaceSymbolSync(params: Any?) -> [[String: Any]]? {
+    private func handleWorkspaceSymbol(params: Any?) -> [[String: Any]]? {
         guard let dict = params as? [String: Any],
               let query = dict["query"] as? String else { return nil }
-        let allDocuments = documentManager.allSync()
+        let allDocuments = documentManager.all()
         return workspaceSymbolHandler.handle(query: query, documents: allDocuments)
     }
 
-    private func handleFormattingSync(params: Any?) -> [[String: Any]]? {
+    private func handleFormatting(params: Any?) -> [[String: Any]]? {
         guard let dict = params as? [String: Any],
               let textDocument = dict["textDocument"] as? [String: Any],
               let uri = textDocument["uri"] as? String,
               let options = dict["options"] as? [String: Any],
-              let state = documentManager.getSync(uri: uri) else { return nil }
+              let state = documentManager.get(uri: uri) else { return nil }
         let tabSize = options["tabSize"] as? Int ?? 4
         let insertSpaces = options["insertSpaces"] as? Bool ?? true
         return formattingHandler.handle(content: state.content, options: FormattingOptions(tabSize: tabSize, insertSpaces: insertSpaces))
     }
 
-    private func handlePrepareRenameSync(params: Any?) -> [String: Any]? {
+    private func handlePrepareRename(params: Any?) -> [String: Any]? {
         guard let dict = params as? [String: Any],
               let textDocument = dict["textDocument"] as? [String: Any],
               let uri = textDocument["uri"] as? String,
               let position = dict["position"] as? [String: Any],
               let line = position["line"] as? Int,
               let character = position["character"] as? Int,
-              let state = documentManager.getSync(uri: uri) else { return nil }
+              let state = documentManager.get(uri: uri) else { return nil }
         let lspPosition = Position(line: line, character: character)
         return renameHandler.prepareRename(uri: uri, position: lspPosition, content: state.content, compilationResult: state.compilationResult)
     }
 
-    private func handleRenameSync(params: Any?) -> [String: Any]? {
+    private func handleRename(params: Any?) -> [String: Any]? {
         guard let dict = params as? [String: Any],
               let textDocument = dict["textDocument"] as? [String: Any],
               let uri = textDocument["uri"] as? String,
@@ -809,40 +859,40 @@ public final class AROLanguageServer: Sendable {
               let line = position["line"] as? Int,
               let character = position["character"] as? Int,
               let newName = dict["newName"] as? String,
-              let state = documentManager.getSync(uri: uri) else { return nil }
+              let state = documentManager.get(uri: uri) else { return nil }
         let lspPosition = Position(line: line, character: character)
         return renameHandler.handle(uri: uri, position: lspPosition, newName: newName, content: state.content, compilationResult: state.compilationResult)
     }
 
-    private func handleFoldingRangeSync(params: Any?) -> [[String: Any]]? {
+    private func handleFoldingRange(params: Any?) -> [[String: Any]]? {
         guard let dict = params as? [String: Any],
               let textDocument = dict["textDocument"] as? [String: Any],
               let uri = textDocument["uri"] as? String,
-              let state = documentManager.getSync(uri: uri) else { return nil }
+              let state = documentManager.get(uri: uri) else { return nil }
         return foldingRangeHandler.handle(compilationResult: state.compilationResult)
     }
 
-    private func handleSemanticTokensSync(params: Any?) -> [String: Any]? {
+    private func handleSemanticTokens(params: Any?) -> [String: Any]? {
         guard let dict = params as? [String: Any],
               let textDocument = dict["textDocument"] as? [String: Any],
               let uri = textDocument["uri"] as? String,
-              let state = documentManager.getSync(uri: uri) else { return nil }
+              let state = documentManager.get(uri: uri) else { return nil }
         return semanticTokensHandler.handle(content: state.content, compilationResult: state.compilationResult)
     }
 
-    private func handleSignatureHelpSync(params: Any?) -> [String: Any]? {
+    private func handleSignatureHelp(params: Any?) -> [String: Any]? {
         guard let dict = params as? [String: Any],
               let textDocument = dict["textDocument"] as? [String: Any],
               let uri = textDocument["uri"] as? String,
               let position = dict["position"] as? [String: Any],
               let line = position["line"] as? Int,
               let character = position["character"] as? Int,
-              let state = documentManager.getSync(uri: uri) else { return nil }
+              let state = documentManager.get(uri: uri) else { return nil }
         let lspPosition = Position(line: line, character: character)
         return signatureHelpHandler.handle(position: lspPosition, content: state.content, compilationResult: state.compilationResult)
     }
 
-    private func handleCodeActionSync(params: Any?) -> [[String: Any]]? {
+    private func handleCodeAction(params: Any?) -> [[String: Any]]? {
         guard let dict = params as? [String: Any],
               let textDocument = dict["textDocument"] as? [String: Any],
               let uri = textDocument["uri"] as? String,
@@ -853,7 +903,7 @@ public final class AROLanguageServer: Sendable {
               let startChar = start["character"] as? Int,
               let endLine = end["line"] as? Int,
               let endChar = end["character"] as? Int,
-              let state = documentManager.getSync(uri: uri) else { return nil }
+              let state = documentManager.get(uri: uri) else { return nil }
         let context = dict["context"] as? [String: Any]
         let diagnostics = context?["diagnostics"] as? [[String: Any]] ?? []
         let startPos = Position(line: startLine, character: startChar)
@@ -861,7 +911,7 @@ public final class AROLanguageServer: Sendable {
         return codeActionHandler.handle(uri: uri, range: (start: startPos, end: endPos), diagnostics: diagnostics, content: state.content, compilationResult: state.compilationResult)
     }
 
-    private func handleInlayHintSync(params: Any?) -> [[String: Any]]? {
+    private func handleInlayHint(params: Any?) -> [[String: Any]]? {
         guard let dict = params as? [String: Any],
               let textDocument = dict["textDocument"] as? [String: Any],
               let uri = textDocument["uri"] as? String,
@@ -870,7 +920,7 @@ public final class AROLanguageServer: Sendable {
               let end = range["end"] as? [String: Any],
               let startLine = start["line"] as? Int,
               let endLine = end["line"] as? Int,
-              let state = documentManager.getSync(uri: uri) else { return nil }
+              let state = documentManager.get(uri: uri) else { return nil }
         return inlayHintHandler.handle(
             compilationResult: state.compilationResult,
             startLine: startLine,
@@ -932,532 +982,11 @@ public final class AROLanguageServer: Sendable {
         output.write(data)
     }
 
-    /// Handle an incoming JSON-RPC message.
-    ///
-    /// Dispatch is table-driven (see ``asyncRequestHandlers`` and
-    /// ``asyncNotificationHandlers``). Lifecycle methods with bespoke
-    /// return/side-effect semantics (`initialize`, `initialized`, `shutdown`,
-    /// `exit`, `$/cancelRequest`) are handled inline before the table lookup.
-    private func handleMessage(_ data: Data) async -> Data? {
-        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let method = json["method"] as? String else {
-            return nil
-        }
-
-        let id = json["id"]
-        let params = json["params"]
-
-        log("Handling method: \(method)")
-
-        // Lifecycle methods with bespoke semantics.
-        switch method {
-        case "initialized":
-            // Client is ready; load workspace plugins now so subsequent
-            // completion/hover sees plugin-provided actions and qualifiers.
-            loadWorkspacePluginsAsync()
-            return nil
-        case "exit":
-            exit(0)
-        case "$/cancelRequest":
-            // Cancellation not fully supported yet, just acknowledge.
-            return nil
-        case "shutdown":
-            // A request that always resolves to a null result.
-            return id.map { createSuccessResponse(id: $0, result: nil) } ?? nil
-        default:
-            break
-        }
-
-        // Notifications: handled for side effects, never answered.
-        if let handler = asyncNotificationHandlers[method] {
-            await handler(params)
-            return nil
-        }
-
-        // Requests: produce a result that is wrapped in a success response
-        // when the message carries an id.
-        if let handler = asyncRequestHandlers[method] {
-            let result = await handler(params)
-            if let id = id {
-                return createSuccessResponse(id: id, result: result)
-            }
-            return nil
-        }
-
-        log("Unknown method: \(method)")
-        if id != nil {
-            return createErrorResponse(id: id, code: -32601, message: "Method not found: \(method)")
-        }
-        return nil
-    }
-
-    // MARK: - Async Dispatch Tables
-
-    /// Request methods routed on the async transport. Each closure maps the
-    /// raw `params` to a JSON-serialisable result (or `nil`), which is wrapped
-    /// in a JSON-RPC success response by ``handleMessage``.
-    ///
-    /// `textDocument/documentHighlight` intentionally forwards to the
-    /// synchronous handler (there is no async variant), matching the previous
-    /// behaviour.
-    private var asyncRequestHandlers: [String: @Sendable (Any?) async -> Any?] {
-        [
-            "initialize": { [self] in await handleInitialize(params: $0) },
-            "textDocument/hover": { [self] in await handleHover(params: $0) },
-            "textDocument/definition": { [self] in await handleDefinition(params: $0) },
-            "textDocument/completion": { [self] in await handleCompletion(params: $0) },
-            "textDocument/references": { [self] in await handleReferences(params: $0) },
-            "textDocument/documentSymbol": { [self] in await handleDocumentSymbol(params: $0) },
-            "workspace/symbol": { [self] in await handleWorkspaceSymbol(params: $0) },
-            "textDocument/formatting": { [self] in await handleFormatting(params: $0) },
-            "textDocument/prepareRename": { [self] in await handlePrepareRename(params: $0) },
-            "textDocument/rename": { [self] in await handleRename(params: $0) },
-            "textDocument/foldingRange": { [self] in await handleFoldingRange(params: $0) },
-            "textDocument/semanticTokens/full": { [self] in await handleSemanticTokens(params: $0) },
-            "textDocument/signatureHelp": { [self] in await handleSignatureHelp(params: $0) },
-            "textDocument/codeAction": { [self] in await handleCodeAction(params: $0) },
-            "textDocument/inlayHint": { [self] in await handleInlayHint(params: $0) },
-            "textDocument/documentHighlight": { [self] in handleDocumentHighlightSync(params: $0) }
-        ]
-    }
-
-    /// Notification methods routed on the async transport. Handled for their
-    /// side effects; no response is ever produced.
-    private var asyncNotificationHandlers: [String: @Sendable (Any?) async -> Void] {
-        [
-            "textDocument/didOpen": { [self] in await handleDidOpen(params: $0) },
-            "textDocument/didChange": { [self] in await handleDidChange(params: $0) },
-            "textDocument/didClose": { [self] in await handleDidClose(params: $0) },
-            "textDocument/didSave": { [self] in await handleDidSave(params: $0) },
-            "workspace/didChangeWatchedFiles": { [self] _ in
-                workspaceState.invalidateDeclaredActions()
-            }
-        ]
-    }
-
-    // MARK: - Initialize
-
-    private func handleInitialize(params: Any?) async -> [String: Any] {
-        log("Initialize request received")
-        captureWorkspaceRoots(from: params)
-        return [
-            "capabilities": capabilitiesDict,
-            "serverInfo": [
-                "name": "aro-lsp",
-                "version": "1.3.0"
-            ]
-        ]
-    }
-
-    // MARK: - Document Sync
-
-    private func handleDidOpen(params: Any?) async {
-        guard let dict = params as? [String: Any],
-              let textDocument = dict["textDocument"] as? [String: Any],
-              let uri = textDocument["uri"] as? String,
-              let text = textDocument["text"] as? String,
-              let version = textDocument["version"] as? Int else {
-            return
-        }
-
-        log("Document opened: \(uri)")
-        let state = documentManager.open(uri: uri, content: text, version: version)
-        publishDiagnostics(for: uri, state: state)
-    }
-
-    private func handleDidChange(params: Any?) async {
-        guard let dict = params as? [String: Any],
-              let textDocument = dict["textDocument"] as? [String: Any],
-              let uri = textDocument["uri"] as? String,
-              let version = textDocument["version"] as? Int,
-              let contentChanges = dict["contentChanges"] as? [[String: Any]] else {
-            return
-        }
-
-        log("Document changed: \(uri)")
-
-        // Convert content changes to TextDocumentContentChangeEvent
-        var changes: [TextDocumentContentChangeEvent] = []
-        for change in contentChanges {
-            let text = change["text"] as? String ?? ""
-
-            if let rangeDict = change["range"] as? [String: Any],
-               let startDict = rangeDict["start"] as? [String: Any],
-               let endDict = rangeDict["end"] as? [String: Any],
-               let startLine = startDict["line"] as? Int,
-               let startChar = startDict["character"] as? Int,
-               let endLine = endDict["line"] as? Int,
-               let endChar = endDict["character"] as? Int {
-                // Incremental change
-                let range = LSPRange(
-                    start: Position(line: startLine, character: startChar),
-                    end: Position(line: endLine, character: endChar)
-                )
-                changes.append(TextDocumentContentChangeEvent(range: range, rangeLength: nil, text: text))
-            } else {
-                // Full content change
-                changes.append(TextDocumentContentChangeEvent(range: nil, rangeLength: nil, text: text))
-            }
-        }
-
-        // #352: applyChanges updates the stored text immediately but
-        // *debounces* the compile. Fresh diagnostics are published by
-        // the DocumentManager's onCompile callback once the debounced
-        // compile lands — publishing the returned interim state here
-        // would just re-emit the previous (stale) diagnostics on every
-        // keystroke, so we intentionally don't.
-        _ = documentManager.applyChanges(uri: uri, changes: changes, version: version)
-    }
-
-    private func handleDidClose(params: Any?) async {
-        guard let dict = params as? [String: Any],
-              let textDocument = dict["textDocument"] as? [String: Any],
-              let uri = textDocument["uri"] as? String else {
-            return
-        }
-
-        log("Document closed: \(uri)")
-        documentManager.close(uri: uri)
-        // Clear diagnostics
-        publishDiagnostics(for: uri, diagnostics: [])
-    }
-
-    private func handleDidSave(params: Any?) async {
-        // Re-publish diagnostics on save
-        guard let dict = params as? [String: Any],
-              let textDocument = dict["textDocument"] as? [String: Any],
-              let uri = textDocument["uri"] as? String else {
-            return
-        }
-
-        log("Document saved: \(uri)")
-
-        // A save is when an `Action` header reaches disk, so the workspace's
-        // declarations may have changed (GitLab #589).
-        workspaceState.invalidateDeclaredActions()
-
-        // Recompile *every* open document, not just this one. The squiggle
-        // that needs clearing is on the file that *calls*
-        // `Application.<Name>`, and that file was compiled against the old
-        // registry — so publishing only this document's diagnostics would
-        // leave the caller marked red until someone thought to edit it.
-        // Open documents are few; the registry rescan behind this is
-        // parse-only and cached.
-        for (openUri, state) in documentManager.all() {
-            if let recompiled = documentManager.update(
-                uri: openUri, content: state.content, version: state.version
-            ) {
-                publishDiagnostics(for: openUri, state: recompiled)
-            } else {
-                publishDiagnostics(for: openUri, state: state)
-            }
-        }
-    }
-
-    // MARK: - LSP Features
-
-    private func handleHover(params: Any?) async -> [String: Any]? {
-        guard let dict = params as? [String: Any],
-              let textDocument = dict["textDocument"] as? [String: Any],
-              let uri = textDocument["uri"] as? String,
-              let position = dict["position"] as? [String: Any],
-              let line = position["line"] as? Int,
-              let character = position["character"] as? Int else {
-            return nil
-        }
-
-        guard let state = documentManager.get(uri: uri) else {
-            return nil
-        }
-
-        let lspPosition = Position(line: line, character: character)
-        return hoverHandler.handle(
-            position: lspPosition,
-            content: state.content,
-            compilationResult: state.compilationResult
-        )
-    }
-
-    private func handleDefinition(params: Any?) async -> [String: Any]? {
-        guard let dict = params as? [String: Any],
-              let textDocument = dict["textDocument"] as? [String: Any],
-              let uri = textDocument["uri"] as? String,
-              let position = dict["position"] as? [String: Any],
-              let line = position["line"] as? Int,
-              let character = position["character"] as? Int else {
-            return nil
-        }
-
-        guard let state = documentManager.get(uri: uri) else {
-            return nil
-        }
-
-        let lspPosition = Position(line: line, character: character)
-        return definitionHandler.handle(
-            uri: uri,
-            position: lspPosition,
-            content: state.content,
-            compilationResult: state.compilationResult
-        )
-    }
-
-    private func handleCompletion(params: Any?) async -> [String: Any]? {
-        guard let dict = params as? [String: Any],
-              let textDocument = dict["textDocument"] as? [String: Any],
-              let uri = textDocument["uri"] as? String,
-              let position = dict["position"] as? [String: Any],
-              let line = position["line"] as? Int,
-              let character = position["character"] as? Int else {
-            return nil
-        }
-
-        guard let state = documentManager.get(uri: uri) else {
-            return nil
-        }
-
-        let context = dict["context"] as? [String: Any]
-        let triggerCharacter = context?["triggerCharacter"] as? String
-
-        let lspPosition = Position(line: line, character: character)
-        return completionHandler.handle(
-            position: lspPosition,
-            content: state.content,
-            compilationResult: state.compilationResult,
-            triggerCharacter: triggerCharacter
-        )
-    }
-
-    private func handleReferences(params: Any?) async -> [[String: Any]]? {
-        guard let dict = params as? [String: Any],
-              let textDocument = dict["textDocument"] as? [String: Any],
-              let uri = textDocument["uri"] as? String,
-              let position = dict["position"] as? [String: Any],
-              let line = position["line"] as? Int,
-              let character = position["character"] as? Int else {
-            return nil
-        }
-
-        guard let state = documentManager.get(uri: uri) else {
-            return nil
-        }
-
-        let lspPosition = Position(line: line, character: character)
-        return referencesHandler.handle(
-            uri: uri,
-            position: lspPosition,
-            content: state.content,
-            compilationResult: state.compilationResult
-        )
-    }
-
-    private func handleDocumentSymbol(params: Any?) async -> [[String: Any]]? {
-        guard let dict = params as? [String: Any],
-              let textDocument = dict["textDocument"] as? [String: Any],
-              let uri = textDocument["uri"] as? String else {
-            return nil
-        }
-
-        guard let state = documentManager.get(uri: uri) else {
-            return nil
-        }
-
-        return documentSymbolHandler.handle(content: state.content, compilationResult: state.compilationResult)
-    }
-
-    private func handleWorkspaceSymbol(params: Any?) async -> [[String: Any]]? {
-        guard let dict = params as? [String: Any],
-              let query = dict["query"] as? String else {
-            return nil
-        }
-
-        let allDocuments = documentManager.all()
-        return workspaceSymbolHandler.handle(query: query, documents: allDocuments)
-    }
-
-    private func handleFormatting(params: Any?) async -> [[String: Any]]? {
-        guard let dict = params as? [String: Any],
-              let textDocument = dict["textDocument"] as? [String: Any],
-              let uri = textDocument["uri"] as? String,
-              let options = dict["options"] as? [String: Any] else {
-            return nil
-        }
-
-        guard let state = documentManager.get(uri: uri) else {
-            return nil
-        }
-
-        let tabSize = options["tabSize"] as? Int ?? 4
-        let insertSpaces = options["insertSpaces"] as? Bool ?? true
-
-        return formattingHandler.handle(
-            content: state.content,
-            options: FormattingOptions(tabSize: tabSize, insertSpaces: insertSpaces)
-        )
-    }
-
-    private func handlePrepareRename(params: Any?) async -> [String: Any]? {
-        guard let dict = params as? [String: Any],
-              let textDocument = dict["textDocument"] as? [String: Any],
-              let uri = textDocument["uri"] as? String,
-              let position = dict["position"] as? [String: Any],
-              let line = position["line"] as? Int,
-              let character = position["character"] as? Int else {
-            return nil
-        }
-
-        guard let state = documentManager.get(uri: uri) else {
-            return nil
-        }
-
-        let lspPosition = Position(line: line, character: character)
-        return renameHandler.prepareRename(
-            uri: uri,
-            position: lspPosition,
-            content: state.content,
-            compilationResult: state.compilationResult
-        )
-    }
-
-    private func handleRename(params: Any?) async -> [String: Any]? {
-        guard let dict = params as? [String: Any],
-              let textDocument = dict["textDocument"] as? [String: Any],
-              let uri = textDocument["uri"] as? String,
-              let position = dict["position"] as? [String: Any],
-              let line = position["line"] as? Int,
-              let character = position["character"] as? Int,
-              let newName = dict["newName"] as? String else {
-            return nil
-        }
-
-        guard let state = documentManager.get(uri: uri) else {
-            return nil
-        }
-
-        let lspPosition = Position(line: line, character: character)
-        return renameHandler.handle(
-            uri: uri,
-            position: lspPosition,
-            newName: newName,
-            content: state.content,
-            compilationResult: state.compilationResult
-        )
-    }
-
-    private func handleFoldingRange(params: Any?) async -> [[String: Any]]? {
-        guard let dict = params as? [String: Any],
-              let textDocument = dict["textDocument"] as? [String: Any],
-              let uri = textDocument["uri"] as? String else {
-            return nil
-        }
-
-        guard let state = documentManager.get(uri: uri) else {
-            return nil
-        }
-
-        return foldingRangeHandler.handle(compilationResult: state.compilationResult)
-    }
-
-    private func handleSemanticTokens(params: Any?) async -> [String: Any]? {
-        guard let dict = params as? [String: Any],
-              let textDocument = dict["textDocument"] as? [String: Any],
-              let uri = textDocument["uri"] as? String else {
-            return nil
-        }
-
-        guard let state = documentManager.get(uri: uri) else {
-            return nil
-        }
-
-        return semanticTokensHandler.handle(
-            content: state.content,
-            compilationResult: state.compilationResult
-        )
-    }
-
-    private func handleSignatureHelp(params: Any?) async -> [String: Any]? {
-        guard let dict = params as? [String: Any],
-              let textDocument = dict["textDocument"] as? [String: Any],
-              let uri = textDocument["uri"] as? String,
-              let position = dict["position"] as? [String: Any],
-              let line = position["line"] as? Int,
-              let character = position["character"] as? Int else {
-            return nil
-        }
-
-        guard let state = documentManager.get(uri: uri) else {
-            return nil
-        }
-
-        let lspPosition = Position(line: line, character: character)
-        return signatureHelpHandler.handle(
-            position: lspPosition,
-            content: state.content,
-            compilationResult: state.compilationResult
-        )
-    }
-
-    private func handleCodeAction(params: Any?) async -> [[String: Any]]? {
-        guard let dict = params as? [String: Any],
-              let textDocument = dict["textDocument"] as? [String: Any],
-              let uri = textDocument["uri"] as? String,
-              let range = dict["range"] as? [String: Any],
-              let start = range["start"] as? [String: Any],
-              let end = range["end"] as? [String: Any],
-              let startLine = start["line"] as? Int,
-              let startChar = start["character"] as? Int,
-              let endLine = end["line"] as? Int,
-              let endChar = end["character"] as? Int else {
-            return nil
-        }
-
-        guard let state = documentManager.get(uri: uri) else {
-            return nil
-        }
-
-        let context = dict["context"] as? [String: Any]
-        let diagnostics = context?["diagnostics"] as? [[String: Any]] ?? []
-
-        let startPos = Position(line: startLine, character: startChar)
-        let endPos = Position(line: endLine, character: endChar)
-
-        return codeActionHandler.handle(
-            uri: uri,
-            range: (start: startPos, end: endPos),
-            diagnostics: diagnostics,
-            content: state.content,
-            compilationResult: state.compilationResult
-        )
-    }
-
-    private func handleInlayHint(params: Any?) async -> [[String: Any]]? {
-        guard let dict = params as? [String: Any],
-              let textDocument = dict["textDocument"] as? [String: Any],
-              let uri = textDocument["uri"] as? String,
-              let range = dict["range"] as? [String: Any],
-              let start = range["start"] as? [String: Any],
-              let end = range["end"] as? [String: Any],
-              let startLine = start["line"] as? Int,
-              let endLine = end["line"] as? Int else {
-            return nil
-        }
-
-        guard let state = documentManager.get(uri: uri) else {
-            return nil
-        }
-
-        return inlayHintHandler.handle(
-            compilationResult: state.compilationResult,
-            startLine: startLine,
-            endLine: endLine,
-            bodyLimits: bodyLimits(for: uri)
-        )
-    }
-
     /// The contract's per-route body limits, for the request-body inlay hint
     /// (GitLab #477). Read from the contract nearest the file being edited,
     /// falling back to the workspace roots.
     private func bodyLimits(for uri: String) -> RouteBodyLimits {
-        RouteBodyLimits.load(near: uriToURL(uri), roots: workspaceState.allRoots)
+        workspaceState.currentBodyLimits(near: uriToURL(uri))
     }
 
     // MARK: - Diagnostics Publishing
@@ -1504,12 +1033,54 @@ public final class AROLanguageServer: Sendable {
         ]
 
         if let data = try? JSONSerialization.data(withJSONObject: notification) {
-            let header = "Content-Length: \(data.count)\r\n\r\n"
-            if let headerData = header.data(using: .utf8) {
-                let output = FileHandle.standardOutput
-                output.write(headerData)
-                output.write(data)
+            DiagnosticsSink.shared.send(data)
+        }
+    }
+
+    /// Where a `publishDiagnostics` notification goes.
+    ///
+    /// Stdout in production: the client is on the other end of the pipe the
+    /// transport reads from, and a notification is framed exactly like a
+    /// response. The indirection exists so a test can observe what the
+    /// client would have been sent (GitLab #736) — whether a document
+    /// notification publishes at all is precisely what diverged between the
+    /// two transports, and reading it back off fd 1 would mean redirecting
+    /// stdout out from under whatever else the suite is running in
+    /// parallel.
+    ///
+    /// Locked rather than `nonisolated(unsafe)` for the reason every other
+    /// shared box in this target is: diagnostics are published from the read
+    /// loop *and* from the document manager's debounced-compile task
+    /// (#352), which are different threads.
+    final class DiagnosticsSink: @unchecked Sendable {
+        static let shared = DiagnosticsSink()
+
+        private let lock = NSLock()
+        private var captured: [Data]?
+
+        func send(_ data: Data) {
+            lock.lock()
+            if captured != nil {
+                captured?.append(data)
+                lock.unlock()
+                return
             }
+            lock.unlock()
+
+            let header = "Content-Length: \(data.count)\r\n\r\n"
+            guard let headerData = header.data(using: .utf8) else { return }
+            let output = FileHandle.standardOutput
+            output.write(headerData)
+            output.write(data)
+        }
+
+        /// Run `body` with publishing diverted, and return the notification
+        /// payloads it produced instead of writing them to stdout.
+        func capturing(_ body: () -> Void) -> [Data] {
+            lock.lock(); captured = []; lock.unlock()
+            body()
+            lock.lock(); defer { captured = nil; lock.unlock() }
+            return captured ?? []
         }
     }
 

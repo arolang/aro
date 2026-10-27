@@ -32,14 +32,17 @@ public struct ReturnAction: SynchronousAction {
         let statusName = result.base
         let reason = object.base
 
-        // Gather any data to include in response
-        var data: [String: AnySendable] = [:]
-
-        // The same payload without the lossy flattening. `data` is what HTTP
-        // and the CLI render; `structured` is what an in-process caller — a
-        // user-defined action's call site above all — binds, so a returned
-        // list arrives as a list rather than as its JSON text (GitLab #504).
-        var structured: [String: any Sendable] = [:]
+        // The payload, in the shape the program produced it.
+        //
+        // This used to be built twice: once here, flattened for transport
+        // (nested records spread into dot-notation keys, collections replaced
+        // by their JSON text), and once as a structured copy for in-process
+        // callers (GitLab #504). Every response paid for the flattening, and
+        // the HTTP renderer then parsed the collections it had just serialised
+        // back out again (GitLab #711). The payload is recorded once;
+        // `Response.data` renders the flat form for the boundaries that still
+        // want it.
+        var payload: [String: any Sendable] = [:]
 
         // Check for expression from "with" clause (e.g., with { user: <user>, ... } or with <variable>)
         // Note: When with clause contains variable references, it's parsed as expression
@@ -47,21 +50,12 @@ public struct ReturnAction: SynchronousAction {
             if let dict = expr as? [String: any Sendable] {
                 // Map literal: { key: value, ... } - preserve nested structure
                 for (key, value) in dict {
-                    flattenValue(value, into: &data, prefix: key, context: context)
-                    structured[key] = value
+                    payload[key] = value
                 }
             } else if let array = expr as? [any Sendable] {
-                // Array value - serialize to JSON
-                let jsonArray = array.map { convertSendableToJSON($0) }
-                if let jsonData = try? JSONSerialization.data(withJSONObject: jsonArray),
-                   let jsonString = String(data: jsonData, encoding: .utf8) {
-                    data["data"] = AnySendable(jsonString)
-                } else {
-                    // Fallback: array could not be serialized to JSON (non-serializable elements)
-                    FileHandle.standardError.write(Data("[ReturnAction] Warning: array serialization failed, returning empty array\n".utf8))
-                    data["data"] = AnySendable("[]")
-                }
-                structured["data"] = array
+                // A returned collection is carried as a collection. It used to
+                // become JSON text here, under the key the flat form gives it.
+                payload["data"] = array
             } else if let str = expr as? String {
                 // A string is a string (GitLab #637).
                 //
@@ -76,29 +70,23 @@ public struct ReturnAction: SynchronousAction {
                 //
                 // A program that means to return structured data has ways to
                 // say so: an object literal, or `Parse` the string first.
-                data["value"] = AnySendable(str)
-                structured["value"] = str
+                payload["value"] = str
             } else if let body = expr as? RequestBodyValue {  // live body: streams back out
                 // Returning an unread request body writes it straight back to
                 // the client, chunk by chunk (GitLab #477). Carried through the
                 // response as itself; `Application.convertToHTTPResponse` turns
                 // it into a chunked body without ever holding the whole.
-                data["value"] = AnySendable(body)
-                structured["value"] = body
+                payload["value"] = body
             } else if let anchored = expr as? AnchoredBody {
                 // Same for a body that has been anchored: the response is
                 // written from the file rather than from memory.
-                data["value"] = AnySendable(anchored)
-                structured["value"] = anchored
+                payload["value"] = anchored
             } else if let int = expr as? Int {
-                data["value"] = AnySendable(int)
-                structured["value"] = int
+                payload["value"] = int
             } else if let double = expr as? Double {
-                data["value"] = AnySendable(double)
-                structured["value"] = double
+                payload["value"] = double
             } else if let bool = expr as? Bool {
-                data["value"] = AnySendable(bool)
-                structured["value"] = bool
+                payload["value"] = bool
             }
         }
 
@@ -106,8 +94,7 @@ public struct ReturnAction: SynchronousAction {
         if let literal = context.resolveAny("_literal_") {
             if let dict = literal as? [String: any Sendable] {
                 for (key, value) in dict {
-                    flattenValue(value, into: &data, prefix: key, context: context)
-                    structured[key] = value
+                    payload[key] = value
                 }
             }
         }
@@ -120,18 +107,15 @@ public struct ReturnAction: SynchronousAction {
            let metricsSnapshot = context.resolveAny("metrics") as? MetricsSnapshot {
             let format = object.specifiers.first ?? "plain"
             let formatted = MetricsFormatter.format(metricsSnapshot, as: format, context: context.outputContext)
-            data["value"] = AnySendable(formatted)
-            structured["value"] = formatted
+            payload["value"] = formatted
         } else if !internalNames.contains(object.base), let value = context.resolveAny(object.base) {
-            flattenValue(value, into: &data, prefix: object.base, context: context)
-            structured[object.base] = value
+            payload[object.base] = value
         }
 
         // Include object specifiers as data references (skip internal names)
         for specifier in object.specifiers where !internalNames.contains(specifier) {
             if let value = context.resolveAny(specifier) {
-                flattenValue(value, into: &data, prefix: specifier, context: context)
-                structured[specifier] = value
+                payload[specifier] = value
             }
         }
 
@@ -156,91 +140,10 @@ public struct ReturnAction: SynchronousAction {
         let response = Response(
             status: statusName,
             reason: reason,
-            data: data,
-            structuredData: structured
+            payload: payload
         )
 
         context.setResponse(response)
         return response
-    }
-
-    /// Flatten a value into the data dictionary using dot notation for nested objects
-    private func flattenValue(
-        _ value: any Sendable,
-        into data: inout [String: AnySendable],
-        prefix: String,
-        context: ExecutionContext
-    ) {
-        switch value {
-        case let str as String:
-            data[prefix] = AnySendable(str)
-        case let int as Int:
-            data[prefix] = AnySendable(int)
-        case let double as Double:
-            data[prefix] = AnySendable(double)
-        case let bool as Bool:
-            data[prefix] = AnySendable(bool)
-        case let dict as [String: any Sendable]:
-            // Recursively flatten nested dictionaries with dot notation
-            for (key, nestedValue) in dict {
-                let nestedPrefix = "\(prefix).\(key)"
-                flattenValue(nestedValue, into: &data, prefix: nestedPrefix, context: context)
-            }
-        case let array as [any Sendable]:
-            // Arrays are serialized as JSON strings
-            let jsonArray = array.map { convertSendableToJSON($0) }
-            if let jsonData = try? JSONSerialization.data(withJSONObject: jsonArray),
-               let jsonString = String(data: jsonData, encoding: .utf8) {
-                data[prefix] = AnySendable(jsonString)
-            } else {
-                // Fallback: array could not be serialized to JSON (non-serializable elements)
-                FileHandle.standardError.write(Data("[ReturnAction] Warning: array serialization failed for '\(prefix)', returning empty array\n".utf8))
-                data[prefix] = AnySendable("[]")
-            }
-        default:
-            data[prefix] = AnySendable(String(describing: value))
-        }
-    }
-
-    /// Convert a Sendable value to a JSON-compatible type
-    private func convertSendableToJSON(_ value: any Sendable) -> Any {
-        SendableConverter.toJSON(value)
-    }
-
-    /// Add a value from JSON parsing (Any type) into the data dictionary
-    /// Nested structures are serialized as JSON strings since AnySendable requires Equatable
-    private func addAnyValue(_ value: Any, into data: inout [String: AnySendable], key: String) {
-        switch value {
-        case let str as String:
-            data[key] = AnySendable(str)
-        case let int as Int:
-            data[key] = AnySendable(int)
-        case let double as Double:
-            data[key] = AnySendable(double)
-        case let bool as Bool:
-            data[key] = AnySendable(bool)
-        case let dict as [String: Any]:
-            // Nested dict - serialize as JSON string (will be parsed back for HTTP response)
-            if let jsonData = try? JSONSerialization.data(withJSONObject: dict),
-               let jsonString = String(data: jsonData, encoding: .utf8) {
-                data[key] = AnySendable(jsonString)
-            } else {
-                // Fallback: dict contains non-serializable values, use string description
-                FileHandle.standardError.write(Data("[ReturnAction] Warning: dict serialization failed for '\(key)', using String(describing:)\n".utf8))
-                data[key] = AnySendable(String(describing: dict))
-            }
-        case let array as [Any]:
-            // Array - serialize as JSON string
-            if let jsonData = try? JSONSerialization.data(withJSONObject: array),
-               let jsonString = String(data: jsonData, encoding: .utf8) {
-                data[key] = AnySendable(jsonString)
-            } else {
-                // Fallback: array contains non-serializable values, use string description
-                FileHandle.standardError.write(Data("[ReturnAction] Warning: array serialization failed for '\(key)', using String(describing:)\n".utf8))
-                data[key] = AnySendable(String(describing: array))
-            }
-        default:
-            data[key] = AnySendable(String(describing: value))
-        }
     }
 }

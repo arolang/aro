@@ -107,7 +107,9 @@ Be cautious of circular chains where A triggers B triggers A. This creates an in
 ## 13.8 Error Handling in Events
 
 Error handling for events differs from synchronous execution. When a handler fails, the error is logged with full context, but the failure does not propagate to the emitter or to other handlers. Each handler succeeds or fails independently.
-The emitting feature set waits for every matching handler to finish before continuing past the `Emit` statement, but it does not see whether they succeeded. The wait keeps causality intact—the next statement after `Emit` can rely on side effects the handlers performed (state mutation, repository writes, log lines)—while still isolating each handler's outcome from the others. This is intentional: it prevents cascading failures and keeps the emitter's behaviour predictable.
+The emitting feature set does not wait: `Emit` hands the event to the bus and the next statement runs while the handlers do. An emitter that blocked would take on the latency of every handler anyone adds later, which is the opposite of what an event is for.
+
+When the next statement must rely on what the handlers did — a state mutation, a repository write — use `Deliver`, which is the same statement awaited. It still does not report whether they succeeded: each handler's outcome stays isolated from the others and from the emitter, which prevents cascading failures and keeps both verbs' behaviour predictable.
 For scenarios where handler success is critical, you need different patterns. You might use synchronous validation before emitting the event, checking conditions that would cause handler failure. You might use compensating events where failure handlers emit events that trigger recovery. You might move critical operations into the emitting feature set itself rather than relying on handlers.
 The runtime logs all handler failures. You can configure alerts based on these logs to notify operators when handlers are failing. The logs include the event type, handler name, error message, and full context, providing the information needed to diagnose and fix issues.
 ---
@@ -368,7 +370,8 @@ The effectful actions are:
 | `Log` | writes to stdout, stderr, or a template buffer |
 | `Return` / `Throw` | materializes the response and propagates control flow |
 | `Publish` | exports a concrete value into the global symbol registry |
-| `Emit` | delivers the event and waits for handlers |
+| `Emit` | delivers the event and continues |
+| `Deliver` | delivers the event and waits for every handler |
 | `Compare` / `Validate` / `Accept` | feeds an `if` / `when` / state-machine branch |
 
 These verbs run synchronously at their statement position. Any upstream futures are forced before the verb runs, and the verb's own result is bound eagerly so the next statement never sees a deferred handle. So `Log "starting"`, then a slow `Retrieve`, then `Log "done"` always prints "starting" before "done"—even though the `Retrieve` would otherwise be deferred—because each `Log` forces its inputs before writing.

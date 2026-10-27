@@ -124,6 +124,10 @@ struct NodeCounterVisitor: ASTVisitor {
         1 + (try node.operand.accept(self))
     }
 
+    func visit(_ node: RangeExpression) throws -> Int {
+        1 + (try node.lower.accept(self)) + (try node.upper.accept(self))
+    }
+
     func visit(_ node: MemberAccessExpression) throws -> Int {
         1 + (try node.base.accept(self))
     }
@@ -285,6 +289,10 @@ struct VariableCollectorVisitor: ASTVisitor {
 
     func visit(_ node: UnaryExpression) throws -> Set<String> {
         try node.operand.accept(self)
+    }
+
+    func visit(_ node: RangeExpression) throws -> Set<String> {
+        try node.lower.accept(self).union(try node.upper.accept(self))
     }
 
     func visit(_ node: MemberAccessExpression) throws -> Set<String> {

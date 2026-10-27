@@ -282,8 +282,30 @@
                     <td>All unique elements from both</td>
                     <td><code>Compute the &lt;result: union&gt; from &lt;a&gt; with &lt;b&gt;.</code></td>
                 </tr>
+                <tr>
+                    <td><code>symmetric-difference</code></td>
+                    <td>Elements in exactly one of the two</td>
+                    <td><code>Compute the &lt;changed: symmetric-difference&gt; from &lt;before&gt; with &lt;after&gt;.</code></td>
+                </tr>
+                <tr>
+                    <td><code>subset of</code></td>
+                    <td>Is every element of A also in B? An <strong>operator</strong>, not a qualifier</td>
+                    <td><code>&hellip; when &lt;required&gt; subset of &lt;held&gt;.</code></td>
+                </tr>
             </tbody>
         </table>
+
+        <h3><code>subset of</code> is an operator</h3>
+        <p>
+            It answers a question rather than producing a collection, so it sits with
+            <code>in</code>, <code>contains</code> and <code>matches</code> rather than with the
+            qualifiers above &mdash; there is no <code>&lt;result: subset&gt;</code> to bind:
+        </p>
+        <pre><code><span class="code-keyword">Return</span> an <span class="code-result">&lt;OK: status&gt;</span> for the <span class="code-result">&lt;request&gt;</span> when &lt;required-roles&gt; subset of &lt;user-roles&gt;.</code></pre>
+        <p>
+            Set semantics apply: a duplicate on the left does not make a new member, and the
+            empty set is a subset of everything.
+        </p>
 
         <h2>List Operations</h2>
         <p>

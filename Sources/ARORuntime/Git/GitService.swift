@@ -319,8 +319,71 @@ public final class GitService: @unchecked Sendable {
                     timestamp: ISO8601DateFormatter().string(from: Date(timeIntervalSince1970: TimeInterval(time)))
                 ))
             }
+
+            // A revwalk that yielded nothing is not the same as a repository
+            // with no commits. libgit2 1.1 — what the Linux CI image ships —
+            // has no shallow support: on a `--depth` clone `push_head`
+            // succeeds and then the *first* `git_revwalk_next` returns
+            // ENOTFOUND, because preparing the walk resolves parents and one
+            // of them is past the graft. The caller sees an empty log for a
+            // checkout that plainly has history, and a notebook reading
+            // `<log: first>` then fails on a line that is correct
+            // (GitLab #810).
+            //
+            // So walk it by hand instead: HEAD, then first parents, stopping
+            // where the object store does. That is a first-parent view rather
+            // than the revwalk's time-ordered one — merge-side commits are not
+            // in it — which is why it is a fallback and not the main path. It
+            // is also the honest answer for a shallow clone, where the
+            // commits it cannot show are the ones that were never fetched.
+            if entries.isEmpty {
+                entries = Self.firstParentLog(repo: repo, limit: limit)
+            }
+
             return entries
         }
+    }
+
+    /// HEAD and its first parents, as far as the object store goes.
+    ///
+    /// Used when the revwalk comes back empty — see `log`. Every lookup that
+    /// fails ends the walk rather than failing it: a missing parent is the
+    /// boundary of a shallow clone, not an error.
+    private static func firstParentLog(repo: OpaquePointer, limit: Int) -> [GitLogEntry] {
+        var headOID = git_oid()
+        guard git_reference_name_to_id(&headOID, repo, "HEAD") == 0 else { return [] }
+
+        var entries: [GitLogEntry] = []
+        var current: OpaquePointer?
+        guard git_commit_lookup(&current, repo, &headOID) == 0 else { return [] }
+
+        while let commit = current, entries.count < limit {
+            var oid = git_commit_id(commit)?.pointee ?? git_oid()
+            var hashBuf = [CChar](repeating: 0, count: 41)
+            git_oid_tostr(&hashBuf, 41, &oid)
+            let hash = hashBuf.withUnsafeBufferPointer { String(cString: $0.baseAddress!) }
+            let msg = git_commit_message(commit).map { String(cString: $0) } ?? ""
+            let authorSig = git_commit_author(commit)
+            let authorName = authorSig?.pointee.name.map { String(cString: $0) } ?? "unknown"
+            let authorEmail = authorSig?.pointee.email.map { String(cString: $0) } ?? ""
+            let time = git_commit_time(commit)
+
+            entries.append(GitLogEntry(
+                hash: hash,
+                short: String(hash.prefix(7)),
+                message: msg.trimmingCharacters(in: .whitespacesAndNewlines),
+                author: authorName,
+                email: authorEmail,
+                timestamp: ISO8601DateFormatter().string(from: Date(timeIntervalSince1970: TimeInterval(time)))
+            ))
+
+            var parent: OpaquePointer?
+            let rc = git_commit_parent(&parent, commit, 0)
+            git_commit_free(commit)
+            current = rc == 0 ? parent : nil
+        }
+        if let commit = current { git_commit_free(commit) }
+        return entries
     }
 
     // MARK: - Branch

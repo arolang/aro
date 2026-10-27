@@ -202,11 +202,73 @@ struct DiffCommand: ParsableCommand {
             return try workingTreeSources(root: root)
         }
         let listing = try git(["ls-tree", "-r", "--name-only", revision], in: root)
+        let files = listing.split(whereSeparator: \.isNewline)
+            .map(String.init)
+            .filter { $0.hasSuffix(".aro") }
+        guard !files.isEmpty else { return [:] }
+        return try blobs(of: files, at: revision, root: root)
+    }
+
+    /// The contents of many blobs at one revision, read through a
+    /// single `git` process.
+    ///
+    /// This used to be `git show <rev>:<path>` in a loop, which is one
+    /// fork per file per side — 800 processes for a repository with 400
+    /// `.aro` files, a second or two of pure fork overhead before any
+    /// parsing started (GitLab #718). `cat-file --batch` answers the
+    /// same question for every path over one pipe.
+    static func blobs(of paths: [String], at revision: String, root: URL) throws -> [String: String] {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+        process.arguments = ["git", "cat-file", "--batch"]
+        process.currentDirectoryURL = root
+        let input = Pipe()
+        let out = Pipe()
+        let err = Pipe()
+        process.standardInput = input
+        process.standardOutput = out
+        process.standardError = err
+        try process.run()
+
+        // The requests go out on another thread. A few hundred paths
+        // exceed a pipe buffer, and git starts answering immediately, so
+        // writing the whole batch before reading anything deadlocks both
+        // ends against each other.
+        let requests = Data(paths.map { "\(revision):\($0)\n" }.joined().utf8)
+        DispatchQueue.global().async {
+            input.fileHandleForWriting.write(requests)
+            try? input.fileHandleForWriting.close()
+        }
+
+        let data = out.fileHandleForReading.readDataToEndOfFile()
+        let errorData = err.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+        guard process.terminationStatus == 0 else {
+            let message = String(data: errorData, encoding: .utf8) ?? ""
+            throw ValidationError(
+                "git cat-file --batch failed: "
+                + message.trimmingCharacters(in: .whitespacesAndNewlines))
+        }
+
+        // One record per request, in request order:
+        //     <oid> SP <type> SP <size> LF <contents> LF
+        // A path git cannot resolve answers `<name> SP missing LF` with no
+        // contents, so the short header has to be recognised rather than
+        // skipped by byte count — otherwise every later file reads the
+        // wrong bytes.
         var sources: [String: String] = [:]
-        for path in listing.split(whereSeparator: \.isNewline) {
-            guard path.hasSuffix(".aro") else { continue }
-            let file = String(path)
-            sources[file] = try git(["show", "\(revision):\(file)"], in: root)
+        var cursor = data.startIndex
+        for path in paths {
+            guard let newline = data[cursor...].firstIndex(of: UInt8(ascii: "\n")) else { break }
+            let header = String(decoding: data[cursor..<newline], as: UTF8.self)
+            cursor = data.index(after: newline)
+            let fields = header.split(separator: " ")
+            guard fields.count == 3, let size = Int(fields[2]),
+                  data.index(cursor, offsetBy: size, limitedBy: data.endIndex) != nil
+            else { continue }
+            let end = data.index(cursor, offsetBy: size)
+            sources[path] = String(decoding: data[cursor..<end], as: UTF8.self)
+            cursor = min(data.index(after: end), data.endIndex)
         }
         return sources
     }

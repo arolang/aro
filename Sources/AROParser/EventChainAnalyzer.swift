@@ -172,66 +172,25 @@ public final class EventChainAnalyzer: Sendable {
     }
 
     /// Finds all event types emitted by the given statements
+    ///
+    /// GitLab #723: `AROStatementWalk` decides where an `Emit` can be
+    /// written. The private visitor this replaces entered `when` blocks,
+    /// match arms and for-each bodies but not while loops, range loops or
+    /// pipelines, so an event emitted there was absent from the chain graph —
+    /// the cycle it closed was not reported, and the handler it fed looked
+    /// unreachable.
+    ///
     /// - Parameter statements: The statements to search
     /// - Returns: Set of event type names that are emitted
     private func findEmittedEvents(in statements: [Statement]) -> Set<String> {
-        let collector = EmittedEventCollector()
-        for statement in statements {
-            statement.accept(collector)
-        }
-        return collector.events
-    }
-
-    /// Collects the event names produced by `Emit` actions, descending into
-    /// match cases/otherwise and for-each bodies. Replaces the old three-way
-    /// `as?`-chain (#434) with `StatementVisitor` dispatch, so a new statement
-    /// node type surfaces as a missing `visit` requirement rather than being
-    /// silently skipped. Statement kinds the chain ignored — including while /
-    /// range loop bodies, which it never traversed — collect nothing here,
-    /// preserving the original behaviour exactly.
-    private final class EmittedEventCollector: StatementVisitor {
-        typealias Result = Void
         var events: Set<String> = []
-
-        func visit(_ node: AROStatement) {
-            if node.action.verb.lowercased() == "emit" {
-                // The event type is in the result's base
-                // (e.g., "UserCreated" from <UserCreated: event>).
-                events.insert(node.result.base)
-            }
+        for statement in AROStatementWalk.flatten(statements)
+        where statement.action.verb.lowercased() == "emit" {
+            // The event type is in the result's base
+            // (e.g., "UserCreated" from <UserCreated: event>).
+            events.insert(statement.result.base)
         }
-
-        func visit(_ node: WhenStatement) {
-            for bodyStatement in node.body { bodyStatement.accept(self) }
-        }
-
-        func visit(_ node: MatchStatement) {
-            for caseClause in node.cases {
-                for bodyStatement in caseClause.body {
-                    bodyStatement.accept(self)
-                }
-            }
-            if let otherwise = node.otherwise {
-                for bodyStatement in otherwise {
-                    bodyStatement.accept(self)
-                }
-            }
-        }
-
-        func visit(_ node: ForEachLoop) {
-            for bodyStatement in node.body {
-                bodyStatement.accept(self)
-            }
-        }
-
-        // Nodes the original chain matched no case for — no emitted events.
-        func visit(_ node: PublishStatement) {}
-        func visit(_ node: RequireStatement) {}
-        func visit(_ node: WhileLoop) {}
-        func visit(_ node: BreakStatement) {}
-        func visit(_ node: RangeLoop) {}
-        func visit(_ node: PipelineStatement) {}
-        func visit(_ node: ErrorStatement) {}
+        return events
     }
 
     // MARK: - Cycle Detection

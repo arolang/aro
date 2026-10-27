@@ -12,13 +12,29 @@ public struct CodeQualityValidator {
 
     private let diagnostics: DiagnosticCollector
 
-    public init(diagnostics: DiagnosticCollector) {
+    /// Whether the application may call plugin actions (GitLab #844).
+    ///
+    /// A plugin action is callable by its bare verb — `Greet`, `ParseCSV` —
+    /// and the names come from `aro_plugin_info()` at load time, not from
+    /// `plugin.yaml`, so nothing short of loading the plugin can enumerate
+    /// them. When an application ships plugins, the verb namespace is
+    /// genuinely open and an unknown verb is unverifiable rather than wrong.
+    private let pluginActionsPossible: Bool
+
+    public init(diagnostics: DiagnosticCollector, pluginActionsPossible: Bool = true) {
         self.diagnostics = diagnostics
+        self.pluginActionsPossible = pluginActionsPossible
     }
 
     /// Checks for code quality issues in a feature set
     public func validate(_ featureSet: FeatureSet) {
         let statements = featureSet.statements
+
+        // GitLab #844: a verb that belongs to no action. Runs before the
+        // preposition check, because `PrepositionCatalog` answers nil for an
+        // unknown verb and that check reads nil as "cannot check" — so an
+        // invented verb slipped past both.
+        validateVerbs(in: statements)
 
         // GitLab #479: prepositions are part of an action's contract, and the
         // constraint is decidable from the AST. Checked over the whole statement
@@ -33,6 +49,11 @@ public struct CodeQualityValidator {
         // GitLab #575: `<params: port> or 8080` is the fallback shape people
         // reach for, and `or` is boolean, so it binds `true`.
         validateLogicalLiterals(in: statements)
+
+        // ARO-0089 §3.1 and §2.2: a range counts integers, and it is not a
+        // comparison operand. Both are decidable from the AST, so `aro check`
+        // reports them without the runtime (GitLab #546).
+        validateRanges(in: statements)
 
         // Check for empty feature set
         if statements.isEmpty {
@@ -73,11 +94,24 @@ public struct CodeQualityValidator {
             }
         }
 
-        // Check for missing Return statement (excluding Application-End handlers)
+        // Check for missing Return statement.
+        //
+        // Two exemptions, and the first one was already meant to be here.
+        // It read `businessActivity.hasPrefix("Application-End")` — but in
+        // `(Application-End: Success)` the *name* is `Application-End` and
+        // the activity is `Success`, so the guard never fired and every
+        // shutdown handler was warned about (GitLab #823).
         let activity = featureSet.businessActivity
-        let isLifecycleHandler = activity.hasPrefix("Application-End")
+        let isLifecycleHandler = featureSet.name.hasPrefix("Application-End")
+            || activity.hasPrefix("Application-End")
 
-        if !isLifecycleHandler && !foundTerminator {
+        // ARO-0015 test feature sets end with `Then`, which *is* their
+        // terminator — §2.3, and every worked example in the proposal ends
+        // that way. Asking them for a Return asks them to stop being tests.
+        let isTestFeatureSet = activity.hasSuffix(" Test") || activity.hasSuffix(" Tests")
+            || activity == "Test" || activity == "Tests"
+
+        if !isLifecycleHandler && !isTestFeatureSet && !foundTerminator {
             let hasAnyReturn = statements.contains { stmt in
                 if let aro = stmt.asAROStatement {
                     let verb = aro.action.verb.lowercased()
@@ -104,6 +138,60 @@ public struct CodeQualityValidator {
             }
         }
     }
+    // MARK: - Verb Validation (GitLab #844)
+
+    /// Reports a statement whose verb names no action.
+    ///
+    /// `aro check` used to accept `Increment the <counter> for the <one>.`
+    /// and exit 0; the program then died at run time with
+    /// `unknownAction("increment")`, and only if that line was reached. A
+    /// green check is the project's claim that a file is valid ARO, and the
+    /// verb namespace is as closed as the qualifier namespace that GitLab
+    /// #486 shut for the same reason.
+    ///
+    /// It matters beyond the one program. `aro check` is the oracle the
+    /// `aro ask` training pipeline grades on, so a model that invented
+    /// `Increment`, `Reserve` or `Generate` scored as correct — and thirteen
+    /// invented verbs had accumulated in the documentation presented as
+    /// built-ins (GitLab #834) because nothing rejected them.
+    ///
+    /// A dotted name is accepted: `Markdown.ToHTML` is a plugin action and
+    /// `Application.DoubleValue` is ARO-0081, and neither is resolvable
+    /// without loading plugins, which the check path deliberately does not
+    /// do. ARO-0081 calls are validated separately against the
+    /// application's own feature sets.
+    private func validateVerbs(in statements: [Statement]) {
+        // An application with plugins has an open verb namespace; see
+        // `pluginActionsPossible`. Saying nothing is the honest answer, and
+        // the alternative — a warning on every plugin call — is the noise
+        // GitLab #823 is about.
+        guard !pluginActionsPossible else { return }
+
+        for aro in collectAROStatements(statements) {
+            let verb = aro.action.verb
+            guard !ActionVerbCatalog.isKnownVerb(verb) else { continue }
+
+            var hints: [String] = []
+            if let closest = ActionVerbCatalog.closestVerb(to: verb) {
+                hints.append("Did you mean '\(closest.prefix(1).uppercased() + closest.dropFirst())'?")
+            } else {
+                // Only when nothing is close. A plain typo does not need to
+                // be told how plugins are namespaced; a verb nobody has ever
+                // heard of is usually someone reaching for one.
+                hints.append(
+                    "A plugin action is namespaced: Handle.\(verb); "
+                    + "an ARO-0081 action is Application.\(verb)")
+            }
+            hints.append("Run `aro actions` for the full set")
+
+            diagnostics.error(
+                "'\(verb)' is not a verb of any action",
+                at: aro.span.start,
+                hints: hints
+            )
+        }
+    }
+
     // MARK: - Preposition Validation (GitLab #479)
 
     /// Reports statements whose preposition the action does not accept.
@@ -376,21 +464,123 @@ public struct CodeQualityValidator {
         }
     }
 
+    /// The shared walk (GitLab #660). This used to be a private copy that
+    /// descended into `match` and `for each` only, so a statement inside a
+    /// `while`, a range loop, a `when { }` block or a pipeline was never
+    /// checked here.
     private func collectAROStatements(_ statements: [Statement]) -> [AROStatement] {
-        var result: [AROStatement] = []
-        for statement in statements {
+        AROStatementWalk.flatten(statements)
+    }
+
+    // MARK: - Ranges (ARO-0089, GitLab #546)
+
+    /// Every expression a range can be written in, including the slots
+    /// `expressionSlots(of:)` leaves out — the `with` / `to` / `against`
+    /// clauses and a loop's own header. A check that only looked at the value
+    /// source would miss `Application.Histogram the <h> with 0..<24.`
+    private func rangeBearingExpressions(in statements: [Statement]) -> [any Expression] {
+        var slots: [any Expression] = []
+        for statement in AROStatementWalk.flattenAll(statements) {
             if let aro = statement as? AROStatement {
-                result.append(aro)
-            } else if let match = statement as? MatchStatement {
-                for matchCase in match.cases {
-                    result.append(contentsOf: collectAROStatements(matchCase.body))
-                }
-                result.append(contentsOf: collectAROStatements(match.otherwise ?? []))
+                slots.append(contentsOf: expressionSlots(of: aro))
+                if let with = aro.withClause { slots.append(with) }
+                if let to = aro.toClause { slots.append(to) }
+                if let against = aro.rangeModifiers.againstClause { slots.append(against) }
+                if let def = aro.queryModifiers.defaultValue { slots.append(def) }
             } else if let loop = statement as? ForEachLoop {
-                result.append(contentsOf: collectAROStatements(loop.body))
+                if let collection = loop.collectionExpression { slots.append(collection) }
+                if let filter = loop.filter { slots.append(filter) }
+            } else if let loop = statement as? RangeLoop {
+                slots.append(loop.from)
+                slots.append(loop.to)
+            } else if let loop = statement as? WhileLoop {
+                slots.append(loop.condition)
+            } else if let when = statement as? WhenStatement {
+                slots.append(when.condition)
             }
         }
-        return result
+        return slots
+    }
+
+    private func validateRanges(in statements: [Statement]) {
+        for expression in rangeBearingExpressions(in: statements) {
+            walkForRangeChecks(expression)
+        }
+    }
+
+    private func walkForRangeChecks(_ expression: any Expression) {
+        switch expression {
+        case let range as RangeExpression:
+            checkRangeEndpoint(range.lower, side: "lower", of: range)
+            checkRangeEndpoint(range.upper, side: "upper", of: range)
+            walkForRangeChecks(range.lower)
+            walkForRangeChecks(range.upper)
+
+        case let binary as BinaryExpression:
+            // §2.2: a range answers "which integers", not "is this true", so
+            // it is not an operand of a comparison or of arithmetic. Parsing
+            // it silently is the surprise this check exists to prevent.
+            for operand in [binary.left, binary.right] where operand is RangeExpression {
+                diagnostics.error(
+                    "A range cannot be an operand of `\(binary.op.rawValue)` — "
+                    + "`\(operand.description)` is a sequence of integers, not a value to compare",
+                    at: operand.span.start,
+                    hints: [
+                        "To test membership, compare the endpoints: "
+                        + "`<n> >= \((operand as? RangeExpression)?.lower.description ?? "lo") and "
+                        + "<n> <= \((operand as? RangeExpression)?.upper.description ?? "hi")`",
+                        "`where <n> in 1->10` is deliberately not part of ARO-0089 (§6)."
+                    ]
+                )
+            }
+            walkForRangeChecks(binary.left)
+            walkForRangeChecks(binary.right)
+
+        case let grouped as GroupedExpression:
+            walkForRangeChecks(grouped.expression)
+        case let unary as UnaryExpression:
+            walkForRangeChecks(unary.operand)
+        case let array as ArrayLiteralExpression:
+            // `[1..10]` itself is reported by the parser, which has the
+            // brackets' span; this descends for a range nested deeper.
+            for element in array.elements where !(element is RangeExpression) {
+                walkForRangeChecks(element)
+            }
+        case let map as MapLiteralExpression:
+            for entry in map.entries { walkForRangeChecks(entry.value) }
+        default:
+            break
+        }
+    }
+
+    /// §3.1: integer endpoints only. A literal of another type is wrong on
+    /// sight; a variable is not decidable here and is left to the runtime.
+    private func checkRangeEndpoint(_ endpoint: any Expression, side: String, of range: RangeExpression) {
+        guard let literal = Self.literalOperand(endpoint) else { return }
+        let offending: String
+        switch literal {
+        case .integer: return
+        case .float(let f):
+            diagnostics.error(
+                "A range endpoint must be an Int, but the \(side) endpoint of "
+                + "`\(range.description)` is a Float",
+                at: endpoint.span.start,
+                hints: ["Round it first — `Compute the <\(side)-bound: fixed> from \(f).`"]
+            )
+            return
+        case .string(let s): offending = "a String (\"\(s)\")"
+        case .boolean(let b): offending = "a Boolean (\(b))"
+        case .null: offending = "nil"
+        case .array: offending = "a List"
+        case .object: offending = "an Object"
+        case .regex: offending = "a regex"
+        }
+        diagnostics.error(
+            "A range endpoint must be an Int, but the \(side) endpoint of "
+            + "`\(range.description)` is \(offending)",
+            at: endpoint.span.start,
+            hints: ["A range counts integers (ARO-0089 §3.1); dates are ARO-0041's `date-range`."]
+        )
     }
 
 }

@@ -44,7 +44,7 @@ When you run the crawler with a URL, here is what happens:
    ├── Reads CRAWL_URL from environment
    ├── Creates output directory
    ├── Emits QueueUrl with starting URL
-   └── Emit blocks until the entire event chain completes
+   └── Emit hands over and continues; shutdown drains the chain
 
 2. QueueUrl Handler (per URL)
    └── Stores { id: hash(url), url, base } in crawled-repository

@@ -8,7 +8,11 @@ set -euo pipefail
 
 MODE="${1:-release}"
 METAL_DIR=".build/checkouts/mlx-swift/Source/Cmlx/mlx-generated/metal"
-BUNDLE_DIR=".build/${MODE}/mlx-swift_Cmlx.bundle"
+# Resource bundles sit beside the binary, so the caller may pass the bin dir
+# it got from `swift build --show-bin-path` — the two build systems do not
+# agree on where that is (issue #898).
+BIN_DIR="${2:-.build/${MODE}}"
+BUNDLE_DIR="${BIN_DIR}/mlx-swift_Cmlx.bundle"
 
 if [ ! -d "$METAL_DIR" ]; then
     echo "Metal sources not found at $METAL_DIR"

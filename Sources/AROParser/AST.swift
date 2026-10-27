@@ -416,6 +416,14 @@ public enum WhereOperator: String, Sendable, Equatable, CustomStringConvertible 
     // same ordering as `<` / `>`, said the way a domain says it.
     case before = "before"
     case after = "after"
+    /// `where <roles> subset of <granted>` (ARO-0042 §3.6, GitLab #864).
+    ///
+    /// `when` has had this since #864; `where` never did, so the operator set
+    /// CLAUDE.md calls shared had diverged for exactly one member — and this
+    /// is the member most useful on the `where` side, since "which records
+    /// have a role set covered by what the caller was granted" is a filter
+    /// rather than a guard (GitLab #894).
+    case subsetOf = "subset of"
 
     public var description: String { rawValue }
 }
@@ -1639,6 +1647,38 @@ public struct BinaryExpression: Expression {
     }
 }
 
+/// A range expression: `1->10`, both ends included.
+///
+/// ARO-0089. A range is a *value*, so it goes wherever an expression goes —
+/// the `for each` collection slot, `Create … with`, a Compute object, an
+/// action argument. It is deliberately **not** a `BinaryExpression`: the
+/// endpoints are not operands of an arithmetic operator (`1->10 = x` is an
+/// error rather than a comparison, §2.2), and the check-time rules in
+/// `CodeQualityValidator` have to recognise a range on sight (GitLab #546).
+///
+/// There is no exclusive-bound variant to carry a flag for: a range says
+/// where it starts and where it ends, both included (§2.1). An exclusive
+/// upper bound is `1->(<n> - 1)`, written out.
+public struct RangeExpression: Expression {
+    public let lower: any Expression
+    public let upper: any Expression
+    public let span: SourceSpan
+
+    public init(lower: any Expression, upper: any Expression, span: SourceSpan) {
+        self.lower = lower
+        self.upper = upper
+        self.span = span
+    }
+
+    public var description: String {
+        "\(lower.description)->\(upper.description)"
+    }
+
+    public func accept<V: ASTVisitor>(_ visitor: V) throws -> V.Result {
+        try visitor.visit(self)
+    }
+}
+
 /// A unary expression: -x, not x
 public struct UnaryExpression: Expression {
     public let op: UnaryOperator
@@ -1937,6 +1977,7 @@ public protocol ExpressionVisitor {
     func visit(_ node: MapLiteralExpression) -> Result
     func visit(_ node: VariableRefExpression) -> Result
     func visit(_ node: BinaryExpression) -> Result
+    func visit(_ node: RangeExpression) -> Result
     func visit(_ node: UnaryExpression) -> Result
     func visit(_ node: MemberAccessExpression) -> Result
     func visit(_ node: SubscriptExpression) -> Result
@@ -1960,6 +2001,9 @@ public extension VariableRefExpression {
     func accept<V: ExpressionVisitor>(_ visitor: V) -> V.Result { visitor.visit(self) }
 }
 public extension BinaryExpression {
+    func accept<V: ExpressionVisitor>(_ visitor: V) -> V.Result { visitor.visit(self) }
+}
+public extension RangeExpression {
     func accept<V: ExpressionVisitor>(_ visitor: V) -> V.Result { visitor.visit(self) }
 }
 public extension UnaryExpression {
@@ -2014,6 +2058,7 @@ public protocol ASTVisitor {
     func visit(_ node: MapLiteralExpression) throws -> Result
     func visit(_ node: VariableRefExpression) throws -> Result
     func visit(_ node: BinaryExpression) throws -> Result
+    func visit(_ node: RangeExpression) throws -> Result
     func visit(_ node: UnaryExpression) throws -> Result
     func visit(_ node: MemberAccessExpression) throws -> Result
     func visit(_ node: SubscriptExpression) throws -> Result
@@ -2107,6 +2152,10 @@ public extension ASTVisitor where Result == Void {
     func visit(_ node: BinaryExpression) throws {
         try node.left.accept(self)
         try node.right.accept(self)
+    }
+    func visit(_ node: RangeExpression) throws {
+        try node.lower.accept(self)
+        try node.upper.accept(self)
     }
     func visit(_ node: UnaryExpression) throws {
         try node.operand.accept(self)

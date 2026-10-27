@@ -1,6 +1,6 @@
 # Test hints for ZipService
 # Package plugin compilation requires Swift compiler at runtime
-# Zip library requires zlib.h which is not available on Windows CI
+# ZIPFoundation needs zlib's headers off Darwin, which Windows CI does not have
 timeout: 300
 # Wipe any archive from a previous run so the test really verifies that THIS
 # run created it (not a stale artifact left in the source tree).

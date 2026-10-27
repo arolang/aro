@@ -85,6 +85,7 @@ struct SettingsView: View {
                 Text("Switches the entire app between light and dark — windows, sidebars, syntax colours.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                ThemePresetPicker()
             } header: {
                 Text("Appearance")
             }
@@ -310,6 +311,13 @@ enum SolaroPrefs: String, CaseIterable {
     /// that nothing could enumerate, although the book tells users to
     /// inspect their settings with `defaults export`.
     case keybindingOverrides = "solaro.keybindings.overrides"
+    /// Which palette is in force (GitLab #269) — a preset id, the
+    /// basename of a file in `~/Library/Application Support/SOLARO/Themes/`,
+    /// or `SolaroThemeStore.builtInID`. Separate from `theme` above,
+    /// which is still only light/dark/system: the two are independent
+    /// axes, and a palette that wants a particular appearance says so
+    /// in its own file rather than by overwriting this one.
+    case themePreset      = "solaro.theme.preset"
 }
 
 /// Which runtime drives the green Play button. The embedded path

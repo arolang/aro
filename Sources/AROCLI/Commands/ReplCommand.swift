@@ -14,6 +14,13 @@ struct ReplCommand: AsyncParsableCommand {
         abstract: "Start the interactive ARO REPL"
     )
 
+    @Argument(help: ArgumentHelp(
+        "Project directory to open the session inside",
+        discussion: """
+            Wires in what `aro run` discovers for that directory — openapi.yaml,             .store seed data, templates/, project plugins and the project's own             feature sets — without executing Application-Start (GitLab #691).
+            """))
+    var project: String?
+
     @Option(name: .shortAndLong, help: "Pre-load definitions from file")
     var load: String?
 
@@ -29,12 +36,24 @@ struct ReplCommand: AsyncParsableCommand {
             return
         }
 
-        let shell = REPLShell()
+        // One session for the whole command. A project is wired into *this*
+        // one and the shell is handed it, because whatever the project
+        // registers has to be there when the first line is typed — building a
+        // throwaway session to load into was the shape of the original bug.
+        let session = REPLSession()
+
+        if let project {
+            let context = await REPLProjectContext.load(
+                directory: project, into: session)
+            print(context.summary)
+            print("")
+        }
+
+        let shell = REPLShell(session: session)
         shell.useColors = !noColor
 
         // Pre-load file if specified
         if let loadPath = load {
-            let session = REPLSession()
             let loadCmd = LoadCommand()
             let result = try await loadCmd.execute(args: [loadPath], session: session)
 
@@ -73,6 +92,14 @@ struct ReplCommand: AsyncParsableCommand {
                 FileHandle.standardError.write(Data(
                     "Warning: failed to load installed REPL plugins: \(error)\n".utf8))
             }
+        }
+
+        if let project {
+            let context = await REPLProjectContext.load(
+                directory: project, into: session)
+            // stderr, not stdout: stdout is the protocol (ARO-0091), and a
+            // notice on it would be a line the client cannot parse.
+            FileHandle.standardError.write(Data((context.summary + "\n").utf8))
         }
 
         if let loadPath = load {

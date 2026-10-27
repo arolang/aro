@@ -65,6 +65,18 @@ public enum SystemObjectCatalog {
         "input",            // user-defined action arguments via `<input: name>`
         "command",          // Exec target: for the <command: "uptime">
 
+        // Framework-injected handler context (GitLab #823). Each of these is
+        // bound by the runtime before a handler runs, so a handler that
+        // reads one is correct code — and every one of them was reported as
+        // an unpublished external dependency.
+        "connection",       // socket / WebSocket peer: <connection: id>
+        "packet",           // socket event payload: <packet: buffer>
+        "body",             // WebSocket message body, pre-bound as parsed JSON
+        "transition",       // ARO-0022 state transition: Accept the <transition: a_to_b>
+        "stdin",            // Listen the <keys> to the <stdin>.
+        "system",           // Retrieve the <stats> from the <system>. (ARO-0008)
+        "now",              // the current instant (ARO-0041)
+
         // Parser-synthesised bases for literal and expression operands
         "_literal_",
         "_expression_"

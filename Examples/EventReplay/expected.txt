@@ -1,7 +1,21 @@
 # Example: EventReplay
 # Type: console
+# Note: the handlers' output is asserted. It used to assert only the banner,
+# and every one of the three handlers was failing — `<event: payload>` looked
+# for a field the emitted payload does not have, because the payload is
+# flattened into the event (GitLab #816). `aro run` exited 0, so CI was green
+# on an application that did nothing.
 ---
 === Event Recording and Replay Test ===
+UserCreated event received:
+name: Alice
+userId: 123
+OrderPlaced event received:
+amount: 100
+orderId: 456
+PaymentProcessed event received:
+paymentId: 789
+status: success
 
 ✓ Events emitted
 ✓ Event recording implemented in EventRecorder.swift

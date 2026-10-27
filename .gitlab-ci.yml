@@ -15,6 +15,21 @@ stages:
 variables:
   SWIFT_VERSION: '6.3.2'
 
+  # The image every integration job runs in, named once so a registry outage
+  # can be worked around without editing this file (GitLab #896).
+  #
+  # When the registry cannot serve it, the job fails in `prepare_executor` —
+  # before a single test runs — and the pipeline is red for a reason that has
+  # nothing to do with the commit. On 2026-10-02 a 502 from `/v2/` blocked the
+  # merge queue for an hour. Retries do not help: the pull policy is
+  # `if-not-present` and then `always`, and neither can reach a registry that
+  # is down.
+  #
+  # So re-run the pipeline with this variable pointing at a mirror, or at a tag
+  # the runner has already pulled, and every job below follows. `registry:probe`
+  # says whether that is the situation you are in.
+  ARO_CI_IMAGE: "$CI_REGISTRY_IMAGE/aro-ci:latest"
+
   # Speak HTTP/1.1 to git remotes, everywhere, including the runner's own
   # checkout.
   #
@@ -60,6 +75,45 @@ default:
   interruptible: true
   tags:
     - adt
+
+# =============================================================================
+# Is the registry up? (GitLab #896)
+# =============================================================================
+# An image that cannot be pulled fails its job in `prepare_executor`: sixteen
+# lines of trace, no test output, and from the pipeline list it looks exactly
+# like a failing test. Telling the two apart meant opening a job and reading
+# the 502, which is why the 2026-10-02 outage cost an hour of merge-queue time
+# before anyone knew what they were looking at.
+#
+# This runs first, on a public image from a different registry, and asks the
+# one question that separates the cases. `401` is the healthy unauthenticated
+# answer to `/v2/`; `200` is a registry that allows anonymous reads. Anything
+# else means no retry of anything below will help.
+#
+# It reports and does not gate — `allow_failure: true`. A registry that
+# recovers mid-pipeline should not leave the run red, and one that stays down
+# fails the jobs that need it anyway, now with a line above them saying why.
+registry:probe:
+  stage: .pre
+  image: curlimages/curl:8.11.1
+  allow_failure: true
+  script:
+    - |
+      code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 "https://$CI_REGISTRY/v2/" || echo 000)"
+      echo "GET https://$CI_REGISTRY/v2/ -> $code"
+      case "$code" in
+        200|401)
+          echo "Registry is healthy — an integration job that fails below is about the code."
+          exit 0 ;;
+      esac
+      echo ""
+      echo "The container registry is not serving manifests."
+      echo "Integration jobs run in $ARO_CI_IMAGE and will fail in"
+      echo "prepare_executor before running anything. That is not this commit."
+      echo ""
+      echo "Wait for the registry and retry, or re-run the pipeline with"
+      echo "ARO_CI_IMAGE set to a mirror or to a tag this runner already has."
+      exit 1
 
 # Resolve SwiftPM dependencies, retrying the fetch.
 #
@@ -341,6 +395,15 @@ train:unit:
   script:
     - pip install --no-cache-dir --quiet pytest PyYAML
     - python3 -m pytest Train/script/tests -q
+    # The held-out benchmark's freeze and its leakage gate, as named steps
+    # rather than only as test cases (GitLab #785). `--verify` checks the
+    # sha256 in MANIFEST.json, the structure of all 301 prompts, and
+    # character-3-gram overlap against every mineable corpus file; `--stub`
+    # proves the pass@k reporting with no model and no `aro`. Both exit
+    # non-zero on failure, so "the benchmark leaked" reads as its own red
+    # step instead of as one assertion inside a 45-test file.
+    - python3 Train/script/held_out_benchmark.py --verify
+    - python3 Train/script/held_out_benchmark.py --stub
     # Train/ is Apple-Silicon-only where it touches mlx, but everything that
     # decides what the pipeline PRODUCES — the shared helpers, the
     # hyper-parameter table, the stall watchdog, the sandbox, the run archive —
@@ -357,6 +420,99 @@ train:unit:
     # than the assertion never running. `|| …` is a condition context, where
     # `set -e` does not fire.
     - rc=0; python3 Train/script/mlx_preflight.py --no-record || rc=$?; test "$rc" -eq 2
+
+# =============================================================================
+# The oracle tests need the thing they are an oracle for (GitLab #900)
+# =============================================================================
+# `train:unit` runs on python:3.12-slim, which has no `aro`. Thirty-eight tests
+# across Train/script/tests are marked `skipif(aro_bin() is None)` — the gates
+# that decide whether a corpus pair is valid, the execution oracle, the pair
+# gate — so in CI they were collected, skipped, and reported as a pass.
+#
+# That is how `test_aro_check_alone_does_not_catch_an_invented_verb` stayed
+# broken on main for a release: the checker closed the gap its premise rested
+# on, and the only machines that ran the test were developers' own.
+#
+# So the tests that need a toolchain get a job that has one, rather than
+# `train:unit` growing a Swift build. Same shape as `doc-examples`: the
+# aro-ci image, build:linux's artifact, ARO_BIN pointing at it. `aro --version`
+# runs first because a missing binary must fail this job rather than skip its
+# way to green — and pytest exits 5 when `-m needs_binary` selects nothing,
+# which fails it too if the marker is ever lost.
+train:oracle:
+  stage: integration
+  image: $CI_REGISTRY_IMAGE/aro-ci:latest
+  rules:
+    - if: $CI_COMMIT_TAG
+    - if: $CI_COMMIT_BRANCH == "main"
+    - if: $CI_COMMIT_BRANCH =~ /^release\/.*/
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+  needs:
+    - job: build:linux
+      artifacts: true
+  variables:
+    ARO_BIN: $CI_PROJECT_DIR/aro-dist/aro
+  script:
+    - chmod +x aro-dist/aro
+    - ./aro-dist/aro --version
+    # Ubuntu 24.04 marks its python environment externally managed (#897); the
+    # bare form is the fallback for an image that predates that.
+    - python3 -m pip install --quiet --break-system-packages pytest PyYAML
+      || python3 -m pip install --quiet pytest PyYAML
+    - python3 -m pytest Train/script/tests -q -m needs_binary -rs
+
+# =============================================================================
+# How much of the Learning course actually reaches the dataset (GitLab #907)
+# =============================================================================
+# `train:oracle` mines a fixed two-notebook subset on every MR, which answers
+# "does the course contribute pairs at all". It deliberately does not answer
+# "how much of the course", because that question costs 29 `aro repl --json`
+# sessions run twice over and depends on notebooks an MR never touched — a
+# per-MR job that goes red because a date notebook drifted is a job people
+# learn to ignore.
+#
+# So the whole course runs here instead: main, tags, release branches and
+# schedules. `--dry-run` because the corpus itself is generated on the training
+# machine, not in CI; the point is the coverage figure and the floor.
+#
+# The floor is 85% of ELIGIBLE cells — cells that are not marked
+# `(* expect-error *)`, which exist in order to fail and are not misses.
+# Measured 91.8%–92.7% over five runs (201–203 of 219 eligible, 228 present),
+# so the floor leaves about fifteen cells of headroom. That is deliberate and
+# not laziness: the twice-and-agree gate is itself stochastic at the margin —
+# a timing-dependent cell can agree twice by luck — so the figure moves by a
+# cell or two between runs, and a floor pinned at the measurement would go red
+# on noise. Fifteen cells is roughly one notebook going dark, which is the
+# event worth a red pipeline.
+#
+# Five of the 228 are already dark: all of `22-git-and-devops.repl` except one,
+# because its cells read `<git: "..">` and the miner's sandboxed working copy
+# has no repository there (GitLab #909). Fixing that would take the figure to
+# roughly 95%; this floor does not assume it will be fixed.
+train:notebook-coverage:
+  stage: integration
+  image: $CI_REGISTRY_IMAGE/aro-ci:latest
+  rules:
+    - if: $CI_COMMIT_TAG
+    - if: $CI_COMMIT_BRANCH == "main"
+    - if: $CI_COMMIT_BRANCH =~ /^release\/.*/
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+  needs:
+    - job: build:linux
+      artifacts: true
+  variables:
+    ARO_BIN: $CI_PROJECT_DIR/aro-dist/aro
+  script:
+    - chmod +x aro-dist/aro
+    - ./aro-dist/aro --version
+    - python3 -m pip install --quiet --break-system-packages pytest PyYAML
+      || python3 -m pip install --quiet pytest PyYAML
+    - python3 Train/script/32_notebook_pairs.py --dry-run --min-coverage 0.85
+  artifacts:
+    when: always
+    expire_in: 1 month
+    paths:
+      - Train/data/32_notebooks/coverage.json
 
 # =============================================================================
 # Fenced ARO blocks in the documentation must parse (GitLab #834)
@@ -384,7 +540,7 @@ train:unit:
 # DEFAULT_ROOTS once #836 has landed.
 doc-examples:
   stage: integration
-  image: $CI_REGISTRY_IMAGE/aro-ci:latest
+  image: $ARO_CI_IMAGE
   rules:
     - if: $CI_COMMIT_TAG
     - if: $CI_COMMIT_BRANCH == "main"
@@ -399,11 +555,51 @@ doc-examples:
 
 
 # =============================================================================
+# The sources the training corpus is mined from must parse (GitLab #810)
+# =============================================================================
+#
+# The REPL-execution, synthetic and fill-in-the-middle stages mine `Examples/`,
+# the Book and the Learning notebooks. Those stages count what they skipped and
+# print what failed, but nothing asserted the sources were green — so drift was
+# only ever visible as a quieter corpus, and commit a2368b0d ("Make the
+# documentation's ARO actually parse") shows the drift is real.
+#
+# `Train/Material` is already covered by `train:corpus`, and the fenced blocks
+# in `Proposals/` and `CLAUDE.md` by `doc-examples`. This job covers the two
+# mined sources that had nothing: every application under `Examples/`, and every
+# code cell of every Learning notebook.
+#
+# It fails the pipeline rather than warning. A source that stopped parsing is a
+# corpus that quietly stopped covering what it claims to cover, and the whole
+# point is that the pipeline consumes only green sources.
+sources:corpus:
+  stage: integration
+  image: $ARO_CI_IMAGE
+  rules:
+    - if: $CI_COMMIT_TAG
+    - if: $CI_COMMIT_BRANCH == "main"
+    - if: $CI_COMMIT_BRANCH =~ /^release\/.*/
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+  needs:
+    - job: build:linux
+      artifacts: true
+  script:
+    - chmod +x aro-dist/aro
+    # `-r`, because `Examples/` is a directory of applications rather than one
+    # application; without it every `.aro` file under it is pooled into a single
+    # pseudo-application and the entry-point rule reports nonsense (#824).
+    - ./aro-dist/aro check -r Examples
+    # Every code cell of every notebook, through a real `aro repl --json`
+    # session — the same way a kernel runs them.
+    - ARO_BIN=$CI_PROJECT_DIR/aro-dist/aro python3 Learning/validate.py
+
+
+# =============================================================================
 # Test Stage - Gate for all builds (main branch only)
 # =============================================================================
 test:
   stage: test
-  image: $CI_REGISTRY_IMAGE/aro-ci:latest
+  image: $ARO_CI_IMAGE
   rules:
     - if: $CI_COMMIT_TAG
     - if: $CI_COMMIT_BRANCH == "main"
@@ -460,10 +656,14 @@ test:
 # every test gets to "started" and nothing ever completes (jobs 80535,
 # 80454 timed out at 45m with zero completions).
 #
-# The full socket surface is exercised on GitHub (Linux + macOS) where
-# the runner has enough cores, and locally. Re-enable this job once
-# the runner is sized larger OR the blocking poll() paths are moved
-# to a dedicated executor.
+# The full socket surface is exercised on GitHub, where the runner has
+# enough cores: the `test` job there runs the whole suite on Linux with
+# nothing skipped, and `test-macos` does the same on macOS. That second
+# half only became true with GitLab #687 — before it, `swift test` ran
+# on no macOS machine but a developer's own, so this paragraph claimed
+# a macOS run that did not exist. Re-enable this job once the runner is
+# sized larger OR the blocking poll() paths are moved to a dedicated
+# executor.
 #
 # The `runtime-sz-no-sockets` shard above already excludes Socket from
 # the runtime test sweep, so this comment is the only marker left.
@@ -473,7 +673,7 @@ test:
 # =============================================================================
 build:linux:
   stage: build
-  image: $CI_REGISTRY_IMAGE/aro-ci:latest
+  image: $ARO_CI_IMAGE
   rules:
     - if: $CI_COMMIT_TAG
     - if: $CI_COMMIT_BRANCH == "main"
@@ -617,7 +817,7 @@ build:linux:
 # =============================================================================
 integration:linux:
   stage: integration
-  image: $CI_REGISTRY_IMAGE/aro-ci:latest
+  image: $ARO_CI_IMAGE
   rules:
     - if: $CI_COMMIT_TAG
     - if: $CI_COMMIT_BRANCH == "main"
@@ -677,7 +877,7 @@ integration:linux:
     - key:
         files:
           - Examples/GreetingPlugin/Plugins/plugin-swift-hello/Package.resolved
-          - Examples/SQLiteExample/plugins/SQLitePlugin/Package.resolved
+          - Examples/SQLiteExample/Plugins/SQLitePlugin/Package.resolved
         prefix: plugin-build
       paths:
         - Examples/*/[Pp]lugins/*/.build
@@ -688,7 +888,13 @@ integration:linux:
     # job-specific or a fallback for running against an image that predates
     # the addition — each check is a no-op once the image has the thing.
     - if [ -n "${GITHUB_TOKEN:-}" ]; then git config --global url."https://x-access-token:${GITHUB_TOKEN}@github.com/".insteadOf "https://github.com/"; fi
-    - pip3 install --quiet "git+https://github.com/arolang/aro-plugin-sdk-python.git@main"
+    # `--break-system-packages`, because the CI image is Ubuntu 24.04 (#897) and
+    # noble marks its system Python externally-managed: PEP 668 makes a plain
+    # `pip3 install` refuse outright, which is what broke the first pipeline to
+    # actually run on the new image. The `||` keeps it working on an older
+    # image, where pip predates the flag and does not need it.
+    - pip3 install --quiet --break-system-packages "git+https://github.com/arolang/aro-plugin-sdk-python.git@main"
+      || pip3 install --quiet "git+https://github.com/arolang/aro-plugin-sdk-python.git@main"
     - python3 -c "import aro_plugin_sdk; print('aro-plugin-sdk ready')"
     # NOT symlinked: /usr/bin/clang. On ubuntu:22.04 this job pointed it at
     # clang-20 safely, because the Swift tarball it downloaded brought its own
@@ -708,9 +914,9 @@ integration:linux:
     - perl -MHTTP::CookieJar -e1 2>/dev/null || cpan -T HTTP::CookieJar 2>&1 || true
     - |
       if ! command -v swift >/dev/null; then
-        wget -q https://download.swift.org/swift-6.3.2-release/ubuntu2204/swift-6.3.2-RELEASE/swift-6.3.2-RELEASE-ubuntu22.04.tar.gz
-        tar xzf swift-6.3.2-RELEASE-ubuntu22.04.tar.gz
-        mv swift-6.3.2-RELEASE-ubuntu22.04 /usr/share/swift
+        wget -q https://download.swift.org/swift-6.3.2-release/ubuntu2404/swift-6.3.2-RELEASE/swift-6.3.2-RELEASE-ubuntu24.04.tar.gz
+        tar xzf swift-6.3.2-RELEASE-ubuntu24.04.tar.gz
+        mv swift-6.3.2-RELEASE-ubuntu24.04 /usr/share/swift
         export PATH="/usr/share/swift/usr/bin:$PATH"
       fi
     - swift --version
@@ -800,6 +1006,10 @@ integration:linux:
       fi
       PLUGIN_CACHE="$CI_PROJECT_DIR/.plugin-dep-cache"
       mkdir -p "$PLUGIN_CACHE"
+      # Nothing is skipped here. ZipService was, between #897 and #901:
+      # marmelroy/Zip does not compile against noble's glibc, and no release
+      # of it ever will. The example uses weichsel/ZIPFoundation now, so every
+      # plugin package in Examples/ is expected to build on Linux again.
       for pkg in Examples/*/plugins/*/Package.swift Examples/*/Plugins/*/Package.swift; do
         [ -f "$pkg" ] || continue
         dir="$(dirname "$pkg")"
@@ -835,7 +1045,7 @@ integration:repl:
   # last one adding the LLVM apt repository for itself: it installed perl,
   # libgit2, libzmq, libcurl and libllvm20 on a bare ubuntu:22.04, which the
   # image already carries (GitLab #596).
-  image: $CI_REGISTRY_IMAGE/aro-ci:latest
+  image: $ARO_CI_IMAGE
   rules:
     - if: $CI_COMMIT_TAG
     - if: $CI_COMMIT_BRANCH == "main"
@@ -861,16 +1071,19 @@ integration:repl:
 # both halves at once: a protocol change that breaks the Python shim, and an
 # example notebook whose ARO has rotted.
 #
-# Runs on ubuntu:22.04, the same image as build:linux, and not on a Python
-# image: the `aro` artifact links libgit2.so.1.1, which is what jammy ships.
-# python:3.12-slim is Debian trixie now and ships libgit2.so.1.9, so the
-# binary would not even start (job 123729: "error while loading shared
-# libraries: libgit2.so.1.1"). Python comes from apt instead — the kernel
-# shim is a thin subprocess wrapper and needs no particular interpreter
-# version (pyproject asks for >=3.9; jammy has 3.10).
+# Runs on the CI image, the same one as build:linux, and not on a Python
+# image: the `aro` artifact links the libgit2 that image provides, and a
+# different base ships a different SONAME. python:3.12-slim is Debian trixie
+# and ships libgit2.so.1.9, so the binary would not even start (job 123729:
+# "error while loading shared libraries: libgit2.so.1.1"). The SONAME has
+# since moved to 1.7 with the image's base (#897) and the reasoning is
+# unchanged — it is "whatever built it", not any particular number. Python
+# comes from apt instead: the kernel shim is a thin subprocess wrapper and
+# needs no particular interpreter version (pyproject asks for >=3.9; noble
+# has 3.12).
 integration:jupyter:
   stage: integration
-  image: $CI_REGISTRY_IMAGE/aro-ci:latest
+  image: $ARO_CI_IMAGE
   rules:
     - if: $CI_COMMIT_TAG
     - if: $CI_COMMIT_BRANCH == "main"
@@ -886,16 +1099,28 @@ integration:jupyter:
   script:
     - export LD_LIBRARY_PATH="/usr/lib/llvm-20/lib:$LD_LIBRARY_PATH"
     - export ARO_KERNEL_ARO="$CI_PROJECT_DIR/aro-dist/aro"
-    # Ubuntu 22.04 ships pip 22.0.2, which does not chdir into a local
-    # source tree before invoking the PEP 517 backend. setuptools then
-    # reads pyproject.toml relative to the *current* directory, finds
-    # none, and cheerfully builds a package called UNKNOWN 0.0.0 —
-    # exit 0, nothing importable, and the failure surfaces one line
-    # later as "No module named 'aro_kernel'". Upgrading pip first is
-    # the fix; `cd`-ing into the package would also work and would
-    # hide why.
-    - python3 -m pip install --quiet --upgrade pip
-    - pip3 install --quiet ./Editor/jupyter-aro nbconvert
+    # Kept after the move to noble (#897), which ships pip 24.0 and does not
+    # have the bug this works around — jammy's pip 22.0.2 did not chdir into
+    # a local source tree before invoking the PEP 517 backend, so setuptools
+    # read pyproject.toml relative to the *current* directory, found none,
+    # and cheerfully built a package called UNKNOWN 0.0.0: exit 0, nothing
+    # importable, and the failure surfacing one line later as "No module
+    # named 'aro_kernel'". An upgrade of an already-new pip is a no-op, and
+    # the line is what stops the bug coming back with a base-image change.
+    # Only when pip is actually old. I kept this line through #897 calling an
+    # upgrade of an already-new pip "a no-op"; it is not. On noble, pip tries to
+    # uninstall the Debian-packaged pip 24.0 first and cannot — "RECORD file not
+    # found" — so the line fails outright, and the fallback then hits PEP 668.
+    - |
+      PIP_MAJOR=$(python3 -c 'import pip; print(pip.__version__.split(".")[0])')
+      if [ "$PIP_MAJOR" -lt 23 ]; then
+        python3 -m pip install --quiet --upgrade pip
+      else
+        echo "pip $(python3 -m pip --version | cut -d' ' -f2) is new enough; not upgrading"
+      fi
+    # PEP 668 again: noble's system Python is externally-managed (#897).
+    - pip3 install --quiet --break-system-packages ./Editor/jupyter-aro nbconvert
+      || pip3 install --quiet ./Editor/jupyter-aro nbconvert
     - python3 -m aro_kernel.install --sys-prefix
     - jupyter kernelspec list
     # Exercise the protocol before the notebooks do, and triage it.
@@ -957,7 +1182,7 @@ integration:jupyter:
 # genuinely does not work on Linux yet.
 repl:smoke:
   stage: integration
-  image: $CI_REGISTRY_IMAGE/aro-ci:latest
+  image: $ARO_CI_IMAGE
   allow_failure: true
   rules:
     - if: $CI_COMMIT_TAG
@@ -1015,7 +1240,7 @@ repl:smoke:
 # no longer matches the binary that built alongside it.
 train:catalogs:
   stage: integration
-  image: $CI_REGISTRY_IMAGE/aro-ci:latest
+  image: $ARO_CI_IMAGE
   rules:
     - if: $CI_COMMIT_TAG
     - if: $CI_COMMIT_BRANCH == "main"
@@ -1056,7 +1281,7 @@ train:catalogs:
 # the training host.
 train:corpus:
   stage: integration
-  image: $CI_REGISTRY_IMAGE/aro-ci:latest
+  image: $ARO_CI_IMAGE
   rules:
     - if: $CI_COMMIT_TAG
     - if: $CI_COMMIT_BRANCH == "main"
@@ -1416,6 +1641,7 @@ docker:ci:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
       changes:
         - docker/ci/Dockerfile
+        - docker/ci/shallow-probe.c
         - .gitlab-ci.yml
   variables:
     IMAGE_NAME: $CI_REGISTRY_IMAGE/aro-ci

@@ -170,7 +170,7 @@ public struct ExtractAction: SynchronousAction {
         // ARO-0038: Check result specifiers for list element access
         if let array = resolvedSource as? [any Sendable],
            let specifier = result.specifiers.first {
-            let extracted = extractFromList(array, specifier: specifier)
+            let extracted = try extractFromList(array, specifier: specifier)
             return extracted
         }
 
@@ -302,7 +302,25 @@ public struct ExtractAction: SynchronousAction {
 
     /// Extracts element(s) from a list using specifier patterns
     /// Supports: first, last, numeric index, ranges (3-5), picks (3,5,7)
-    private func extractFromList(_ array: [any Sendable], specifier: String) -> any Sendable {
+    ///
+    /// An index past the end **throws** (GitLab #843). It used to fall
+    /// through to the "unknown specifier" branch below and return the
+    /// *whole list*, so `Extract the <item: 5> from the <short>.` on a
+    /// two-element list bound `[1, 2]` where the reader expected an element,
+    /// and the mistake surfaced much later as a type confusion or not at
+    /// all. Two proposals described two other behaviours (ARO-0002 §5.7 said
+    /// empty string, ARO-0038 §6.1 said nil) and the code did neither.
+    ///
+    /// Erroring is ARO-0006: the statement is the error message, and the
+    /// runtime can name the index and the length. It is also what the
+    /// interpreter's subscript form already did, so this is the behaviour
+    /// the compiled bridge is brought into line with rather than a third
+    /// new one.
+    ///
+    /// A *non-numeric* specifier still returns the list unchanged — that
+    /// path is how `<users: name>`-shaped reads pass through, and it is not
+    /// what this issue is about.
+    private func extractFromList(_ array: [any Sendable], specifier: String) throws -> any Sendable {
         let spec = specifier.lowercased()
 
         // Keyword access: first, last
@@ -334,7 +352,10 @@ public struct ExtractAction: SynchronousAction {
         }
 
         // Single numeric index (0 = last element, reverse indexing per ARO-0038)
-        if let index = Int(spec), index >= 0, index < array.count {
+        if let index = Int(spec) {
+            guard index >= 0, index < array.count else {
+                throw ActionError.indexOutOfBounds(index: index, count: array.count)
+            }
             return array[array.count - 1 - index]
         }
 

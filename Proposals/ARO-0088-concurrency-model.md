@@ -206,17 +206,33 @@ Repository writes from concurrent iterations are serialised by the repository's 
 
 ## 7. Event Dispatch
 
-`Emit` hands the event to the bus and the emitting feature set continues; it does not wait for handlers. The bus is an actor, so its own state transitions are serialised, and it offers three delivery strategies:
+`Emit` hands the event to the bus and the emitting feature set continues; it does not wait for handlers. Events are background work: a feature set that emits one has said what happened, and is not thereby responsible for everything that listens. Waiting would couple the emitter to the slowest handler, and to every handler anyone adds later.
+
+`Deliver` is the same delivery, awaited:
+
+```aro
+Emit    a <UserCreated: event> with <user>.    (* hands over, continues *)
+Deliver a <UserCreated: event> with <user>.    (* waits for every handler *)
+```
+
+After a `Deliver` the next statement runs in the world the handlers left behind and may rely on what they did — the causality ARO-0007 §7.3 promises, attached to the verb that makes it.
+
+**Waiting is not ordering.** Even `Deliver`'s handlers run concurrently with *each other*, in unspecified order; it waits for all of them and sequences none. Those are two different promises and neither verb makes the second.
+
+Nothing is lost at exit. `publish` pre-increments a synchronously visible counter before it spawns its task, and `awaitPendingEvents` waits on that as well as on in-flight handlers — a program that emits and returns still drains before the process does.
+
+The bus is an actor, so its own state transitions are serialised, and it offers three delivery strategies:
 
 ```
-Emit
+Emit / Deliver
  |
  +-- publish()              fire-and-forget: one task per matching handler.
  |                          Highest fan-out, no bound on concurrent handlers.
+ |                          What `Emit` uses (`EmitAction.swift`).
  |
  +-- publishAndTrack()      awaited: the caller resumes only once every
- |                          handler has finished. Used where the emitting
- |                          statement's ordering matters.
+ |                          handler has finished. What `Deliver` uses, and
+ |                          what repository observers use.
  |
  +-- publishBackpressured() pooled: work items queue and a fixed worker set
                             drains them. Bounds concurrent handler bodies
@@ -400,7 +416,7 @@ A body binding is not a deferred future. It is a value that happens not to have 
 | What happens at the ceiling? | Work queues, in arrival order. Nothing fails. |
 | What is shared? | Repositories and published symbols, both actor-isolated. |
 | What is atomic? | A single repository operation. Nothing larger. |
-| Does `Emit` block? | No. Handlers run independently; shutdown drains them. |
+| Does `Emit` block? | No. Handlers run independently; shutdown drains them. `Deliver` is the awaited form, and even it does not *order* its handlers (§7). |
 | Is an unread request body a future? | No — see §13. It is a value not yet built (ARO-0090). |
 | Is compiled output different? | Same semantics, tighter concurrency bounds. |
 | When does a failure surface? | At the failing statement's identity, reported no later than feature-set exit. |

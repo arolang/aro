@@ -1134,9 +1134,12 @@ public final class NativePluginHost: @unchecked Sendable, PluginHostProtocol {
         // name the manifest advertises for this verb before
         // failing. Result is the same successful payload the
         // plugin would have returned for the correct dispatch.
-        var candidates = [action]
-        candidates.append(contentsOf: snakeCaseCandidates(for: action))
-        candidates = Array(NSOrderedSet(array: candidates)) as! [String]
+        // Shared with `PluginLoader.callCPlugin` (GitLab #884), which is the
+        // path a statically linked plugin takes and which had no fallback at
+        // all — so the same plugin worked under `aro run` and failed under
+        // `aro build`.
+        let candidates = PluginActionDispatch.candidates(
+            for: action, verbsByName: registry.verbsByName)
 
         var lastResultJSON: String = ""
         for candidate in candidates {
@@ -1153,7 +1156,7 @@ public final class NativePluginHost: @unchecked Sendable, PluginHostProtocol {
             lastResultJSON = resultJSON
             // If the SDK returned its "Unknown action" sentinel,
             // keep trying. Otherwise we're done.
-            if resultJSON.contains("Unknown action:") {
+            if PluginActionDispatch.isUnknownAction(resultJSON) {
                 continue
             }
             guard let resultData = resultJSON.data(using: .utf8),
@@ -1182,50 +1185,9 @@ public final class NativePluginHost: @unchecked Sendable, PluginHostProtocol {
     /// failing verb (`ParseCSV` → `parse_csv`), and only that —
     /// trying every action name would dispatch CSVToJSON
     /// requests into parse_csv.
-    private func snakeCaseCandidates(for verb: String) -> [String] {
-        var out: [String] = []
-        let lowered = verb.lowercased()
-        for (name, verbs) in registry.verbsByName {
-            if name.lowercased() == lowered
-                || verbs.contains(where: { $0.lowercased() == lowered }) {
-                out.append(toSnakeCase(name))
-            }
-        }
-        out.append(toSnakeCase(verb))
-        return out
-    }
-
-    /// CamelCase → snake_case, matching the Rust convention
-    /// `aro-plugin-sdk-rust` uses for function-name derivation:
-    ///
-    ///   ParseCSV   → parse_csv
-    ///   CSVToJSON  → csv_to_json
-    ///   FormatCSV  → format_csv
-    ///
-    /// Rule: insert `_` between (lowercase | digit) and uppercase
-    /// (start of a new word), and between two uppercases when
-    /// the second is followed by a lowercase (end of an acronym
-    /// run). Otherwise consecutive uppercases stay together so
-    /// CSV doesn't become c_s_v.
-    private func toSnakeCase(_ s: String) -> String {
-        let chars = Array(s)
-        guard !chars.isEmpty else { return s }
-        var out = ""
-        for i in 0..<chars.count {
-            let ch = chars[i]
-            if i > 0, ch.isUppercase {
-                let prev = chars[i - 1]
-                let nextLower = i + 1 < chars.count
-                    && chars[i + 1].isLowercase
-                if prev.isLowercase || prev.isNumber
-                    || (prev.isUppercase && nextLower) {
-                    out.append("_")
-                }
-            }
-            out.append(Character(ch.lowercased()))
-        }
-        return out
-    }
+    // `snakeCaseCandidates` / `toSnakeCase` moved to
+    // `PluginActionDispatch` (GitLab #884) so the static-plugin path shares
+    // them rather than carrying a second, older copy.
 
     // MARK: - Action Registration
 

@@ -1,0 +1,5 @@
+# Generated: Mon Sep 28 20:12:37 2026
+# Type: http
+# Command: aro run ./Examples/WebhookReceiver
+---
+GET /health => {"status":"healthy"}

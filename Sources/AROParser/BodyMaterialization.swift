@@ -60,12 +60,18 @@ public enum StreamConsumptionPolicy {
     ///     that could stream; that is a later refinement, not a default.
     public static let elementWiseVerbs: Set<String> = [
         "write", "append", "send", "return", "broadcast", "respond",
-        // `emit` and `publish` hand the value to something that outlives the
-        // statement, so the runtime anchors it — drains it to a file one chunk
-        // at a time and passes on something any number of readers can open.
-        // That consumes element by element too, so the route still needs no
-        // buffer; what it needs is disk, which is the sink's business.
-        "emit", "publish",
+        // `emit`, `deliver` and `publish` hand the value to something that
+        // outlives the statement, so the runtime anchors it — drains it to a
+        // file one chunk at a time and passes on something any number of
+        // readers can open. That consumes element by element too, so the route
+        // still needs no buffer; what it needs is disk, which is the sink's
+        // business.
+        //
+        // `deliver` is here because it is `emit` with the emitter waiting
+        // (GitLab #905): same event, same anchoring, same consumption. Leaving
+        // it out would have made a route that delivers its body analyse as
+        // whole-value and answer 413 where the same route emitting it streams.
+        "emit", "deliver", "publish",
     ]
 
     /// Verbs that move a binding without reading it. `extract` qualifies only
@@ -262,16 +268,22 @@ public struct BodyMaterializationAnalyzer {
         seenBody: inout Bool,
         actionMaterializes: [String: Bool]
     ) -> Finding? {
-        for statement in statements {
+        // GitLab #723: `flattenAll` rather than a private recursion, because
+        // this pass has something to say about the containers too — what a
+        // `match` matches on, what a `for each` iterates. Pre-order is the
+        // order the recursion produced, so the taint set is built in the same
+        // sequence and the first finding is the same statement.
+        //
+        // What changes is coverage: the recursion never entered a
+        // `when { … }` block, so `Compute the <n: length> from <upload>.`
+        // written inside one read the body without the analysis noticing, and
+        // the route was published as streaming — exactly the assumption this
+        // file says loses memory. A pipeline's stages arrive as the
+        // `AROStatement`s they are.
+        for statement in AROStatementWalk.flattenAll(statements) {
             if let aro = statement as? AROStatement {
                 if let finding = inspect(aro, tainted: &tainted, seenBody: &seenBody, actionMaterializes: actionMaterializes) {
                     return finding
-                }
-            } else if let pipeline = statement as? PipelineStatement {
-                for stage in pipeline.stages {
-                    if let finding = inspect(stage, tainted: &tainted, seenBody: &seenBody, actionMaterializes: actionMaterializes) {
-                        return finding
-                    }
                 }
             } else if let loop = statement as? ForEachLoop {
                 // Iterating a stream is the element-wise shape: the loop pulls
@@ -289,26 +301,19 @@ public struct BodyMaterializationAnalyzer {
                         return Finding(statement: "For each <\(loop.itemVariable)> in \(loop.collectionLabel)", line: loop.span.start.line, span: loop.span)
                     }
                 }
-                if let finding = walk(loop.body, tainted: &tainted, seenBody: &seenBody, actionMaterializes: actionMaterializes) {
-                    return finding
-                }
             } else if let match = statement as? MatchStatement {
                 // Matching on a binding compares it, which needs its value.
                 if tainted.contains(match.subject.base) {
                     return Finding(statement: match.description, line: match.span.start.line, span: match.span)
                 }
-                for clause in match.cases {
-                    if let finding = walk(clause.body, tainted: &tainted, seenBody: &seenBody, actionMaterializes: actionMaterializes) {
-                        return finding
-                    }
-                }
-                if let otherwise = match.otherwise,
-                   let finding = walk(otherwise, tainted: &tainted, seenBody: &seenBody, actionMaterializes: actionMaterializes) {
-                    return finding
-                }
-            } else if let loop = statement as? WhileLoop {
-                if let finding = walk(loop.body, tainted: &tainted, seenBody: &seenBody, actionMaterializes: actionMaterializes) {
-                    return finding
+            } else if let block = statement as? WhenStatement {
+                // A block's condition asks the same question a statement's
+                // `when` suffix asks, so it gets the same answer: asking
+                // whether the body is empty needs the body. Reachable only
+                // now that the walk enters these blocks at all (GitLab #723).
+                let referenced = DataFlowAnalyzer.variables(in: block.condition)
+                if !referenced.isDisjoint(with: tainted) {
+                    return Finding(statement: block.description, line: block.span.start.line, span: block.span)
                 }
             } else if let publish = statement as? PublishStatement {
                 // A published binding outlives the feature set, so it cannot
@@ -367,7 +372,7 @@ public struct BodyMaterializationAnalyzer {
         // the body, and a question needs the answer — so it reads, even when
         // the statement it guards would only have moved it.
         if let condition = statement.statementGuard.condition {
-            let referenced = condition.accept(VariableNameCollector())
+            let referenced = DataFlowAnalyzer.variables(in: condition)
             if !referenced.isDisjoint(with: tainted) {
                 return Finding(statement: describe(statement), line: statement.span.start.line, span: statement.span)
             }
@@ -457,7 +462,7 @@ public struct BodyMaterializationAnalyzer {
 
     private func referencesTaintedInClauses(_ statement: AROStatement, tainted: Set<String>) -> Bool {
         var referenced: Set<String> = []
-        let collector = VariableNameCollector()
+        let collector = DataFlowAnalyzer.VariableCollector()
         if let expression = statement.rangeModifiers.withClause {
             referenced.formUnion(expression.accept(collector))
         }
@@ -494,51 +499,4 @@ public struct BodyMaterializationAnalyzer {
     private static let frameworkBindings: Set<String> = [
         "_expression_", "_literal_", "_with_", "_to_", "_against_", "_result_expression_",
     ]
-}
-
-// MARK: - Variable collection
-
-/// Collects the base names referenced anywhere in an expression tree.
-struct VariableNameCollector: ExpressionVisitor {
-    typealias Result = Set<String>
-
-    func visit(_ node: LiteralExpression) -> Set<String> { [] }
-
-    func visit(_ node: VariableRefExpression) -> Set<String> { [node.noun.base] }
-
-    func visit(_ node: BinaryExpression) -> Set<String> {
-        node.left.accept(self).union(node.right.accept(self))
-    }
-
-    func visit(_ node: UnaryExpression) -> Set<String> { node.operand.accept(self) }
-
-    func visit(_ node: MemberAccessExpression) -> Set<String> { node.base.accept(self) }
-
-    func visit(_ node: SubscriptExpression) -> Set<String> {
-        node.base.accept(self).union(node.index.accept(self))
-    }
-
-    func visit(_ node: GroupedExpression) -> Set<String> { node.expression.accept(self) }
-
-    func visit(_ node: ExistenceExpression) -> Set<String> { node.expression.accept(self) }
-
-    func visit(_ node: TypeCheckExpression) -> Set<String> { node.expression.accept(self) }
-
-    func visit(_ node: EmptinessCheckExpression) -> Set<String> { node.expression.accept(self) }
-
-    func visit(_ node: ArrayLiteralExpression) -> Set<String> {
-        node.elements.reduce(into: Set<String>()) { $0.formUnion($1.accept(self)) }
-    }
-
-    func visit(_ node: MapLiteralExpression) -> Set<String> {
-        node.entries.reduce(into: Set<String>()) { $0.formUnion($1.value.accept(self)) }
-    }
-
-    func visit(_ node: InterpolatedStringExpression) -> Set<String> {
-        node.parts.reduce(into: Set<String>()) { accumulated, part in
-            if case .interpolation(let expression) = part {
-                accumulated.formUnion(expression.accept(self))
-            }
-        }
-    }
 }

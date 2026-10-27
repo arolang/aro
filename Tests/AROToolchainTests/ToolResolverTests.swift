@@ -1,18 +1,18 @@
 // ============================================================
 // ToolResolverTests.swift
-// ARO CLI - ToolResolver Unit Tests (#214)
+// AROToolchain - ToolResolver Unit Tests (#214, #733)
 // ============================================================
 
 import Foundation
 import Testing
-@testable import ARORuntime
+import AROToolchain
 
 // MARK: - ToolResolver.findTool Tests
 
 @Suite("ToolResolver.findTool Tests")
 struct ToolResolverFindToolTests {
 
-    @Test("Finds common system tool via which lookup")
+    @Test("Finds common system tool via the PATH scan")
     func testFindsCommonTool() {
         // 'ls' exists on all Unix systems
         #if !os(Windows)
@@ -66,20 +66,24 @@ struct ToolResolverFindToolTests {
         #expect(result == nil)
     }
 
-    @Test("Env override with nonexistent path falls through to which")
+    @Test("Env override with nonexistent path falls through to the PATH scan")
     func testEnvOverrideNonexistentFallsThrough() {
         #if !os(Windows)
-        // Should fall through to which and find 'ls'
+        // Should fall through to the PATH scan and find 'ls'. `environment`
+        // supplies PATH as well as the override: the scan happens in process
+        // now rather than in a `which` subprocess that inherited the real
+        // environment, so a caller passing a partial environment gets exactly
+        // the PATH it passed (GitLab #733).
         let result = ToolResolver.findTool(
             "ls",
             envOverride: "_ARO_TEST_BAD",
-            environment: ["_ARO_TEST_BAD": "/nonexistent/binary"]
+            environment: ["_ARO_TEST_BAD": "/nonexistent/binary", "PATH": "/usr/bin:/bin"]
         )
         #expect(result != nil)
         #endif
     }
 
-    @Test("Fallback paths are used when which fails")
+    @Test("Fallback paths are used when the PATH scan fails")
     func testFallbackPathsUsed() {
         #if !os(Windows)
         // Use a tool name that won't be on PATH, but provide a valid fallback
@@ -142,28 +146,5 @@ struct ToolResolverJoinTests {
     func testJoinFile() {
         let result = ToolResolver.join("/opt/homebrew/share", "aro")
         #expect(result == "/opt/homebrew/share/aro")
-    }
-}
-
-// MARK: - ToolResolver.resolveExecutableDirectory Tests
-
-@Suite("ToolResolver.resolveExecutableDirectory Tests")
-struct ToolResolverResolveExecDirTests {
-
-    @Test("Absolute path returns its directory")
-    func testAbsolutePath() {
-        let result = ToolResolver.resolveExecutableDirectory("/usr/local/bin/aro")
-        #expect(result == "/usr/local/bin")
-    }
-
-    @Test("Relative path is resolved against cwd")
-    func testRelativePath() {
-        let result = ToolResolver.resolveExecutableDirectory("./some/binary")
-        let cwd = FileManager.default.currentDirectoryPath
-        #expect(result.hasPrefix("/"))
-        // Should end with "some" since "binary" is the file
-        #expect(result.hasSuffix("/some"))
-        // Should contain the cwd
-        #expect(result.contains(URL(fileURLWithPath: cwd).lastPathComponent))
     }
 }

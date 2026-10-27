@@ -61,12 +61,22 @@ public struct BackpressureSample: Sendable, Hashable {
     }
 }
 
-/// Process-wide registry of channel occupancy.
+/// Registry of channel occupancy, one per application.
 ///
 /// A final class behind a lock rather than an actor: `send` and
 /// `next` are already on the hot path of every streamed element,
 /// and an actor hop per element would cost more than the feature
 /// is worth.
+///
+/// `shared` is the one a running program uses, and every channel
+/// still reports to it by default. It is not the only one that can
+/// exist, because `enable`, `disable` and `reset` reconfigure
+/// whichever monitor they are called on: a caller that does that
+/// to a process-wide instance is reconfiguring it for everybody
+/// else in the process at the same time, which is what made the
+/// backpressure tests depend on their neighbours (GitLab #890).
+/// Such a caller builds its own and hands it to the channels it
+/// wants to watch.
 public final class BackpressureMonitor: @unchecked Sendable {
     public static let shared = BackpressureMonitor()
 
@@ -82,7 +92,7 @@ public final class BackpressureMonitor: @unchecked Sendable {
         var stalledSeconds: Double
     }
 
-    private init() {}
+    public init() {}
 
     /// Start recording. Off by default — a plain `aro run` should
     /// not pay for a UI feature nobody is watching.

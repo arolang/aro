@@ -241,9 +241,67 @@ public enum WherePredicateMatcher {
             let values = expectedStr.split(separator: ",").map { String($0).trimmingCharacters(in: .whitespaces) }
             return !values.contains(actualStr)
 
+        case "subset of", "subset-of", "subsetof":
+            return isSubset(actual, of: expected)
+
         default:
             return actualStr == expectedStr
         }
+    }
+
+    /// `where <roles> subset of <granted>` — is every element of the record's
+    /// value present in the right-hand one? (ARO-0042 §3.6, GitLab #894.)
+    ///
+    /// The same answers `ExpressionEvaluator.isSubset` gives `when`, because
+    /// one operator written in two places must not mean two things:
+    ///
+    /// * **Set semantics, not multiset.** `[1, 1]` is a subset of `[1]` — the
+    ///   question is membership, and a duplicate does not make a new member.
+    /// * **The empty set is a subset of everything**, which is the convention
+    ///   and also the useful reading: a route requiring no roles admits every
+    ///   caller.
+    /// * **A bare scalar is a one-element set**, so `where <role> subset of
+    ///   <granted>` reads the way it looks.
+    private static func isSubset(_ subset: Any, of superset: any Sendable) -> Bool {
+        // Objects: every key of A present in B with an equal value.
+        if let a = subset as? [String: any Sendable] {
+            guard let b = superset as? [String: any Sendable] else { return false }
+            return a.allSatisfy { key, value in
+                guard let other = b[key] else { return false }
+                return areValuesEqual(value, other)
+            }
+        }
+
+        // Strings: every character of A appears somewhere in B.
+        if let a = subset as? String, let b = superset as? String {
+            let characters = Set(b)
+            return a.allSatisfy { characters.contains($0) }
+        }
+
+        guard superset is [any Sendable] || superset is String
+                || superset is [String: any Sendable] else { return false }
+
+        if let elements = subset as? [any Sendable] {
+            return elements.allSatisfy { contains(superset, $0) }
+        }
+        // A bare scalar is a one-element set.
+        return contains(superset, subset)
+    }
+
+    /// Membership of one value in a container, for `isSubset`.
+    private static func contains(_ container: any Sendable, _ element: Any) -> Bool {
+        if let array = container as? [any Sendable] {
+            return array.contains { areValuesEqual($0, element) }
+        }
+        if let str = container as? String, let substr = element as? String {
+            // Swift's `String.contains("")` is false; every string
+            // conceptually contains the empty string.
+            return substr.isEmpty || str.contains(substr)
+        }
+        if let dict = container as? [String: any Sendable], let key = element as? String {
+            return dict[key] != nil
+        }
+        return false
     }
 
     private static func asDouble(_ value: Any) -> Double? {

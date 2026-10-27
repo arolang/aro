@@ -32,6 +32,15 @@ enum StatementModifiers {
             context.bind("_literal_", value: value(of: literal))
         }
 
+        // GitLab #906: the statement's `as <Type>` annotation. The interpreter
+        // reads it off the AST and does not need this binding, but a compiled
+        // binary has no AST and reads it from here — so it is bound in both
+        // modes, over the same name, and an action or plugin that consults it
+        // sees the same thing whichever way the program is running.
+        if let asType = statement.result.asType, !asType.isEmpty {
+            context.bind("_as_type_", value: asType)
+        }
+
         // ARO-0018: Bind aggregation clause if present
         if let aggregation = statement.queryModifiers.aggregation {
             context.bind("_aggregation_type_", value: aggregation.type.rawValue)

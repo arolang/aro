@@ -95,8 +95,28 @@ sub build_example {
         return { success => 0, error => $error_msg, duration => 0 };
     }
 
-    eval { finish($handle) };
+    # A timeout makes `finish` die, and it dies *before* reaping, so `$?` is
+    # still 0 and whatever the build had buffered is never flushed into
+    # $out/$err. Reported through the branches below, that reads as
+    # "BINARY_NOT_FOUND, exit code 0, (no output)" — a build that silently
+    # produced nothing. Say what actually happened instead (GitLab #902).
+    my $finish_error = '';
+    eval { finish($handle); 1 } or $finish_error = $@ // 'unknown error';
     my $build_duration = time - $start_time;
+
+    if ($finish_error) {
+        eval { $handle->kill_kill(grace => 1) };
+        my $timed_out = $finish_error =~ /timeout/i;
+        my $error_msg = $timed_out
+            ? "Build timed out after ${timeout}s"
+            : "Build did not finish: $finish_error";
+        my $partial = ($err && $out) ? "$err\n$out" : ($err || $out);
+        $error_msg .= "\n\nBuild output so far:\n" . ($partial || "(no output)");
+        write_testrun_log($example_name, 'compiled',
+                          $timed_out ? 'BUILD_TIMEOUT' : 'BUILD_INCOMPLETE',
+                          $error_msg, "$aro_bin build $dir", undef);
+        return { success => 0, error => $error_msg, duration => $build_duration };
+    }
 
     if ($? != 0) {
         my $combined_err = ($err && $out) ? "$err\n$out" : ($err || $out);

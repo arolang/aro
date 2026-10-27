@@ -736,6 +736,52 @@ Team ID with no local certificate.
 
 - **Theme** — Light, Dark, or System. Switches the entire app
   including syntax colours; no restart needed.
+- **Theme preset** — *which* colours, as opposed to which half of
+  them. SOLARO's own palette is the default; Solarized Light,
+  Solarized Dark, Dracula, Nord and GitHub Light ship with it, and
+  anything in
+  `~/Library/Application Support/SOLARO/Themes/` is listed alongside
+  them. Clicking down the list applies each one immediately — there is
+  no Apply button — and a preset that only makes sense in one
+  appearance (Dracula is dark, GitHub Light is light) switches the
+  Theme picker above to match when you select it.
+
+  A theme is a JSON file of colour keys, and every key is optional:
+  what the file does not set keeps SOLARO's colour. **Reveal Themes
+  Folder…** opens the folder and, the first time, leaves an
+  `Example.json` in it with all 26 keys written out — delete the ones
+  you don't care about and you have a legal theme.
+
+  ```json
+  {
+    "name": "Half Nord",
+    "appearance": "dark",
+    "colors": {
+      "backdrop": "#2E3440",
+      "accent": "#88C0D0",
+      "textPrimary": { "light": "#2E3440", "dark": "#ECEFF4" }
+    }
+  }
+  ```
+
+  A colour is a hex string — `#RGB`, `#RRGGBB` or `#RRGGBBAA`, with or
+  without the `#`. One string applies to both appearances, which is
+  what a palette that only exists dark wants; `{ "light": …, "dark": … }`
+  gives each appearance its own, and naming only one side keeps
+  SOLARO's for the other.
+
+  Saving the file re-applies it while the app is running, so editing a
+  palette is a live loop rather than a relaunch per colour. A mistake
+  costs exactly the key it is in: a hex string of the wrong length, a
+  key that is not a colour, a value that is not a string — each is
+  skipped, named under the picker in Settings and noted in the status
+  bar, and the other keys still apply. A file that is not JSON at all
+  leaves the whole palette as SOLARO's and says so. There is no way to
+  end up with a half-painted window, because a theme is always an
+  overlay on a complete palette rather than a replacement for one.
+
+  The preset you chose is remembered under `solaro.theme.preset`, like
+  every other setting.
 - **Font size** and **Line height** — the text size every reading
   surface resolves against: the code editor, notebook cells, and
   rendered markdown. ⌘+ and ⌘− step it live, wherever you are

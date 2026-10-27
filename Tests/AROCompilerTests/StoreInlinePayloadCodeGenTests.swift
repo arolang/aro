@@ -46,7 +46,7 @@ struct StoreInlinePayloadCodeGenTests {
         #expect(ir.contains("$lit"))
     }
 
-    @Test("_with_ is unbound at the top of every statement")
+    @Test("The per-statement sweep runs at the top of every statement")
     func withIsClearedPerStatement() throws {
         let ir = try generateIR("""
         (Application-Start: T) {
@@ -57,18 +57,14 @@ struct StoreInlinePayloadCodeGenTests {
         }
         """)
 
-        // Find the constant holding "_with_" and count how often it is
-        // unbound: once per statement, so a payload can never outlive the
-        // statement that wrote it.
-        let withConstant = try #require(
-            ir.split(separator: "\n")
-                .first { $0.contains("private constant") && $0.contains("_with_") }
-                .flatMap { line in line.split(separator: " ").first.map(String.init) },
-            "IR should declare a string constant for _with_"
-        )
-        let unbinds = ir.components(separatedBy: "@aro_variable_unbind(ptr %0, ptr \(withConstant))")
-            .count - 1
-        #expect(unbinds >= 4, "expected one _with_ unbind per statement, saw \(unbinds)")
+        // `_with_` is cleared by `aro_context_clear_transients`, which sweeps
+        // `FrameworkVariables.transientKeys` on the runtime side. It used to
+        // be 21 `aro_variable_unbind` calls per statement, which is what this
+        // test counted and what #714 removed; the invariant it was protecting
+        // — a payload never outlives the statement that wrote it — is now one
+        // call per statement instead of one per name.
+        let sweeps = ir.components(separatedBy: "@aro_context_clear_transients(").count - 1
+        #expect(sweeps >= 4, "expected one sweep per statement, saw \(sweeps)")
     }
 }
 

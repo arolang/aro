@@ -453,13 +453,20 @@ specifiers, and only a name reaches the lazy-stream iteration path
 memory. An expression that *evaluates* to a stream streams as well; a list
 literal is a value and is iterated as one.
 
-There is no range literal *yet*. `for each <n> in [1..10]` is not ARO — count
-with the range loop, `for <n> from 1 to 10 { … }`, whose upper bound is
-exclusive (it binds 1…9). A `..` / `..<` range syntax is not part of this
-proposal; it is specified separately in
-[ARO-0089](ARO-0089-ranges.md), which also explains why `[1..10]` stays an
-error once ranges exist and how the two counting forms differ at their upper
-bound.
+A **range** is an expression, so it goes in the collection slot too:
+
+<!-- aro-check: skip — loop headers with elided bodies, not programs -->
+```aro
+for each <n> in 1->10 { … }        (* 1 … 10 — both ends are included *)
+for each <n> in 1->(<n> - 1) { … } (* an exclusive bound is a subtraction *)
+for each <n> in <lo>-><hi> { … }   (* endpoints are expressions *)
+```
+
+The collection slot is the one place a range is not materialised, so
+`for each <n> in 1->10_000_000` costs two integers of memory rather than ten
+million. `[1->10]` is a list holding one range and is rejected at check time
+with a diagnostic pointing at `1->10`, and so is `1..10`, which names the
+arrow. Ranges are specified in [ARO-0089](ARO-0089-ranges.md).
 
 #### Basic Iteration
 
@@ -602,7 +609,57 @@ before any iteration starts.
 - Concurrency limit controls maximum parallel operations
 - Loop variable is scoped to the loop body and immutable
 
-### 4.3 Collection Actions
+### 4.3 Range Loop
+
+A counting loop whose bounds are expressions rather than a collection. It is
+a statement, not a value — see [ARO-0089](ARO-0089-ranges.md) for the value
+form.
+
+#### Syntax
+
+```ebnf
+range_loop = "for" , "<" , variable_name , ">" ,
+             "from" , expression , "to" , expression ,
+             block ;
+
+variable_name = compound_identifier ;
+```
+
+**Format:**
+<!-- aro-check: skip — the format shape, with the body named rather than written -->
+```aro
+for <n> from 1 to 10 {
+    <statements using n>
+}
+```
+
+#### The upper bound is exclusive
+
+```aro
+for <n> from 1 to 3 {
+    Log <n> to the <console>.
+}
+(* 1
+   2   — 3 is not reached *)
+```
+
+This surprises most readers, and it is the behaviour of the implementation in
+both execution modes, so it is documented rather than changed: a loop that
+silently binds something different from what it binds today is the worst
+outcome available. [ARO-0089 §7](ARO-0089-ranges.md) sets out the resulting
+split between the two counting forms and why both are kept.
+
+#### Semantics
+
+- Bounds are expressions, evaluated **once**, before the first iteration.
+- Both must be integers; a non-integer bound fails the statement.
+- The loop counts **up**. `for <n> from 10 to 1` is an error naming both
+  bounds, not an empty loop and not a reversed one — unlike a descending
+  range value (`10->1`), which is empty (ARO-0089 §3.2).
+- The loop variable is scoped to the body and immutable within an iteration.
+- `Break.` leaves the loop; a `Return` inside the body ends the feature set.
+
+### 4.4 Collection Actions
 
 Declarative actions for functional-style collection processing:
 
@@ -788,22 +845,21 @@ Extract the <selected: 0,2,4> from the <letters>.
 
 | Access Type | Returns |
 |-------------|---------|
-| Single element (first, last, numeric) | Single value; see below when out of bounds |
+| Single element (first, last, numeric) | Single value; an index past the end fails the statement |
 | Range (3-5) | Array of elements, clamped to the list |
 | Pick (3,5,7) | Array of elements |
 
-**Out of bounds is currently an accident, not a rule.** A numeric specifier
-past the end falls through to the "unknown specifier" branch and binds the
-**whole collection** — `Extract the <item: 5> from the <short>.` on a two-element
-list binds `[1, 2]`, not an empty string and not a null. The subscript form
-`<items>[99]` behaves differently again, and differently between modes: the
-interpreter throws, the compiled binary returns `""`. ARO-0038 §6 says `nil` and
-this table used to say empty string; none of the three descriptions matched.
-Tracked as GitLab #843, which has to settle the behaviour before either document
-can state one.
+**An index past the end fails the statement**, in both execution modes and for
+both spellings — `Extract the <item: 5> from the <short>.` and `<items>[99]`.
+ARO-0038 §6.1 has the full rule and the shape to use when the index may not be
+there.
+
+Three different things used to happen (the specifier form bound the whole
+collection, the interpreter's subscript threw, the compiled binary's returned
+`""`), and this table said a fourth. GitLab #843 settled it.
 
 Empty-list access (`<empty: first>`) does bind an empty value, as ARO-0038 §6.2
-says.
+says — that case was always consistent.
 
 ---
 
@@ -916,7 +972,8 @@ statement = aro_statement
           | publish_statement
           | match_expression
           | foreach_loop
-          | parallel_foreach ;
+          | parallel_foreach
+          | range_loop ;
 
 (* Guarded Statement *)
 guarded_statement = action_clause , result_clause , object_clause ,
@@ -942,9 +999,13 @@ regex_pattern     = "/" , regex_body , "/" , [ regex_flags ] ;
 (* For-Each Loop *)
 foreach_loop = "for" , "each" , variable_reference ,
                [ "at" , variable_reference ] ,
-               "in" , variable_reference ,
+               "in" , collection ,
                [ "where" , condition ] ,
                block ;
+
+(* A noun carries specifiers and reaches the lazy-stream path; an expression
+   covers list literals, field access and ranges — `1->10` (ARO-0089). *)
+collection   = variable_reference | expression ;
 
 (* Parallel For-Each *)
 parallel_foreach = "parallel" , "for" , "each" , variable_reference ,
@@ -952,6 +1013,12 @@ parallel_foreach = "parallel" , "for" , "each" , variable_reference ,
                    [ "with" , "<" , "concurrency" , ":" , integer , ">" ] ,
                    [ "where" , condition ] ,
                    block ;
+
+(* Range Loop — §4.3. Counts up; the upper bound is EXCLUSIVE.
+   A range *value* (ARO-0089) includes both ends: `1->10`. *)
+range_loop = "for" , variable_reference ,
+             "from" , expression , "to" , expression ,
+             block ;
 
 (* Conditions *)
 condition         = condition_or ;

@@ -25,8 +25,14 @@ on:
       - '.github/workflows/cards.yml'
   workflow_dispatch:
   schedule:
-    # Run Monday-Friday at 9:00 AM UTC
-    - cron: '0 9 * * 1-5'
+    # 09:00 Europe/London, every day.
+    #
+    # GitHub's cron is UTC only and has no timezone, while London is UTC+0 in
+    # winter and UTC+1 in summer — so one fixed expression is an hour wrong for
+    # half the year. Both candidate hours fire, and the job's first step stops
+    # whichever one is not 09:00 in London. Exactly one posts, year round.
+    - cron: '0 8 * * *'
+    - cron: '0 9 * * *'
 
 concurrency:
   group: cards-${{ github.ref }}
@@ -97,7 +103,7 @@ jobs:
           done
 
   # ===========================================================================
-  # Post Card to Mastodon (scheduled daily Monday-Friday)
+  # Post Card to Mastodon (09:00 Europe/London, daily)
   # ===========================================================================
   post:
     name: Post Card to Mastodon
@@ -107,25 +113,48 @@ jobs:
     # Only run on schedule or manual trigger, not on code changes
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     steps:
+      # Two crons fire so that one of them is 09:00 in London whatever the
+      # season; this is where the other one stops. A manual run is never
+      # stopped — someone who pressed the button means it.
+      - name: Post only at 09:00 Europe/London
+        id: window
+        run: |
+          HOUR=$(TZ=Europe/London date +%H)
+          if [ "${{ github.event_name }}" != "schedule" ]; then
+            echo "manual run — posting regardless of the hour"
+            echo "post=true" >> "$GITHUB_OUTPUT"
+          elif [ "$HOUR" = "09" ]; then
+            echo "09:00 in London — this is the run that posts"
+            echo "post=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "London local time is ${HOUR}:00, not 09 — the other cron is today's run"
+            echo "post=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Checkout repository
+        if: steps.window.outputs.post == 'true'
         uses: actions/checkout@v4
 
       - name: Setup Node.js
+        if: steps.window.outputs.post == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: '20'
 
       - name: Install dependencies
+        if: steps.window.outputs.post == 'true'
         run: |
           cd cards
           npm install
 
       - name: Generate cards
+        if: steps.window.outputs.post == 'true'
         run: |
           cd cards
           node generate.js
 
       - name: Post card to Mastodon
+        if: steps.window.outputs.post == 'true'
         env:
           MASTODON_INSTANCE: ${{ secrets.MASTODON_INSTANCE }}
           MASTODON_ACCESS_TOKEN: ${{ secrets.MASTODON_ACCESS_TOKEN }}

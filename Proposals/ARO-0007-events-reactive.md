@@ -947,11 +947,26 @@ The EventBus is the central hub for event routing in ARO applications. This sect
   concurrently and in unspecified order.
 - Handlers run in isolation. A failure in one handler does not affect
   the others.
-- The emitting feature set **waits** for every matching handler to
-  complete before continuing past the `Emit`. This preserves causality
-  and request/response flow — the next statement after `Emit` may rely
-  on side-effects the handlers performed (state mutation, repository
-  writes, logs).
+- The emitting feature set does **not** wait for handlers: `Emit` hands the
+  event to the bus and continues (ARO-0088 §7). Events are background work,
+  and an emitter that blocked on its listeners would take on the latency of
+  every handler anyone adds later.
+- `Deliver` is the same delivery, awaited — identical statement shape, one
+  verb different:
+
+  ```aro
+  Emit    a <UserCreated: event> with <user>.    (* continues *)
+  Deliver a <UserCreated: event> with <user>.    (* waits *)
+  ```
+
+  After a `Deliver` the next statement may rely on side-effects the handlers
+  performed (state mutation, repository writes, logs). That is the causality
+  guarantee this section used to attach to `Emit`; GitLab #905 moved it to the
+  verb that asks for it, after #893 had briefly resolved the contradiction the
+  other way.
+- Waiting is not ordering. `Deliver` waits for every matching handler and
+  orders none of them — see the line above about handlers running
+  concurrently.
 
 ### 7.4 Lazy Action Execution and Effect Ordering
 
@@ -971,7 +986,8 @@ the runtime's force-at-site set:
 | `Return` | materializes the response value |
 | `Throw` | propagates an error |
 | `Publish` | exports a concrete value into the global symbol registry |
-| `Emit` | delivers a domain event and waits for handlers |
+| `Emit` | delivers a domain event and continues |
+| `Deliver` | delivers a domain event and waits for every handler |
 | `Compare` / `Validate` / `Accept` | feed an `if` / `when` / state branch |
 
 For these verbs the upstream chain is fully resolved before the verb

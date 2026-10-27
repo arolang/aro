@@ -1,14 +1,21 @@
+# Example: GroupDemo
+# Type: console
+# Note: occurrence-check. Every group's members are asserted, not just its
+# key. They used to print as Swift `[String: Any]` descriptions, whose key
+# order is unspecified and changed between runs, so this file could only
+# assert the keys (GitLab #822).
+---
 === Group Action Demo ===
 --- Group by status ---
-active:
-pending:
-cancelled:
+active: {amount: 100, id: 1, status: active}, {amount: 300, id: 5, status: active}, {amount: 500, id: 3, status: active}
+cancelled: {amount: 75, id: 4, status: cancelled}
+pending: {amount: 150, id: 6, status: pending}, {amount: 250, id: 2, status: pending}
 --- Group by country ---
-DE:
-US:
-FR:
+DE: {country: DE, name: Alice, role: admin}, {country: DE, name: Charlie, role: user}
+FR: {country: FR, name: Eve, role: user}
+US: {country: US, name: Bob, role: user}, {country: US, name: Diana, role: admin}
 --- Group by role ---
-admin:
-user:
+admin: {country: DE, name: Alice, role: admin}, {country: US, name: Diana, role: admin}
+user: {country: DE, name: Charlie, role: user}, {country: FR, name: Eve, role: user}, {country: US, name: Bob, role: user}
 === Demo Complete ===
 [OK] demo

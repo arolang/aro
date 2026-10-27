@@ -66,6 +66,7 @@ are read only to be **removed** from the environment handed to `cargo`,
 |---|---|---|
 | `ARO_REPL_PLUGINS_DIR` | `~/.aro/repl-plugins` | Where an interactive session keeps its plugins. |
 | `ARO_REPL_ALLOW_BLOCKING` | unset | Exactly `"1"` lets a REPL or notebook cell run a blocking verb — starting a server and waiting — instead of being rejected. |
+| `ARO_INPUT_TIMEOUT_SECONDS` | `300` | How long `Prompt`, `Select` or `Ask` waits for a front-end's answer before failing the statement. `0` waits indefinitely — the only way to opt into a cell that can hang. `InteractiveInput.swift` |
 | `ARO_BASE_PATH` | discovery | ARO installation root for `aro mcp`; accepted only if `<path>/Proposals` exists. |
 | `JUPYTER_DATA_DIR`, `XDG_DATA_HOME` | platform default | Where `aro kernel install` writes the kernelspec. |
 

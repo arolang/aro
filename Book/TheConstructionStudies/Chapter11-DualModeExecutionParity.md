@@ -233,6 +233,16 @@ The harness is Perl — `Tests/IntegrationTestsRunner/run-tests.pl`, with `Runne
 
 The `occurrence-check: true` hint enables order-independent output comparison, which is essential for event handlers that fire asynchronously in binary mode.
 
+### The language's own test command
+
+The harness above compares *output* for an example application. ARO's own test command compares nothing of the sort: it runs the program's colocated `Given`/`When`/`Then` feature sets. For a long time it only ever ran them through the interpreter, which is the reason the divergences in this chapter survived to be written up — a user's green `aro test` said nothing about the binary they shipped.
+
+`aro test --compiled` closes that. It builds a *test-harness* binary — the same compiled code as a shipped one, except the test feature sets are kept instead of stripped (ARO-0009 §8) and `main` drives them instead of calling `Application-Start` — and runs the same tests through it, reporting with the same reporter so the two runs compare line for line. `aro build --tests` is the build half on its own.
+
+Two mechanics are worth knowing. `When the <len> from the <get-length>.` resolves its target through the AST when interpreted; a compiled binary has none, so the harness registers every feature-set body by name at startup and `When` dispatches through that table. And a compiled body cannot throw across the C ABI — a failure is left in the context's error slot — so `Then` and `Assert` log every comparison they make, which is how the harness still tells a failed expectation (`FAIL`) from a broken statement (`ERROR`).
+
+It found a new divergence on the second example it was pointed at: `Compute the <difference> from <x> - <y>.` is subtraction interpreted and a set operation compiled, because the compiled path reads the *result name* as the qualifier. `Examples/Calculator` fails under `--compiled` for that reason, and the failure is the feature working.
+
 ---
 
 ## Verification Checklist for New Event Types

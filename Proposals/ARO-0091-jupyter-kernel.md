@@ -4,8 +4,8 @@
 **Author:** ARO Team
 **Status:** Implemented
 **Created:** 2026-08-17
-**Updated:** 2026-08-17
-**Requires:** ARO-0001 (Language Fundamentals), ARO-0081 (User-Defined Actions), ARO-0088 (Concurrency Model)
+**Updated:** 2026-10-04
+**Requires:** ARO-0001 (Language Fundamentals), ARO-0081 (User-Defined Actions), ARO-0083 (Terminal UI), ARO-0088 (Concurrency Model)
 
 ---
 
@@ -42,13 +42,14 @@ server's `StdioTransport` — not LSP's `Content-Length`.
 
 | `type` | Fields | Answer |
 |--------|--------|--------|
-| `execute` | `code`, optional `cellId` | `status: ok` with optional `display`, or `status: error` |
+| `execute` | `code`, optional `cellId`, optional `baseDir`, optional `allowStdin` | `status: ok` with optional `display`, or `status: error` |
 | `is_complete` | `code` | `status: complete` / `incomplete` (+`indent`) / `invalid` |
 | `complete` | `code`, `cursor` | `matches`, `items`, `cursorStart`, `cursorEnd` |
 | `inspect` | `code`, `cursor` | `found`, `text` |
 | `info` | — | `info` (version, feature sets, variables) |
 | `reset` | — | `status: ok`; session cleared |
 | `shutdown` | — | `status: ok`; server exits |
+| `input_reply` | `value`, or `status: "error"` | nothing — it answers an `input_request` |
 
 **`cellId` — re-running a cell.** A front-end that has stable cell
 identity sends it with `execute`. Re-running a cell then releases the
@@ -64,8 +65,31 @@ fewer names on its second run leaves nothing behind: the names it no
 longer binds are released with it, so the session reflects the cells as
 they are now.
 
+**`baseDir` — where a relative path points.** A front-end sends the directory
+the cell's relative paths resolve against, and it is the *notebook's own
+folder*, not the session's.
+
+The two are not the same thing, and the gap is what made this a field rather
+than a working directory. A kernel process has one working directory for its
+whole life, chosen when it starts — Solaro launches it in the project root — but
+a project holds notebooks in several folders, and a reader looking at
+`Learning/22-git-and-devops.repl` means that file's folder when the cell says
+`<git: "..">`. Without the field that cell discovered whatever repository sits
+above the project root, or none, and answered `Cannot retrieve the status from
+the git: ..` — while the same notebook passed under `Learning/validate.py`,
+which runs with `cwd=Learning/` (GitLab #915).
+
+So the directory travels per request. The server applies it for that cell and
+restores the previous default afterwards, which also means a front-end may run
+cells from notebooks in different folders against one session.
+
+Absent means the session's own default: the project directory for
+`aro repl <dir>`, otherwise the process's working directory. A client that does
+not know where its cell came from therefore behaves exactly as before.
+
 Every request carries an `id`. Every request gets exactly one `result` message
-with the same `id`.
+with the same `id` — `input_reply` excepted, because it is an answer rather than
+a question (see *Interactive input*).
 
 ### Messages from the server
 
@@ -74,10 +98,14 @@ with the same `id`.
 {"type":"stream","id":1,"name":"stdout","text":"hi\n"}    // output, as it happens
 {"type":"result","id":1,"status":"ok","display":{…},"durationMs":3.0}
 {"type":"result","id":1,"status":"error","error":{"ename":…,"evalue":…,"traceback":[…]}}
+{"type":"input_request","id":1,"prompt":"Your name: ","password":false}  // mid-execute
 ```
 
 **Ordering is guaranteed**: every `stream` for a request precedes that
 request's `result`. Clients never have to guess when a cell's output is done.
+An `input_request` obeys the same rule from the other side: everything the
+question is printed under — a `Select` menu, the `Log` lines above it — is on
+the wire before the question.
 
 ### Display bundles
 
@@ -166,11 +194,237 @@ drops it — a cleared definition must not keep answering events. Both
 front-ends behave identically because the dispatch lives in
 `REPLSession`; the terminal REPL benefits equally.
 
-Service-bound handler families — `Socket Event Handler`,
-`WebSocket Event Handler`, `File Event Handler`, `KeyPress Handler` —
-are *not* subscribed. Their events come from a server the session never
-runs; subscribing them would promise dispatch that cannot arrive. Use
-`aro run` for those.
+### Handler families
+
+A business activity says how a feature set is triggered, and a session can
+deliver some of those triggers and not others. The dividing line is **where
+the events come from**:
+
+- An **ARO statement** produces them — `Emit`, `Store`/`Update`/`Delete`,
+  `Accept`, `Notify`, or a file monitor this session started. The session
+  subscribes the handler, and dispatch at the prompt works the way it does
+  under `aro run`.
+- They arrive over a **transport the session does not own** — a TCP server,
+  an HTTP contract, the keyboard. No subscription would make one arrive.
+
+```
+                         +---------------------------+
+   Emit / Store /        |                           |
+   Accept / Notify /     |   the session's EventBus  |-----> handler runs
+   file monitor   ------>|                           |
+                         +---------------------------+
+   TCP peer / WebSocket          (nothing publishes here
+   frame / key press      --X     in a session)        -----> never arrives
+```
+
+| Business activity | In a session |
+|-------------------|--------------|
+| `{EventName} Handler` | dispatched — fires on `Emit` |
+| `{repository} Observer` | dispatched — fires on `Store`, `Update`, `Delete` |
+| `File Event Handler` | dispatched — fires on a change under a path `Start the <file-monitor>` is watching |
+| `StateTransition Handler` / `… StateObserver` | dispatched — fires on `Accept` |
+| `NotificationSent Handler` | dispatched — fires on `Notify` |
+| `Socket Event Handler` | **undelivered** — a session starts no TCP server |
+| `WebSocket Event Handler` | **undelivered** — a session serves no HTTP contract |
+| `KeyPress Handler` | **undelivered** — nothing here reads a raw keyboard (`Prompt`, `Select` and `Ask` do work — see *Interactive input*) |
+| `{repository} Evicted Handler` | **undelivered** — the eviction is published on the runtime's shared bus, not the session's |
+| `… Watch: …` | **undelivered** — a session refreshes no watches (ARO-0083) |
+| `Application-End` | **undelivered** — a session has no shutdown to run it on |
+
+**An undelivered family is named at definition time, not silently accepted.**
+The definition is still kept — it compiles, it is listed by `:fs`, and it can
+be copied into an application unchanged — but the front-end says what will not
+happen and where it will:
+
+```
+Defined (Echo Input: Socket Event Handler) — this session delivers no socket
+events — nothing in a session starts a TCP server; put it in an application
+and `aro run` it
+```
+
+A dispatched family says what makes it fire, for the same reason: "Defined"
+alone reads as "parked". The classification is one function
+(`REPLSession.handlerFamily`), read by `aro repl`, `aro repl --json`,
+`aro kernel`, piped stdin and Solaro alike, so no two front-ends can disagree
+about which family is which.
+
+## Interactive input
+
+`Prompt`, `Select` and `Ask` (ARO-0083 §5.2–5.3) read an answer from the user.
+They used to read it from the process's own terminal and nothing else, so in a
+notebook — where there is no terminal — the statement failed with
+`Service not registered: 'TerminalService'`, which names a Swift type and tells
+the reader nothing they can act on (GitLab #690).
+
+**The terminal is one answerer, not the only possible one.** A front-end driving
+a session already has a channel to its user; a question travels over it the same
+way output does.
+
+```
+   Prompt / Select / Ask
+            |
+            v
+   +--------------------+     no answerer registered
+   | who can answer?    |---------------------------> statement FAILS,
+   +--------------------+                             naming the reason
+      |             |
+      | terminal    | front-end channel
+      v             v
+   the TTY     input_request  -------->  front-end asks its user
+   (aro run,   <--------------  input_reply  (or refuses, or never answers:
+    aro repl)                                the wait is bounded)
+```
+
+### The message pair
+
+Jupyter already has this: `input_request` / `input_reply` on the **stdin
+channel**, which is how `input()` works in IPython. The native kernel bound that
+socket and never used it; it now serves it. The JSON protocol gains the same pair
+of messages, deliberately the same shape — `prompt` and `password` out, `value`
+back — so a kernel sitting between the two is a relay rather than a translator,
+and a reader of one protocol already knows the other.
+
+```jsonc
+// server → client, between an execute request and its result
+{"type":"input_request","id":1,"prompt":"Your name: ","password":false}
+// client → server
+{"id":1,"type":"input_reply","value":"Ada Lovelace"}
+// …or: the user dismissed the prompt and will not answer
+{"id":1,"type":"input_reply","status":"error"}
+```
+
+The `id` is the id of the `execute` that asked, which is what lets a client
+attribute the question to a cell.
+
+### Who may be asked
+
+A client declares it per request, as Jupyter does:
+
+| Front-end | Declares | Default when absent |
+|-----------|----------|---------------------|
+| `aro kernel` (native) | `allow_stdin` on `execute_request` | **false** — ipykernel's own default |
+| `aro repl --json` | `"allowStdin": true` on `execute` | **false** |
+
+False in both cases, and the reason is the same: a client that has never heard of
+`input_request` would be sent one, never reply, and the cell would sit out the
+whole timeout before failing. Opting in costs one field; refusing honestly is the
+default. "Run All Cells" and `nbconvert` send false themselves — there is nobody
+at the keyboard — and get the failure rather than a hang.
+
+### Nobody can answer
+
+The statement **fails**, with a sentence saying which front-end could have
+answered and how to get one:
+
+```
+Runtime Error: Cannot prompt the name with the _expression_. Interactive input is
+not available in this cell: the front-end ran this cell with allow_stdin: false,
+so `Prompt` has nobody to ask. Allow input for the cell and run it again.
+```
+
+Failing is the design, not a shortcut. A cell waiting forever on a question
+nobody will answer cannot be told from a slow one, and interrupting a notebook
+costs the whole session (see *Interrupt*). Every wait therefore has a way out:
+
+- **the reply**, or an `input_reply` that refuses;
+- **the channel closing** — stdin at EOF, a `shutdown` arriving instead of an
+  answer, the kernel's context shutting down;
+- **the timeout**, `ARO_INPUT_TIMEOUT_SECONDS`, 300s by default. `0` waits
+  indefinitely, for a front-end whose user may legitimately take an hour.
+
+A request arriving while a question is open is **refused by name** rather than
+run: the session is one request at a time (see *Limits*), and the refusal says
+to answer the `input_request` first.
+
+### Select without a picker
+
+Neither front-end has a menu widget, so `Select` renders the numbered menu it
+has always rendered — to the cell's output — and asks for a number:
+
+```
+Pick a colour:
+  1. Red
+  2. Green
+  3. Blue
+Enter selection (number): ▁
+```
+
+An out-of-range number selects nothing, as it always has. A front-end that grows
+a real picker overrides one method (`requestChoice`) and keeps `Prompt`
+unchanged.
+
+### What answers today
+
+| Front-end | Interactive input |
+|-----------|-------------------|
+| `aro run`, `aro repl` on a TTY | the terminal, unchanged |
+| `aro kernel` (native) | `input_request` on the stdin channel |
+| `Editor/jupyter-aro` (Python shim) | relayed onto ipykernel's `raw_input` / `getpass` |
+| SOLARO notebooks | not yet — it does not opt in, so a cell gets the explanation (GitLab #912) |
+
+A `KeyPress Handler` stays **undelivered** in a session (see *Handler
+families*), and this is where the line falls: this channel answers a question
+the program asked — one line, on request — while a `KeyPress` handler wants
+unsolicited keystrokes from a raw keyboard, which no front-end offers.
+## The project a session stands in
+
+A session takes an optional project directory, and wires in what `aro run`
+discovers for it:
+
+```
+aro repl ./MyApp
+aro repl --json ./MyApp
+aro kernel --connection-file … --project ./MyApp
+```
+
+| What | Effect in a cell |
+|---|---|
+| `openapi.yaml` | the contract is registered, so route-shaped work and status names behave as they do under `aro run` |
+| `*.store` | seed rows are in the repositories a cell `Retrieve`s from |
+| `templates/` | `Transform the <page> from the <template: hi.tpl>.` finds the file — with a template executor set, since a service without one answers "Template executor not configured" |
+| `Plugins/` | the project's plugin actions and qualifiers resolve (`Greeting.Hello the <h> with …`) |
+| the project's `.aro` files | its feature sets are added through the same `addFeatureSet` a `:load` or a cell definition uses, so handler families register through the one classifier above and `Application.<Name>` calls resolve |
+
+**`Application-Start` and `Application-End` are discovered and not executed.** A
+session is a place to try statements, not a process that boots an application:
+binding ports and starting watchers because a notebook window opened would be a
+surprise, and Solaro opens a project as soon as one does. The count of skipped
+lifecycle feature sets is reported, so it is visible rather than silent.
+
+Each item is wired in independently and a failure in one is a warning, not a
+refusal: a project with a malformed contract still gives you its templates. A
+session is a tool for finding out why something is broken, which it cannot be if
+the breakage stops it from starting.
+
+Without a directory nothing changes — a bare `aro repl` is the session it always
+was (GitLab #691).
+
+## Output with no cell
+
+A handler runs when something outside the notebook says so. A `File Event
+Handler` woken by a file dropped into a watched directory may fire between two
+cells, or while nobody is typing — and its output belongs to no cell at all.
+
+Such output is sent as a `stream` message carrying **no `id`** and an
+`origin`:
+
+```json
+{"type":"stream","origin":"background","name":"stdout","text":"New export landed: harbor.csv\n"}
+```
+
+The alternative — stamping it with whichever request was last seen — says
+something false about causation, and a front-end that has already finalised
+that cell either renders the line under a finished cell or drops it. Neither is
+visible to the user as a mistake, which is what makes it worth a distinct
+message rather than a best guess (GitLab #913).
+
+A front-end should render background output somewhere of its own: a log pane, a
+status area, or appended to the notebook with its origin shown. What it must
+not do is attribute it to a cell.
+
+Output produced *while* a cell is executing still carries that cell's `id`,
+including a handler the cell itself woke — the cell is running, so it is the
+honest owner even when it is not the cause.
 
 ## Output capture
 
@@ -211,10 +465,12 @@ Threading follows libzmq's one-socket-one-thread rule: heartbeat echoes
 on its own thread, control has its own so shutdown stays answerable
 mid-cell, shell recv/handle/reply sequentially (one request at a time
 *is* the protocol), and iopub — written by both the shell thread and the
-output-capture readers — is serialized by a lock. Output capture is the
-same descriptor-redirection machinery the JSON server uses, sentinel
-drain included, so every `stream` for a cell is on iopub before that
-cell's reply.
+output-capture readers — is serialized by a lock. Stdin is confined to a
+serial queue of its own, because an `input_request` is raised *by* the
+cell the shell thread is blocked on. Output capture is the same
+descriptor-redirection machinery the JSON server uses, sentinel drain
+included, so every `stream` for a cell is on iopub before that cell's
+reply.
 
 Windows is excluded — the kernel shares the REPL's POSIX capture
 machinery. Use the Python shim there.
@@ -225,7 +481,9 @@ An `ipykernel` subclass owning one `aro repl --json` subprocess;
 `jupyter_client` handles ZMQ, signing, heartbeat. It predates the native
 kernel and remains the Windows path and the reference client for the
 JSON protocol. It does no ARO parsing — everything language-shaped stays
-on the ARO side.
+on the ARO side. An `input_request` is relayed onto ipykernel's own
+`raw_input` / `getpass`, which is the same stdin channel the native
+kernel speaks directly.
 
 ### Interrupt
 
@@ -283,12 +541,18 @@ front-end.
 
 ## Limits
 
-- **Service-bound handlers do not fire.** Domain event handlers dispatch
-  (see *Event dispatch* above), but `Socket` / `WebSocket` / `File` /
-  `KeyPress` handler families need a running service the session never
-  starts — use `aro run` for those.
+- **Transport-bound handlers do not fire.** `Socket`, `WebSocket` and
+  `KeyPress` handlers — plus repository evictions, watches and
+  `Application-End` — need something a session does not own, so they are
+  reported as undelivered when defined rather than waited for (see *Handler
+  families* above). Everything an ARO statement can trigger dispatches.
 - **One request at a time.** `REPLSession` is not internally synchronised, and
-  the protocol is request/response; concurrent requests are not supported.
+  the protocol is request/response; concurrent requests are not supported. An
+  open `input_request` is part of its cell's request, so a second request sent
+  before the answer is refused rather than queued (see *Interactive input*).
+- **No input widget.** `Select` renders a numbered menu and reads a number;
+  neither front-end offers a real picker, and SOLARO does not opt into input at
+  all yet.
 
 ## Completion & inspection
 

@@ -1,0 +1,27 @@
+# Type: console
+# Command: aro run ./Examples/CurrencyAmounts
+#
+# Asserted in BOTH modes against this one file, which is the point of the
+# example: the compiled path has its own expression evaluator, and the
+# `as <Type>` annotation reaches it over a different channel than the
+# interpreter's (GitLab #906). A divergence here is a build failure.
+#
+# The `float` line is deliberate. It is the same multiplication without the
+# annotation, and the contrast with the line under it is the whole lesson.
+---
+float      7.199999999999999
+currency   7.2
+decimal    7.2
+plus fee   8.25
+10.00 / 3  3.333333
+6.00 / 2   3.0
+revenue    99.95
+fixed      7.20
+orders,region,revenue
+5,EMEA,99.95
+{
+  "orders" : 5,
+  "region" : "EMEA",
+  "revenue" : 99.95
+}
+[OK] startup

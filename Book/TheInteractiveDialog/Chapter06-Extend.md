@@ -44,27 +44,63 @@ set than the one you typed into.
 `${<name>}` interpolates a binding into a string literal. It works anywhere a
 string does.
 
-**Only domain handlers subscribe.** A feature set whose activity is
-`{EventName} Handler` is wired to the session's event bus when you define it.
-The service-bound families — `File Event Handler`, `Socket Event Handler`,
-`WebSocket Event Handler`, `KeyPress Handler` — are deliberately not, because
-their events belong to a service the session does not own. You can start a file
-monitor from the prompt and watch it log:
+**What a definition will do, the prompt tells you.** Whatever you can trigger
+with a statement, the session dispatches — `{EventName} Handler` on `Emit`,
+`{repository} Observer` on a `Store`, `StateTransition Handler` on an `Accept`,
+`NotificationSent Handler` on a `Notify`, and `File Event Handler` on a change
+under a directory you are watching. The prompt says which:
+
+```
+aro> (Report Drop: File Event Handler) {
+(Report Drop)>     Extract the <dropped> from the <event: path>.
+(Report Drop)>     Log "arrived: ${dropped}" to the <console>.
+(Report Drop)>     Return an <OK: status> for the <ingestion>.
+(Report Drop)> }
+Feature set 'Report Drop' defined
+  fires on changes under a path this session watches — Start the <file-monitor> first
+```
+
+Start the monitor and the handler runs on the next change:
 
 ```
 aro> Start the <file-monitor> with "./data".
-[FileMonitor] Watching: ./data
+=> OK
+arrived: ./data/notes.txt
+```
+
+The families a session *cannot* deliver say so instead of pretending. A
+`Socket Event Handler`, a `WebSocket Event Handler` or a `KeyPress Handler`
+needs a TCP server, an HTTP contract or a raw keyboard — none of which belongs
+to a session — so the prompt keeps the definition and names what will not
+happen:
+
+```
+aro> (Echo Input: Socket Event Handler) {
+...
+Feature set 'Echo Input' defined
+  this session delivers no socket events — nothing in a session starts a TCP
+  server; put it in an application and `aro run` it
+```
+
+That line is the whole difference between a handler that is waiting and a
+handler that is dead. Copy the definition into a directory and `aro run` it,
+unchanged.
+
+A key press is unsolicited, which is why that family needs a terminal. *Asking*
+for an answer is a different thing, and it works everywhere:
+
+```
+aro> Prompt the <name> with "Your name: ".
+Your name: Ada Lovelace
 => OK
 ```
 
-…and a moment later, when something changes:
-
-```
-[FileMonitor] Created: ./data/notes.txt
-```
-
-But a `File Event Handler` you define here will not run. For handler-driven
-file work, write a directory and `aro run` it.
+At this prompt the keyboard answers directly. In a notebook the question goes
+to the front-end, which asks its own user and sends the answer back — the same
+statement, a different answerer (ARO-0091 §Interactive input). Where *nobody*
+can answer — a cell run with input disabled, a piped script — the statement
+fails and says so, because a prompt waiting on an answer that will never come
+is indistinguishable from a program thinking hard.
 
 ## Git
 

@@ -127,7 +127,7 @@ The `when` guard makes individual statements conditional:
 Emit a <QueueUrl: event> with { url: <url> } when <url> contains <base-domain>.
 ```
 
-For iteration, `for each` iterates over collections (with an optional `parallel` modifier), `for <i> from <start> to <end>` handles numeric ranges, and `while <condition>` handles unbounded iteration. `Break` exits the innermost loop.
+For iteration, `for each` iterates over collections (with an optional `parallel` modifier) and over range values — `for each <n> in 1->10` counts one to ten, both ends included — while `for <i> from <start> to <end>` is the older counting statement, whose upper bound is exclusive, and `while <condition>` handles unbounded iteration. `Break` exits the innermost loop.
 
 ### 3.6 The Happy Path
 

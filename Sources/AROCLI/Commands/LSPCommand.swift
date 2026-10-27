@@ -57,8 +57,7 @@ struct LSPCommand: ParsableCommand {
         // --stdio is accepted for compatibility with VSCode language client
         // but stdio is already the default and only transport
         let server = AROLanguageServer(debug: debug)
-        // Run synchronously using RunLoop to avoid async runtime issues
-        server.runStdioSync()
+        server.runStdio()
     }
 }
 #endif

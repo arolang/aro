@@ -46,19 +46,25 @@ struct PluginSymbolRenamerTests {
     /// Both must produce the same file names and the same renamed symbols —
     /// that equivalence is what makes the batching in GitLab #716 safe.
     @Test("Batched and per-file renaming agree", .enabled(if: Toolchain.available))
-    func batchedAndPerFileAgree() throws {
-        let renamer = PluginSymbolRenamer()
-
+    func batchedAndPerFileAgree() async throws {
         for count in [3, PluginSymbolRenamer.archiveBatchThreshold + 4] {
             let work = try Toolchain.makeTempDir()
             defer { try? FileManager.default.removeItem(at: work) }
 
-            let objects = try Toolchain.makeObjectFiles(count: count, in: work)
-            let outDir = work.appendingPathComponent("out")
-            try FileManager.default.createDirectory(at: outDir, withIntermediateDirectories: true)
+            // clang, llvm-objcopy, llvm-ar and nm are all subprocesses the
+            // test waits for, so that part runs off the cooperative pool (see
+            // `offThePool`); the assertions stay on the test's own task.
+            let (renamed, symbols, dump) = try await offThePool {
+                let renamer = PluginSymbolRenamer()
+                let objects = try Toolchain.makeObjectFiles(count: count, in: work)
+                let outDir = work.appendingPathComponent("out")
+                try FileManager.default.createDirectory(at: outDir, withIntermediateDirectories: true)
 
-            let renamed = try renamer.renamePluginSymbols(
-                objectFiles: objects, pluginName: "demo", outputDir: outDir.path)
+                let renamed = try renamer.renamePluginSymbols(
+                    objectFiles: objects, pluginName: "demo", outputDir: outDir.path)
+                let symbols = try renamer.discoverSymbols(in: renamed, pluginName: "demo")
+                return (renamed, symbols, Toolchain.nm(renamed))
+            }
 
             #expect(renamed.count == count)
             for (index, path) in renamed.enumerated() {
@@ -69,10 +75,8 @@ struct PluginSymbolRenamerTests {
 
             // The renamed symbol must actually be in the objects, and the
             // original must be gone — otherwise two plugins would still collide.
-            let symbols = try renamer.discoverSymbols(in: renamed, pluginName: "demo")
             #expect(symbols.contains("aro_plugin_info"))
 
-            let dump = Toolchain.nm(renamed)
             #expect(dump.contains("aro_static_demo__aro_plugin_info"))
             #expect(!dump.contains(" _aro_plugin_info\n") && !dump.contains(" aro_plugin_info\n"))
         }

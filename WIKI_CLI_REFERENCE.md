@@ -55,6 +55,7 @@ aro build [options] <path>
 | `-v, --verbose` | Verbose logging |
 | `--keep-intermediate` | Keep `.ll` and `.o` |
 | `--emit-llvm` | Emit LLVM IR text instead of a binary |
+| `--tests` | Build a **test-harness** binary: keep the test feature sets and run them instead of `Application-Start` (ARO-0015 §3.4). This is what `aro test --compiled` builds |
 | `--sign <identity>` | Code-signing identity, or `-` for ad-hoc |
 | `--hardened-runtime` | Enable hardened runtime (needed for notarization) |
 
@@ -85,8 +86,15 @@ qualifier does.
 ## `aro test` — run colocated tests
 
 ```
-aro test <path> [-v] [--filter <pattern>] [--no-color] [--record <file>]
+aro test <path> [-v] [--filter <pattern>] [--no-color] [--record <file>] [--compiled]
 ```
+
+`--compiled` builds a test-harness binary (`aro build --tests`) and runs the
+same test feature sets through it, instead of the interpreter (ARO-0015 §3.4).
+The interpreter is the default; `--compiled` is what tells you whether the
+binary you ship behaves like the program you tested. `--record` is
+interpreter-only, and `--compiled` needs `aro build`, so it is unavailable on
+Windows.
 
 ## `aro diff` — compare feature graphs
 
@@ -102,23 +110,52 @@ too.
 ## `aro repl` — interactive
 
 ```
-aro repl [-l, --load <file>] [--no-color] [--json]
+aro repl [<project>] [-l, --load <file>] [--no-color] [--json]
 ```
 
 `--json` speaks line-delimited JSON on stdio (ARO-0091) instead of running a
-terminal REPL. These three are the only flags; ARO-0049 lists others that were
-never implemented.
+terminal REPL.
+
+A project directory wires in what `aro run` discovers for it — `openapi.yaml`,
+`.store` seed rows, `templates/`, project plugins and the project's own feature
+sets — **without executing `Application-Start`**, because a session is not a run
+(GitLab #691). Each item is independent: a malformed contract is a warning and
+the rest still loads. Without a directory, nothing changes.
+
+```
+aro repl ./MyApp
+Project: MyApp
+  contract: 3 path(s) from openapi.yaml
+  stores: 12 row(s) in 2 repositories
+  templates: templates/
+  feature sets: 7 from 3 file(s)
+  lifecycle: 1 Application-Start/End not run
+```
+
+ARO-0049 lists other flags that were never implemented.
+
+A `--json` client that wants `Prompt`, `Select` or `Ask` to work sends
+`"allowStdin": true` with its `execute` and answers the server's
+`input_request` with an `input_reply`. Without it those statements fail with an
+explanation rather than waiting — see ARO-0091 §Interactive input, and
+`ARO_INPUT_TIMEOUT_SECONDS` for the bound on a wait.
 
 ## `aro kernel` — Jupyter
 
 ```
-aro kernel [--connection-file <file>]
+aro kernel [--connection-file <file>] [--project <dir>]
 aro kernel install
 ```
 
 `install` writes the kernelspec into the user's Jupyter kernels directory; the
 front end then launches `aro kernel --connection-file …`. Native ZMQ, no Python
-needed.
+needed. `--project` is the same project wiring `aro repl` takes, for a notebook
+that belongs to an application.
+
+`Prompt`, `Select` and `Ask` work in a cell: the kernel serves Jupyter's
+`input_request` / `input_reply` on the stdin channel, the same mechanism behind
+`input()` in IPython. A cell run with `allow_stdin: false` — "Run All Cells",
+`nbconvert` — gets a failed statement naming the reason instead of a hang.
 
 ## `aro debug` — step-debug
 

@@ -233,13 +233,21 @@ Transform data or make decisions entirely within the feature set.
 **Verbs:** `compute` · `calculate` · `derive`
 **Prepositions:** `from` · `for` · `with`
 
-Performs arithmetic, string operations, or built-in transformations. Supports `+`, `-`, `*`, `/`, `%` and qualifiers like `length`, `uppercase`, `lowercase`, `hash`, `count`, `intersect`, `difference`, `union`.
+Performs arithmetic, string operations, or built-in transformations. Supports `+`, `-`, `*`, `/`, `%` and qualifiers like `length`, `uppercase`, `lowercase`, `hash`, `count`, `fixed`, `intersect`, `difference`, `union`.
+
+Money is made exact with the `as Currency` clause on the result, not with a
+qualifier: `Currency` is exact base-10 arithmetic, so `3 * 2.40` is `7.20`
+rather than `Float`'s `7.199999999999999`. The exactness is contagious — a
+statement reading an exact amount stays exact without the annotation — so an
+amount is computed once and every aggregate agrees about it. `fixed` is the
+separate lever that settles a *presentation* scale (`with { places: N }`, 2 by
+default). See ARO-0003 §Primitive Types and ARO-0019 §3.2.1.
 
 ```aro
 (calculateInvoice: Invoice API) {
     Extract the <items> from the <request: body>.
-    Reduce the <subtotal: sum> from the <items: price>.
-    Compute the <tax> from <subtotal> * 0.2.
+    Reduce the <subtotal> as Currency from the <items> with sum(<price>).
+    Compute the <tax> as Currency from <subtotal> * 0.2.
     Compute the <total> from <subtotal> + <tax>.
     Create the <invoice> with { subtotal: <subtotal>, tax: <tax>, total: <total> }.
     Return an <OK: status> with <invoice>.
@@ -296,6 +304,10 @@ Compares two values and binds a Boolean result.
 **Prepositions:** `from` · `into` · `to`
 
 Converts a value from one type or format to another. Qualifiers: `int`, `string`, `float`, `bool`, `date`, `json`, `markdown`.
+
+`float` is binary (IEEE 754). For a money string that has to stay exact, bind
+it and compute `as Currency` instead — `Transform … float` is the right call
+only when a `Float` is what you want.
 
 ```aro
 (processOrder: Order API) {
@@ -427,6 +439,12 @@ Transforms each element in a collection using a qualifier or field accessor.
 **Prepositions:** `from` · `with`
 
 Aggregates a collection into a single value. Qualifiers: `sum`, `avg`, `count`, `min`, `max`, `first`, `last`.
+
+An aggregate over a money column is written `as Currency`, which adds the
+column in base 10: `Reduce the <revenue> as Currency from the <orders> with
+sum(<total>).` A `sum` of amounts that are already exact is exact anyway, so
+the annotation is only needed where the column arrived as `Float` — from a
+file, a database, or a plugin.
 
 ```aro
 (getSalesReport: Report API) {

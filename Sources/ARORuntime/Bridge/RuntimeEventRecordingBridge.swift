@@ -181,6 +181,27 @@ public func aro_register_user_action(
                 context: context
             )
 
+            // The caller's statement modifiers are spent: `buildCompiledUserActionInput`
+            // above has just read the `with` clause, and that is the only thing
+            // entitled to it. Clear them before the callee runs, or it inherits
+            // them (GitLab #887).
+            //
+            // The interpreter cannot have this problem. There, framework
+            // variables live in a per-statement scope that the callee is never
+            // handed, so the caller's `_with_` is gone by construction. A
+            // compiled binary has no statement scopes — the generated code binds
+            // them straight onto the feature set's own context, which for
+            // `Application-Start` IS the application root. A callee marks itself
+            // a call-frame root and so jumps *to that root* on lookup, skipping
+            // the caller's locals exactly as intended — and landing on the one
+            // context where the modifiers are sitting.
+            //
+            // So `Application.IngestOrders the <bronze> with { }.` left an empty
+            // map in `_with_`, and the first `Store … into the <repo>.` inside
+            // the callee read it as an inline payload (#515) and stored that
+            // instead of the record. Six rows became one, with no error.
+            context.clearTransientFrameworkVariables()
+
             // Spawn a fresh runtime context for the callee, parented to
             // the caller so services and globals stay reachable.
             let childContext = RuntimeContext(
@@ -273,19 +294,16 @@ private func buildCompiledUserActionInput(
 /// context and flatten it into the dict shape callers see from plugin
 /// and interpreter user-actions.
 ///
-/// Field values come from `structuredData` where `Return` recorded it, so a
-/// compiled binary hands lists and records back structured exactly like the
-/// interpreter does (GitLab #504). `Return` runs through the same
-/// `ReturnAction` in both modes, so there is one place where that record is
-/// made and both call sites read it.
+/// Field values are the response payload, so a compiled binary hands lists and
+/// records back structured exactly like the interpreter does (GitLab #504).
+/// `Return` runs through the same `ReturnAction` in both modes, so there is one
+/// place where the payload is recorded and both call sites read it — and since
+/// GitLab #711 there is only one payload to read.
 private func flattenCompiledUserActionResponse(_ context: RuntimeContext) -> [String: any Sendable] {
     guard let response = context.getResponse() else { return [:] }
     var dict: [String: any Sendable] = ["status": response.status]
     if !response.reason.isEmpty { dict["reason"] = response.reason }
-    for (key, anySendable) in response.data {
-        if let value: any Sendable = anySendable.get() { dict[key] = value }
-    }
-    for (key, value) in response.structuredData { dict[key] = value }
+    for (key, value) in response.payload { dict[key] = value }
     return dict
 }
 

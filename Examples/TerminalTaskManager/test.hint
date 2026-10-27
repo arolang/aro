@@ -1,5 +1,12 @@
 # TerminalTaskManager uses Keepalive for event loop
 # Timeout is expected behavior - application stays alive until Ctrl+C
+#
+# The dashboard is complete well inside a second: the three renders finish by
+# ~0.8 s and the two Log lines follow. It was 10 s for a while because the
+# compiled binary appeared to take ~3.4 s to produce them — that was `Render`
+# output sitting in a stdio buffer until process exit, not work taking time
+# (GitLab #891). With `Render` flushing like `Log`, the original budget is
+# three times what the example needs again.
 timeout: 3
 mode: both
 # Binary mode outputs return value fields that interpreter doesn't

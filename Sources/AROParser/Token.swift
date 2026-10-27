@@ -24,7 +24,7 @@ public enum TokenKind: Sendable, Equatable, CustomStringConvertible {
     case semicolon          // ;
     case atSign             // @
     case question           // ?
-    case arrow              // ->
+    case arrow              // -> (the range operator, ARO-0089)
     case fatArrow           // =>
     case equals             // =
     case pipe               // |> (ARO-0067 pipeline operator)

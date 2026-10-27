@@ -123,6 +123,36 @@ extension AROError {
            case .unknownComputation = actionError {
             return actionError.description
         }
+        // GitLab #690. `Cannot prompt the name with the _expression_.` is a
+        // faithful rendering of the statement and tells a notebook user
+        // nothing: the statement is fine, there is simply nobody at the other
+        // end of it. The whole content of this failure is which front-end
+        // could have answered and did not.
+        if let actionError = error as? ActionError,
+           case .interactiveInputUnavailable = actionError {
+            return actionError.description
+        }
+        // GitLab #843. Without this the user sees only "Cannot extract the
+        // item: 5 from the short" — true, and silent about the one fact
+        // that explains it.
+        if let actionError = error as? ActionError,
+           case .indexOutOfBounds = actionError {
+            return actionError.description + "."
+        }
+        // A failed test expectation (ARO-0015 §2.3, §2.4). `Cannot then the
+        // <difference> with the 15.` reads perfectly well and says nothing
+        // about the 20 that was actually there — and the comparison is the
+        // entire content of the failure.
+        //
+        // It matters most compiled. `TestRunner` catches the `AssertionError`
+        // itself and reads `.message` off it, but a compiled binary has no
+        // executor to catch anything: the bridge turns the thrown error into a
+        // message string and the type is gone by the time `aro test --compiled`
+        // reports it (GitLab #694). Curating it here is what keeps the two
+        // modes' failure text the same sentence.
+        if let assertion = error as? AssertionError {
+            return assertion.message + "."
+        }
         return nil
     }
 }
@@ -173,6 +203,15 @@ public enum ActionError: Error, Sendable {
     /// Required service not registered
     case missingService(String)
 
+    /// `Prompt`, `Select` or `Ask` had nobody to ask (GitLab #690).
+    ///
+    /// Its own case rather than `missingService("TerminalService")`,
+    /// because the honest answer is a front-end one — "there is no
+    /// terminal and this front-end offered no input channel" — and the
+    /// name of a Swift type is not that. `reason` is already the complete
+    /// sentence (`InteractiveInputError.description`).
+    case interactiveInputUnavailable(reason: String)
+
     /// Repository not found
     case undefinedRepository(String)
 
@@ -193,6 +232,13 @@ public enum ActionError: Error, Sendable {
     /// replace the message that says what actually happened with the last
     /// statement that noticed.
     case callDepthExceeded(String)
+
+    /// An element index past the end of a list (GitLab #843).
+    ///
+    /// Its own case so the reason survives into the user's error. The
+    /// statement reconstruction says *which* statement failed; only this
+    /// says why, and "index 5 on a 2-element list" is the whole diagnosis.
+    case indexOutOfBounds(index: Int, count: Int)
 
     /// A Compute qualifier that resolves to no built-in, no
     /// registered plugin qualifier and no date offset (GitLab #486).
@@ -268,6 +314,8 @@ extension ActionError: CustomStringConvertible {
             return "Invalid preposition '\(received.rawValue)' for action '\(action)'. Expected: [\(expectedStr)]"
         case .missingService(let name):
             return "Service not registered: '\(name)'"
+        case .interactiveInputUnavailable(let reason):
+            return reason
         case .undefinedRepository(let name):
             return "Repository not found: '\(name)'"
         case .typeMismatch(let expected, let actual, let variable):
@@ -281,6 +329,12 @@ extension ActionError: CustomStringConvertible {
             return "Unknown action verb: '\(verb)'"
         case .callDepthExceeded(let message):
             return "Runtime Error: \(message)"
+        case .indexOutOfBounds(let index, let count):
+            if count == 0 {
+                return "index \(index) on an empty list"
+            }
+            return "index \(index) is past the end of a \(count)-element list "
+                + "(valid indices are 0 to \(count - 1))"
         case .unknownComputation(let name, let known, let chain):
             var message = "Unknown Compute qualifier: '\(name)'"
             if let chain {

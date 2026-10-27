@@ -12,6 +12,24 @@ const cssContent = fs.readFileSync(path.join(__dirname, 'styles.css'), 'utf8');
 
 // Category colors for visual distinction
 const categoryColors = {
+  // Added when the set grew to a full year: without an entry a category
+  // falls back to one shared purple, and half of them were doing so.
+  Concurrency: '#0891b2',
+  Control: '#c2410c',
+  Errors: '#b91c1c',
+  Expressions: '#7e22ce',
+  Immutability: '#0f766e',
+  Literals: '#a16207',
+  Loops: '#1d4ed8',
+  Match: '#9333ea',
+  Metrics: '#15803d',
+  Operators: '#be185d',
+  REPL: '#0369a1',
+  Repositories: '#4d7c0f',
+  Runtime: '#57534e',
+  Scoping: '#7c2d12',
+  Tooling: '#475569',
+  Types: '#065f46',
   'Syntax': '#7c3aed',
   'HTTP': '#06b6d4',
   'Events': '#f472b6',

@@ -104,6 +104,10 @@ public enum SendableConverter {
             return int
         case let double as Double:
             return double
+        case let exact as AROCurrency:
+            // Carried through; the JSON writer spells it exactly
+            // (GitLab #906).
+            return exact
         case let bool as Bool:
             return bool
         case let dict as [String: any Sendable]:

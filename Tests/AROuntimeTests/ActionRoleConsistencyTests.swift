@@ -115,6 +115,8 @@ struct ActionRoleConsistencyTests {
         // (ARO-0094, GitLab #885);
         // 74 since Declare folded back into Configure (GitLab #886) — a
         // repository's scope is a Configure setting, next to its ttl.
-        #expect(ActionRegistry.shared.allBuiltInActionInfos.count == 74)
+        // 75 since Deliver separated the awaited delivery from Emit, which
+        // hands its event over and continues (GitLab #905).
+        #expect(ActionRegistry.shared.allBuiltInActionInfos.count == 75)
     }
 }

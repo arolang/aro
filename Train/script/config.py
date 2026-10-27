@@ -239,6 +239,66 @@ TYPE_CAPS = {
 }
 DEFAULT_TYPE_CAP = None   # uncapped by default for any new task types
 
+
+# ── Cap selection by quality, not by insertion order (#806's second half) ────
+# The changelog above says it: the cap is applied first-N-wins in insertion
+# order, so *which* rows survive is decided by which notebook happened to save
+# its data first. Once the recovery stages (NB36/NB37) append execution-graded
+# applications at the end of the corpus, first-N-wins would drop them first —
+# precisely the pairs that cost the most to make and teach the most. Selection
+# within a cap is now by recorded quality.
+
+def cap_rank(sample) -> tuple:
+    """The key a capped task type's samples sort by, best first.
+
+    Two signals, in the order data provenance puts them: the sample's own
+    validated score (the `score` NB15 and the generation gates record), then
+    the source's quality-table entry. Both rounded so a float-ish 0.9000001
+    does not outrank 0.9 and shuffle the dataset between runs.
+    """
+    try:
+        score = float(sample.get('score', 1.0))
+    except (TypeError, ValueError):
+        score = 1.0
+    quality = source_quality_score(sample.get('source') or '',
+                                   sample.get('notebook'))
+    return (round(score, 4), round(quality, 4))
+
+
+def select_within_caps(samples, caps=None, default_cap=None):
+    """(kept, drops) — the caps applied by `cap_rank`, not by arrival order.
+
+    Everything except the selection is unchanged: the counts per task type and
+    the drop accounting shapes are the same as before, so the funnel report
+    and the share checks read the same. Within one capped type the top `cap`
+    samples by (score, source quality) survive; ties fall back to input order,
+    so equal titles keep the dataset deterministic across runs.
+    """
+    caps = TYPE_CAPS if caps is None else caps
+    default_cap = DEFAULT_TYPE_CAP if default_cap is None else default_cap
+    order = list(enumerate(samples))
+    by_type = {}
+    for idx, s in order:
+        t = s.get('task_type', 'unknown')
+        by_type.setdefault(t, []).append((idx, s))
+
+    kept_index = set()
+    for t, items in by_type.items():
+        cap = caps.get(t, default_cap)
+        if cap is None:
+            kept_index.update(i for i, _ in items)
+            continue
+        best = sorted(items, key=lambda it: (
+            tuple(-x for x in cap_rank(it[1])), it[0]))[:cap]
+        kept_index.update(i for i, _ in best)
+
+    kept = [s for i, s in order if i in kept_index]
+    drops = _Counter()
+    for i, s in order:
+        if i not in kept_index:
+            drops[f'cap_exceeded:{s.get("task_type", "unknown")}'] += 1
+    return kept, drops
+
 # ── Hyper-parameters (GitLab #795) ───────────────────────────────────────────
 # Every training stage used to declare its own constants in its own notebook.
 # Eight notebooks then disagreed with each other, and — worse — disagreed about
@@ -425,7 +485,18 @@ DISTILL_MODELS_DIR = MODELS_DIR / 'distill'
 # Use a non-quantized base. LoRA-on-4bit-base + fuse is fragile in MLX-LM and
 # has produced collapsed students (output of only `!`). BF16 is fully reliable;
 # fall back to `mlx-community/Qwen3-8B-8bit` (8.7 GB) if training OOMs.
-STUDENT_MODEL_ID = 'mlx-community/Qwen3-8B-bf16'
+#
+# The id resolves from the run's environment (ARO_TRAIN_STUDENT_MODEL_ID): the
+# OOM fallback and the #794 A/B winners are run decisions, not source edits —
+# switching should not mean dirtying this file mid-pipeline. The flag travels
+# with the id so a notebook can print where its student came from.
+STUDENT_MODEL_ID_DEFAULT = 'mlx-community/Qwen3-8B-bf16'
+STUDENT_MODEL_OVERRIDDEN = bool(
+    os.environ.get('ARO_TRAIN_STUDENT_MODEL_ID', '').strip())
+if not STUDENT_MODEL_OVERRIDDEN:
+    STUDENT_MODEL_ID = STUDENT_MODEL_ID_DEFAULT
+else:
+    STUDENT_MODEL_ID = os.environ['ARO_TRAIN_STUDENT_MODEL_ID'].strip()
 
 # ── Model ─────────────────────────────────────────────────────────────────────
 # TRAIN_ON_BASE controls whether to train from the base Qwen model (True) or
@@ -475,7 +546,15 @@ BASE_MODEL_CANDIDATES = [
 # failure above is training-time; inference on a sparse model is stable and
 # cheap (3B active). Keeping the teacher but not training it drops ~60 GB of
 # memory pressure and both failure modes without giving up distillation.
-TEACHER_IS_INFERENCE_ONLY = True
+#
+# Training the teacher (stages 18/19 — the full fine-tune and the preference
+# SFT) is opt-in: ARO_TRAIN_TRAIN_TEACHER=1 puts the flag down, which also
+# releases the meta pipeline's default skips for those stages and passes the
+# stage guards. Default stays inference-only — there is nothing to guard
+# against when the training job is never asked for.
+TEACHER_IS_INFERENCE_ONLY = (
+    os.environ.get('ARO_TRAIN_TRAIN_TEACHER', '').strip().lower()
+    not in ('1', 'true', 'yes'))
 
 
 def base_model_candidates():
@@ -1735,6 +1814,110 @@ def _normalize_aro_whitespace(text: str) -> str:
     return _MISSING_SPACE_BEFORE_ANGLE_RE.sub(r'\1 <\2', text)
 
 
+# ── Canonicalization: spell the language the registry spells it (#806) ───────
+#
+# Two families of drift show up in everything the model generates and in
+# several mineable corpora:
+#
+#   1. alias verbs — `Build`, `Remove`, `Exec` — several of which the catalog
+#      lists as full aliases of one canonical action. Both spellings check
+#      green, so no gate can tell them apart; the registry is keyed by the
+#      canonical verb and the action reference uses it, so the corpus should
+#      too.
+#   2. `Store <x> in the <y>.` — `in` is a keyword, not a preposition; the
+#      checker says `Expected preposition, but got the keyword 'in'` and the
+#      statement never parses. The catalog's prepositions for Store/Write/
+#      Append are `into` (and `to`), so `in` is one letter away from the
+#      statement the author meant.
+#
+# Canonicalization is OFF by default (`ARO_TRAIN_CANONICALIZE=1` to enable)
+# for two reasons. Rejected halves of preference pairs must stay aligned
+# with their chosen halves — rewriting one side only would manufacture
+# second differences; and a global rewrite of a frozen corpus is a
+# provenance event, not a cleaning pass. New generation stages (36/37)
+# apply it explicitly to generated code before grading, so what lands in
+# the corpus is canonical from day one.
+
+_CANONICALIZE_ON = ('1', 'true', 'yes', 'on')
+
+
+def canonicalize_enabled() -> bool:
+    """Training-data canonicalization is env-gated; default is off."""
+    return os.environ.get('ARO_TRAIN_CANONICALIZE', '').strip().lower() \
+        in _CANONICALIZE_ON
+
+
+def _canonical_verb_map() -> dict:
+    """alias → canonical verb, from the committed action catalog.
+
+    First canonical wins on a name collision; the file is static so the
+    mapping is stable between runs.
+    """
+    try:
+        import extract_action_catalog
+        catalog = extract_action_catalog.load()
+    except Exception:
+        return {}
+    verb_map = {}
+    for canon_key, meta in catalog.items():
+        for alias in meta.get('aliases', []):
+            a = alias.lower()
+            if a and a != canon_key.lower() and a not in verb_map:
+                verb_map[a] = canon_key
+    return verb_map
+
+
+# Statement-leading alias verbs: '    Build the <app> for the <x>.'
+# (A name of its own — _STATEMENT_VERB_RE is already taken further
+# down for verb-position checks in the verifier.)
+_CANON_ALIAS_VERB_RE = _re.compile(r'^([ \t]*)([A-Z][A-Za-z]+)\b', _re.MULTILINE)
+
+# `Store the <x> in the <kv>.` / `Store <x> in <kv>.` — the keyword `in`
+# after the storage verbs, always directly before the destination object.
+_STORE_INTO_RE = _re.compile(
+    r'\b(Store|Write|Append)\b([^\n]*?)[ \t]in\b(?=[ \t]+(?:the[ \t]+|an?[ \t]+)?<)',
+    _re.IGNORECASE)
+
+
+def canonicalize_aro_code(code: str) -> str:
+    """One canonical spelling, applied where it is unambiguous.
+
+    Alias verbs become their canonical verb; `Store/Write/Append … in …`
+    becomes `… into …`. Qualifier slots, `<object>` names, and feature-set
+    declarations are left alone — the verb position is the only thing the
+    catalog actually speaks about. Verbs already canonical pass through
+    byte for byte, so the function is idempotent.
+    """
+    if not code or not code.strip():
+        return code
+
+    verb_map = _canonical_verb_map()
+    if verb_map:
+        out = []
+        last = 0
+        for m in _CANON_ALIAS_VERB_RE.finditer(code):
+            canonical = verb_map.get(m.group(2).lower())
+            out.append(code[last:m.start()])
+            if canonical:
+                out.append(m.group(1) + canonical.capitalize())
+                last = m.end()
+            else:
+                last = m.start()
+        out.append(code[last:])
+        code = ''.join(out)
+
+    return _STORE_INTO_RE.sub(lambda m: f"{m.group(1)}{m.group(2)} into", code)
+
+
+_ARO_FENCE_RE = _re.compile(r'```aro\n(.*?)```', _re.DOTALL)
+
+
+def _canonicalize_fenced(text: str) -> str:
+    """Canonicalize every ```aro fenced block inside a longer text."""
+    return _ARO_FENCE_RE.sub(
+        lambda m: '```aro\n' + canonicalize_aro_code(m.group(1)) + '```', text)
+
+
 # Qwen3's chat template injects an empty `<think>\n\n</think>\n\n` block
 # before every assistant turn when the assistant content does not already
 # contain reasoning. Fine-tuning on text rendered this way teaches the
@@ -1809,16 +1992,29 @@ def patch_qwen3_chat_template(tokenizer):
 
 
 def _normalize_pair(pair: dict) -> dict:
-    """Apply `_normalize_aro_whitespace` to every string field in a pair."""
+    """Apply `_normalize_aro_whitespace` to every string field in a pair.
+
+    When `ARO_TRAIN_CANONICALIZE` is on, ```aro fenced blocks in the
+    *answer* fields (and assistant turns) also go through
+    `canonicalize_aro_code`. Instruction text is deliberately untouched:
+    an instruction that says "Store the file in the repo" is the user's
+    sentence, not code.
+    """
     for key in ('instruction', 'output', 'input', 'prompt', 'response'):
         v = pair.get(key)
         if isinstance(v, str):
-            pair[key] = _normalize_aro_whitespace(v)
+            v = _normalize_aro_whitespace(v)
+            if key in ('output', 'response') and canonicalize_enabled():
+                v = _canonicalize_fenced(v)
+            pair[key] = v
     msgs = pair.get('messages')
     if isinstance(msgs, list):
         for msg in msgs:
             if isinstance(msg, dict) and isinstance(msg.get('content'), str):
-                msg['content'] = _normalize_aro_whitespace(msg['content'])
+                content = _normalize_aro_whitespace(msg['content'])
+                if canonicalize_enabled() and msg.get('role') == 'assistant':
+                    content = _canonicalize_fenced(content)
+                msg['content'] = content
     return pair
 
 

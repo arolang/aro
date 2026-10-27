@@ -264,16 +264,39 @@ public struct StartAction: ActionImplementation {
                   let dirPath = objectConfig["directory"] as? String {
             path = dirPath
         }
-        // Priority 4: Legacy _expression_ binding
-        else if let exprValue = context.resolveAny("_expression_") as? [String: Any],
-                  let dirPath = exprValue["directory"] as? String {
-            path = dirPath
+        // Priority 4: `_expression_`, which is how a **compiled** binary
+        // delivers `Start the <file-monitor> with "sub".` (GitLab #882).
+        //
+        // This accepted only a dictionary with a `directory` key, so a plain
+        // string fell through to the `"."` below and the binary watched its
+        // working directory — whatever path the program named. The
+        // interpreter was unaffected because its executor binds `_literal_`
+        // for the same statement (Priority 2), while codegen serialises it
+        // as an expression: two spellings of one statement, and only one of
+        // them was read here.
+        //
+        // The symptom was a compiled watcher reporting every change under
+        // the working directory. Run from a project root that is one event
+        // per build artefact, which is what kept `Examples/MultiService`
+        // pinned to `mode: interpreter` — its compiled run passed only when
+        // the tree happened to be quiet.
+        else if let exprValue = context.resolveAny("_expression_") {
+            if let dirPath = exprValue as? String {
+                path = dirPath
+            } else if let config = exprValue as? [String: Any],
+                      let dirPath = (config["directory"] ?? config["path"]) as? String {
+                path = dirPath
+            } else {
+                path = "."
+            }
         }
         // Priority 5: Object specifier (fallback)
         else if let specPath = object.specifiers.first {
             path = specPath
         }
-        // Priority 6: Default to current directory
+        // Priority 6: Nothing was named — `Start the <file-monitor>.` on its
+        // own means the working directory, and that is the only case that
+        // should reach here.
         else {
             path = "."
         }
@@ -438,19 +461,39 @@ public struct ListenAction: ActionImplementation {
         // Determine what to listen for
         let listenType = object.base.lowercased()
 
+        /// The specifier as a *value*, not as the word the author typed
+        /// (GitLab #822).
+        ///
+        /// These read `object.specifiers.first` raw, so
+        /// `Listen the <l> for the <events: eventname>.` recorded the target
+        /// as the string `"eventname"` rather than the `"user-created"` that
+        /// variable holds. The port case was worse than wrong-looking:
+        /// `Int("port-number")` is nil, so `<port: port-number>` fell back to
+        /// **8080** — a real port, silently substituted, while the line above
+        /// it in the example logs 18787.
+        ///
+        /// `Start` and `Exists` already resolve their specifier this way; a
+        /// name that resolves to nothing stays the literal, which is what
+        /// makes `<port: 8080>` and `<file: "notes.md">` keep working.
+        func specifierValue() -> String? {
+            guard let specifier = object.specifiers.first else { return nil }
+            guard let resolved = context.resolveAny(specifier) else { return specifier }
+            return ResponseFormatter.formatValue(resolved, for: .human)
+        }
+
         switch listenType {
         case "port":
-            let port = Int(object.specifiers.first ?? "8080") ?? 8080
+            let port = Int(specifierValue() ?? "8080") ?? 8080
             context.emit(ListenStartedEvent(type: "port", target: String(port)))
             return ListenResult(type: "port", target: String(port))
 
         case "events", "event":
-            let eventType = object.specifiers.first ?? "*"
+            let eventType = specifierValue() ?? "*"
             context.emit(ListenStartedEvent(type: "events", target: eventType))
             return ListenResult(type: "events", target: eventType)
 
         case "file", "files", "directory":
-            let path = object.specifiers.first ?? "."
+            let path = specifierValue() ?? "."
             context.emit(ListenStartedEvent(type: "file", target: path))
             return ListenResult(type: "file", target: path)
 
@@ -562,9 +605,17 @@ public struct ServerStartResult: Sendable, Equatable {
 }
 
 /// Result of a listen operation
-public struct ListenResult: Sendable, Equatable {
+public struct ListenResult: Sendable, Equatable, CustomStringConvertible {
     public let type: String
     public let target: String
+
+    /// `Log <listener> to the <console>.` printed
+    /// `ListenResult(type: "events", target: "user-created")` — Swift's
+    /// synthesised description, in a language whose every other value prints
+    /// as `key: value` lines (GitLab #822).
+    public var description: String {
+        "type: \(type)\ntarget: \(target)"
+    }
 }
 
 // MARK: - Supporting Events

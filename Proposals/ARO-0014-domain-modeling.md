@@ -97,6 +97,36 @@ components:
       required: [value]
 ```
 
+
+#### `Money` and the `Currency` number format
+
+They are different things and both are needed.
+
+`Money` is a **shape**: an amount and the code that says what the amount is
+denominated in, declared in the contract so it crosses a boundary intact. It is
+where a currency *code* belongs, and where a rule like "you cannot add USD to
+EUR" is enforced — by comparing the `currency` fields, in ordinary ARO.
+
+`Currency` (ARO-0003 §Primitive Types) is a **number format**: exact base-10
+arithmetic, requested with `as Currency` at the statement that computes an
+amount. It carries no code, deliberately, because the code already lives here.
+
+They compose. Hold `Money.amount` exactly and the code stays beside it:
+
+```aro
+(Price Line: Order Domain) {
+    Extract the <unit> from the <product: price>.
+    Extract the <code> from the <product: price-currency>.
+    Compute the <amount> as Currency from <unit> * <quantity>.
+    Create the <line-price: Money> with { amount: <amount>, currency: <code> }.
+    Return an <OK: status> with <line-price>.
+}
+```
+
+`Compute the <cost> as Money from …` still works and still means the schema:
+the `as` clause takes a schema name as readily as a primitive. It shapes the
+result; it does not make the arithmetic exact. `as Currency` is what does that.
+
 ### Usage in ARO
 
 ```aro

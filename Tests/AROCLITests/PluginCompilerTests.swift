@@ -370,6 +370,162 @@ struct PluginCompilerTests {
         #expect(PluginCompiler.manifestDeclaresPythonPlugin(manifest))
         #expect(!PluginCompiler.manifestDeclaresNativePlugin(manifest))
     }
+
+    // MARK: - System libraries a package links against (#884)
+    //
+    // Harvesting a Swift package's .o files takes the code but not the link
+    // line SwiftPM built around it. A package reaches a C library through a
+    // system-library target, and that target's module map is where the
+    // `link "sqlite3"` directive lives. Reading those directives is the pure
+    // half of the fix; whether the host actually has the library is a
+    // toolchain question and is not asserted here.
+
+    private func writeModuleMap(_ body: String, at url: URL) throws {
+        try FileManager.default.createDirectory(
+            at: url, withIntermediateDirectories: true)
+        try body.write(
+            to: url.appendingPathComponent("module.modulemap"),
+            atomically: true, encoding: .utf8)
+    }
+
+    @Test("A system-library module map yields its link directive")
+    func readsLinkDirective() throws {
+        let dir = try makeScratchDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        try writeModuleMap("""
+        module CSQLite [system] {
+            header "shim.h"
+            link "sqlite3"
+            export *
+        }
+        """, at: dir.appendingPathComponent("checkouts/CSQLite"))
+
+        #expect(PluginCompiler.moduleMapLinkDirectives(under: dir) == ["sqlite3"])
+    }
+
+    @Test("Several module maps across the graph all contribute")
+    func readsEveryCheckout() throws {
+        let dir = try makeScratchDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        try writeModuleMap("""
+        module CSQLite [system] {
+            link "sqlite3"
+        }
+        """, at: dir.appendingPathComponent("checkouts/CSQLite"))
+        try writeModuleMap("""
+        module CZlib [system] {
+            link "z"
+            link "bz2"
+        }
+        """, at: dir.appendingPathComponent("checkouts/CZlib/Sources/CZlib"))
+
+        let found = Set(PluginCompiler.moduleMapLinkDirectives(under: dir))
+        #expect(found == ["sqlite3", "z", "bz2"])
+    }
+
+    @Test("A framework link directive is not a -l")
+    func ignoresFrameworkDirective() throws {
+        // `link framework "Security"` is a Darwin concept, and the walk only
+        // runs where ld64 is not doing this job for us. Taking the last quoted
+        // token off that line would emit `-lSecurity`, which resolves to
+        // nothing on Linux and would replace a real missing-symbol error with
+        // a missing-library one.
+        let dir = try makeScratchDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        try writeModuleMap("""
+        module CFoo [system] {
+            link framework "Security"
+            link "foo"
+        }
+        """, at: dir.appendingPathComponent("checkouts/CFoo"))
+
+        #expect(PluginCompiler.moduleMapLinkDirectives(under: dir) == ["foo"])
+    }
+
+    @Test("A checkout's own build and history directories are not walked")
+    func prunesBuildAndGitDirectories() throws {
+        // swift-syntax in a dependency graph is tens of thousands of files;
+        // none of the ones worth reading are under .build or .git. A module
+        // map left in there by an earlier build is also not this package's
+        // declaration.
+        let dir = try makeScratchDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        try writeModuleMap("""
+        module Stale [system] {
+            link "stale"
+        }
+        """, at: dir.appendingPathComponent("checkouts/Dep/.build/x"))
+        try writeModuleMap("""
+        module Real [system] {
+            link "real"
+        }
+        """, at: dir.appendingPathComponent("checkouts/Dep"))
+
+        #expect(PluginCompiler.moduleMapLinkDirectives(under: dir) == ["real"])
+    }
+
+    @Test("A package that declares no system library contributes nothing")
+    func noDirectivesIsEmpty() throws {
+        let dir = try makeScratchDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        try writeModuleMap("""
+        module CFoo {
+            header "foo.h"
+            export *
+        }
+        """, at: dir.appendingPathComponent("checkouts/CFoo"))
+
+        #expect(PluginCompiler.moduleMapLinkDirectives(under: dir).isEmpty)
+    }
+
+    @Test("A directory that does not exist is not an error")
+    func missingRootIsEmpty() {
+        let missing = FileManager.default.temporaryDirectory
+            .appendingPathComponent("aro-no-such-dir-\(UUID().uuidString)")
+        #expect(PluginCompiler.moduleMapLinkDirectives(under: missing).isEmpty)
+    }
+
+    @Test("A declared library the host does not have is dropped, not emitted")
+    func filtersLibrariesTheHostLacks() throws {
+        // A package may declare a system target for a platform this build is
+        // not. Emitting `-l` for it would replace a link error naming the real
+        // missing symbols with one naming a library nobody asked for.
+        //
+        // `m` stands in for the real case (`sqlite3`) because every host with
+        // a C toolchain has it, and this test should not depend on which
+        // database libraries happen to be installed.
+        let dir = try makeScratchDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        try writeModuleMap("""
+        module CMath [system] {
+            link "m"
+            link "aro-no-such-system-library"
+        }
+        """, at: dir.appendingPathComponent("checkouts/CMath"))
+
+        let flags = PluginCompiler.swiftPackageSystemLibraryFlags(
+            packageDir: dir.appendingPathComponent("package"), scratchPath: dir)
+        #expect(flags == ["-lm"])
+    }
+
+    @Test("A package with no system-library dependency adds no flags")
+    func noSystemLibrariesAddsNoFlags() throws {
+        // The common case, and the one that must stay free: every plugin that
+        // is pure Swift links exactly as it did before.
+        let dir = try makeScratchDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        try FileManager.default.createDirectory(
+            at: dir.appendingPathComponent("checkouts"), withIntermediateDirectories: true)
+
+        #expect(PluginCompiler.swiftPackageSystemLibraryFlags(
+            packageDir: dir.appendingPathComponent("package"), scratchPath: dir).isEmpty)
+    }
 }
 
 #endif  // !os(Windows)

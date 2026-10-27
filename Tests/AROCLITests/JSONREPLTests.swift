@@ -187,6 +187,27 @@ struct JSONREPLProtocolTests {
         #expect(error.name == "AROError")
     }
 
+    @Test("An execute request carries the notebook's directory, or nothing")
+    func baseDirOnRequest() throws {
+        // The front-end half of GitLab #915: the kernel process runs in the
+        // project root, so the notebook says which folder its relative paths
+        // mean. Absent is the session default, not the empty string — a
+        // front-end that does not know stays on today's behaviour.
+        let withBase = try JSONDecoder().decode(
+            JSONREPLRequest.self,
+            from: Data(#"""
+            {"id":1,"type":"execute","code":"Retrieve the <s> from the <git: \"..\">.",
+             "cellId":"nb22-c01","baseDir":"/repo/Learning"}
+            """#.utf8))
+        #expect(withBase.baseDir == "/repo/Learning")
+        #expect(withBase.cellId == "nb22-c01")
+
+        let without = try JSONDecoder().decode(
+            JSONREPLRequest.self,
+            from: Data(#"{"id":2,"type":"execute","code":"Compute the <a> from 1."}"#.utf8))
+        #expect(without.baseDir == nil)
+    }
+
     @Test("Stream messages carry their request id")
     func streamLine() throws {
         let line = JSONREPLEncoder.stream(id: 3, name: "stderr", text: "boom\n")
@@ -196,5 +217,51 @@ struct JSONREPLProtocolTests {
         #expect(decoded["id"] as? Int == 3)
         #expect(decoded["name"] as? String == "stderr")
         #expect(decoded["text"] as? String == "boom\n")
+    }
+}
+
+// MARK: - Output with no cell (GitLab #913)
+
+/// A handler woken by something outside the notebook — a file dropped into a
+/// watched directory — produces output while no cell is executing. Stamping it
+/// with the last request seen says something false about causation, and a
+/// front-end that has already finalised that cell renders the line under a
+/// finished cell or drops it. Either way the user is not told.
+@Suite("Background output carries no cell (#913)")
+struct JSONREPLBackgroundStreamTests {
+
+    private func decode(_ line: String) -> [String: Any] {
+        (try? JSONSerialization.jsonObject(with: Data(line.utf8))) as? [String: Any] ?? [:]
+    }
+
+    @Test("A background stream names its origin and carries no id")
+    func backgroundStreamShape() {
+        let message = decode(JSONREPLEncoder.backgroundStream(
+            name: "stdout", text: "New export landed\n"))
+        #expect(message["type"] as? String == "stream")
+        #expect(message["origin"] as? String == "background")
+        #expect(message["name"] as? String == "stdout")
+        #expect(message["text"] as? String == "New export landed\n")
+        #expect(message["id"] == nil, "background output must not claim a cell")
+    }
+
+    @Test("A cell's own stream still carries its id and no origin")
+    func cellStreamShape() {
+        // The two have to stay distinguishable in both directions: a client
+        // decides where to render by asking which of the two it received.
+        let message = decode(JSONREPLEncoder.stream(id: 7, name: "stdout", text: "hi\n"))
+        #expect(message["id"] as? Int == 7)
+        #expect(message["origin"] == nil)
+    }
+
+    @Test("stderr is carried through on the background channel too")
+    func backgroundStderr() {
+        // A failing handler reports on stderr, and that is exactly the output
+        // a user must not lose to an unrelated cell.
+        let message = decode(JSONREPLEncoder.backgroundStream(
+            name: "stderr", text: "Cannot read the rows from the file.\n"))
+        #expect(message["name"] as? String == "stderr")
+        #expect(message["origin"] as? String == "background")
+        #expect(message["id"] == nil)
     }
 }

@@ -1,17 +1,57 @@
 # Chapter 41: Type System
 
-ARO has a simple type system: four built-in primitives, two collection types, and complex types defined externally in OpenAPI. This chapter explains how types work in ARO.
+ARO has a simple type system: five built-in primitives, two collection types, and complex types defined externally in OpenAPI. This chapter explains how types work in ARO.
 
 ## Primitive Types
 
-ARO has four built-in primitive types:
+ARO has five built-in primitive types:
 
 | Type | Description | Literal Examples |
 |------|-------------|-----------------|
 | `String` | Text | `"hello"` (regular), `'world'` (raw) |
 | `Integer` | Whole numbers | `42`, `-17`, `0xFF`, `1_000_000` |
-| `Float` | Decimal numbers | `3.14`, `2.5e10`, `1_299.99`, `3.141_592` |
+| `Float` | Decimal numbers, binary (IEEE 754) | `3.14`, `2.5e10`, `1_299.99`, `3.141_592` |
+| `Currency` | Decimal numbers, exact (base 10) | no literal of its own — see below |
 | `Boolean` | True/False | `true`, `false` |
+
+### `Currency`: Exact Decimal Arithmetic
+
+`Float` is binary floating point, and binary floating point cannot represent `2.40`. So three items at that price is not the number anybody would write on an invoice:
+
+```aro
+Compute the <float-total> from <qty> * <price>.                (* 7.199999999999999 *)
+Compute the <line-total> as Currency from <qty> * <price>.    (* 7.20 *)
+```
+
+That second statement is the whole feature. `Currency` is base-10 arithmetic, exact, and it is requested with the `as` clause on the result — which is also why it has no literal form of its own. A bare `19.99` in source is a `Float`, exactly as it has always been; the format is asked for where a value is *computed*, because that is where the arithmetic happens. `as Decimal` is accepted and means the same format (before GitLab #906 it was a silent alias for `Float`, which is the word that promises exactness delivering the opposite). Prefer the spelling `Currency` in new code: it says *why*.
+
+A `Currency` is a **number**, not a rendering. It serialises as a JSON, CSV and YAML number, and in an HTTP response body, at full precision — a gold CSV reads `99.95`, never `99.94999999999999` and never `"99.95"`.
+
+An amount carries a **scale**, which is its number of decimal places, and the scale comes from the operands rather than being invented. This is the rule SQL's `NUMERIC` and Java's `BigDecimal` follow:
+
+| Operation | Result scale | Exact? |
+|-----------|--------------|--------|
+| `a + b`, `a - b` | the wider of the two | yes |
+| `a * b` | the two scales added, trailing zeros dropped to the wider operand's | yes |
+| `a / b` | six places, then trailing zeros dropped to the wider operand's | **no** |
+| `a % b` | the wider of the two | yes |
+
+Division is the one operation that cannot be exact, so its rule is stated rather than left to chance: computed at **six decimal places**, rounded **half-up**, then trailing zeros dropped. Six is four more places than any circulating currency's minor unit, so an intermediate division never decides the cents. `6.00 / 2` is `3.00`; `10.00 / 3` is `3.333333`, visibly not exact, which is the honest report. Rescaling — including the `fixed` qualifier of Chapter 9 — rounds half-up away from zero, so `2.345` at two places is `2.35` and `-2.345` is `-2.35`.
+
+Exactness is **contagious**. A statement that reads an exact amount stays exact without repeating the annotation:
+
+```aro
+Compute the <line-total> as Currency from <qty> * <price>.
+Compute the <with-fee> from <line-total> + 1.05.              (* still exact *)
+```
+
+That is what lets a pipeline compute an amount once and have every aggregate downstream agree about it: `sum` of a column of exact amounts is exact, and so are `min`, `max` and a comparison in a `where` or `when` clause.
+
+The limits are 18 decimal places and a scaled value that fits a 64-bit integer. A result that will not fit is a runtime error naming the operation — never a wrapped number and never a quietly rounded one. Multiplication reaches the scale limit first, because the scales add.
+
+Finally, `Currency` carries **no currency code**. It is a precision format, so `as Currency` will add a USD amount to a EUR one without complaint. The code has a home already: ARO-0014's `Money` schema is an object with `amount` and `currency`, declared in `openapi.yaml`. If the arithmetic has to refuse a mismatch, model the amount as `Money` and compare the `currency` fields. The two compose — hold `Money.amount` as a `Currency` and both the exactness and the label are where they belong.
+
+Holding money as whole minor units in an `Integer` and dividing once at the end remains available, and remains the stricter choice for a ledger: an `Integer` cannot acquire a fractional place at all. `Currency` is for the far more common case where the amounts are written in major units and the arithmetic simply has to be right.
 
 ### Numeric Literals
 
@@ -384,7 +424,7 @@ components:
 
 | Concept | Details |
 |---------|---------|
-| Primitives | `String`, `Integer`, `Float`, `Boolean` |
+| Primitives | `String`, `Integer`, `Float`, `Currency`, `Boolean` |
 | Collections | `List<T>`, `Map<K, V>` |
 | Complex types | Defined in `openapi.yaml` components/schemas |
 | Optionals | No optional type; a missing field fails, an unmatched query binds `[]` |

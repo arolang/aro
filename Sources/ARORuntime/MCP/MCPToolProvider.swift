@@ -202,6 +202,79 @@ public struct MCPToolProvider: Sendable {
                     ])
                 ])
             ),
+            // The three below close the gap #696 names: an agent could run a
+            // program but not run its tests, see what a branch changed, or
+            // find out which plugins an application has. Those are the
+            // operations automated work is actually made of.
+            MCPTool(
+                name: "aro_test",
+                description: "Run an ARO application's colocated tests (ARO-0015). Returns the test report, or the failures if any test fails.",
+                inputSchema: .object([
+                    "type": .string("object"),
+                    "properties": .object([
+                        "directory": .object([
+                            "type": .string("string"),
+                            "description": .string("Path to the ARO application directory")
+                        ]),
+                        "filter": .object([
+                            "type": .string("string"),
+                            "description": .string("Run only tests whose name matches this pattern")
+                        ]),
+                        "verbose": .object([
+                            "type": .string("boolean"),
+                            "description": .string("Report every test, not only the failures")
+                        ]),
+                        "timeout": .object([
+                            "type": .string("integer"),
+                            "description": .string("Seconds to allow (default 60)")
+                        ])
+                    ]),
+                    "required": .array([.string("directory")])
+                ])
+            ),
+            MCPTool(
+                name: "aro_graph_diff",
+                description: "Compare the feature-set graph between two git revisions: which feature sets, statements and wires (events, Application.<Name> calls, repository observers) a change added, removed or altered. Derived statically with the runtime's own matching rules.",
+                inputSchema: .object([
+                    "type": .string("object"),
+                    "properties": .object([
+                        "range": .object([
+                            "type": .string("string"),
+                            "description": .string("Git revision range such as 'main..my-branch', or a single revision to compare the working tree against")
+                        ]),
+                        "directory": .object([
+                            "type": .string("string"),
+                            "description": .string("Project directory (default: current)")
+                        ]),
+                        "all": .object([
+                            "type": .string("boolean"),
+                            "description": .string("List untouched feature sets too")
+                        ]),
+                        "timeout": .object([
+                            "type": .string("integer"),
+                            "description": .string("Seconds to allow (default 60)")
+                        ])
+                    ]),
+                    "required": .array([.string("range")])
+                ])
+            ),
+            MCPTool(
+                name: "aro_plugins",
+                description: "List the plugins an ARO application has installed, with the actions and qualifiers each one provides.",
+                inputSchema: .object([
+                    "type": .string("object"),
+                    "properties": .object([
+                        "directory": .object([
+                            "type": .string("string"),
+                            "description": .string("Application directory (default: current)")
+                        ]),
+                        "verbose": .object([
+                            "type": .string("boolean"),
+                            "description": .string("Show each plugin's actions, qualifiers and manifest details")
+                        ])
+                    ])
+                ])
+            ),
             MCPTool(
                 name: "aro_run",
                 description: "Run an ARO application from a directory. Returns the output or error.",
@@ -327,6 +400,12 @@ public struct MCPToolProvider: Sendable {
             return await executeCheck(arguments: arguments)
         case "aro_run":
             return await executeRun(arguments: arguments)
+        case "aro_test":
+            return await executeTest(arguments: arguments)
+        case "aro_graph_diff":
+            return await executeGraphDiff(arguments: arguments)
+        case "aro_plugins":
+            return await executePlugins(arguments: arguments)
         case "aro_compile":
             return await executeCompile(arguments: arguments)
         case "aro_examples":
@@ -519,6 +598,120 @@ public struct MCPToolProvider: Sendable {
             successEmpty: "Application completed successfully",
             failVerb: "Application failed",
             timeoutLabel: "Application timed out",
+            timeoutSeconds: timeout
+        )
+    }
+
+    /// Run an application's colocated tests (ARO-0015).
+    ///
+    /// A failing test is a RESULT, not a tool error: the agent asked what the
+    /// tests say, and "three of them fail, here they are" is the answer. So
+    /// the exit code is reported in the text and `isError` stays false —
+    /// unlike `aro_run`, where a non-zero exit means the thing the agent
+    /// asked for did not happen (GitLab #696).
+    private func executeTest(arguments: JSONValue?) async -> MCPToolCallResult {
+        guard let args = arguments?.objectValue,
+              let directory = args["directory"]?.stringValue else {
+            return MCPToolCallResult(
+                content: [.text("Missing required argument: 'directory'")],
+                isError: true
+            )
+        }
+
+        let timeout = Self.clampTimeout(args["timeout"]?.intValue ?? 60)
+
+        var subcommand = ["test", directory]
+        if let filter = args["filter"]?.stringValue, !filter.isEmpty {
+            subcommand += ["--filter", filter]
+        }
+        if args["verbose"]?.boolValue == true {
+            subcommand.append("--verbose")
+        }
+        // Colour codes in a tool result are noise for a reader that is not a
+        // terminal, and they cost tokens on every line.
+        subcommand.append("--no-color")
+
+        let outcome = await runAro(subcommand, timeoutSeconds: timeout)
+
+        if outcome.timedOut {
+            return MCPToolCallResult(
+                content: [.text("Tests timed out after \(timeout)s")],
+                isError: true
+            )
+        }
+        if outcome.launchFailed {
+            return MCPToolCallResult(
+                content: [.text("Could not run `aro test`: \(outcome.stderr)")],
+                isError: true
+            )
+        }
+
+        let report = [outcome.stdout, outcome.stderr]
+            .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+            .joined(separator: "\n")
+        let summary = outcome.exitCode == 0
+            ? "All tests passed."
+            : "Tests failed (exit code \(outcome.exitCode))."
+        let body = report.isEmpty ? summary : "\(summary)\n\n\(report)"
+        return MCPToolCallResult(content: [.text(body)], isError: false)
+    }
+
+    /// Compare the feature-set graph between two revisions.
+    ///
+    /// `--graph` is always passed: the statement-level diff is the one worth
+    /// handing an agent, and a caller who wanted `git diff` has `git diff`.
+    /// `--html` is deliberately NOT exposed — it writes a file, and a tool
+    /// that answers a question should not also leave one behind.
+    private func executeGraphDiff(arguments: JSONValue?) async -> MCPToolCallResult {
+        guard let args = arguments?.objectValue,
+              let range = args["range"]?.stringValue, !range.isEmpty else {
+            return MCPToolCallResult(
+                content: [.text("Missing required argument: 'range' (e.g. 'main..my-branch')")],
+                isError: true
+            )
+        }
+
+        let timeout = Self.clampTimeout(args["timeout"]?.intValue ?? 60)
+
+        var subcommand = ["diff", range, "--graph"]
+        if let directory = args["directory"]?.stringValue, !directory.isEmpty {
+            subcommand += ["--directory", directory]
+        }
+        if args["all"]?.boolValue == true {
+            subcommand.append("--all")
+        }
+
+        let outcome = await runAro(subcommand, timeoutSeconds: timeout)
+        return formatOutcome(
+            outcome,
+            successEmpty: "No graph differences between the two revisions",
+            failVerb: "Graph diff failed",
+            timeoutLabel: "Graph diff timed out",
+            timeoutSeconds: timeout
+        )
+    }
+
+    /// List the plugins an application has installed.
+    private func executePlugins(arguments: JSONValue?) async -> MCPToolCallResult {
+        let args = arguments?.objectValue ?? [:]
+        let timeout = Self.clampTimeout(args["timeout"]?.intValue ?? 30)
+
+        // `plugins` without a subcommand is a usage error; `plugins list` is
+        // the one this exposes.
+        var subcommand = ["plugins", "list"]
+        if let directory = args["directory"]?.stringValue, !directory.isEmpty {
+            subcommand += ["--directory", directory]
+        }
+        if args["verbose"]?.boolValue == true {
+            subcommand.append("--verbose")
+        }
+
+        let outcome = await runAro(subcommand, timeoutSeconds: timeout)
+        return formatOutcome(
+            outcome,
+            successEmpty: "No plugins installed",
+            failVerb: "Listing plugins failed",
+            timeoutLabel: "Listing plugins timed out",
             timeoutSeconds: timeout
         )
     }

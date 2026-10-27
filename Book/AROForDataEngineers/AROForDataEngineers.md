@@ -436,7 +436,7 @@ Silver is where opinions are allowed. Three of them here:
    orders were abandoned.
 2. **Customers are joined on.** Downstream should never have to know that
    region lives in a different file.
-3. **Money is computed once, and rounded once.** `line_total` is
+3. **Money is computed once, and computed exactly.** `line_total` is
    calculated here so every consumer computes it the same way — which is
    to say, so no two dashboards disagree.
 
@@ -452,8 +452,7 @@ Silver is where opinions are allowed. Three of them here:
         Filter the <candidates> from the <customers> where <customer_id> = <cid>.
         Extract the <customer: first> from the <candidates>.
 
-        Compute the <raw-total> from <order: quantity> * <order: unit_price>.
-        Compute the <line-total: fixed> from the <raw-total>.
+        Compute the <line-total> as Currency from <order: quantity> * <order: unit_price>.
 
         Create the <fact> with {
             order_id: <order: order_id>,
@@ -488,10 +487,11 @@ one line you can point a finance person at.
 
 Two smaller things in that block. `<order: quantity>` is usable directly
 in an expression — the `Extract` per operand that §4 showed is only
-needed when you want the value under a name of its own. And
-`<line-total: fixed>` is money: `2 × 19.99` in binary floating point is
-not `39.98`, and `fixed` makes the stored value the one a person would
-write. §7 has the full story, because gold is where it shows.
+needed when you want the value under a name of its own. And `as Currency`
+is money: `2 × 19.99` in binary floating point is not `39.98`, and the
+annotation makes the arithmetic base 10, so the amount stored is the one
+a person would write. §7 has the full story, because gold is where it
+shows.
 
 ### 6.1 The join
 
@@ -516,9 +516,9 @@ The `where` clause takes the usual comparisons: `=`, `!=`, `<`, `>`,
 
 ```json
 {"customer_id":"C001","customer_name":"Ada Lovelace",
- "id":"A5862C4B-C30E-49C9-BF81-449DC3FD74C0","line_total":39.979999999999997,
+ "id":"A5862C4B-C30E-49C9-BF81-449DC3FD74C0","line_total":39.98,
  "order_id":1001,"ordered_on":"2026-08-01","quantity":2,"region":"EMEA",
- "sku":"SKU-RED","tier":"gold","unit_price":19.989999999999998}
+ "sku":"SKU-RED","tier":"gold","unit_price":19.99}
 ```
 
 Note `id`. Storing a record into a repository gives it a key. You can
@@ -541,10 +541,11 @@ question*, shaped for whoever asked it. Ours: **revenue by region.**
 
     for each <region-name> in <regions> {
         Filter the <rows> from the <facts> where <region> = <region-name>.
-        Reduce the <raw-revenue> from the <rows> with sum(<line_total>).
         Reduce the <order-count> from the <rows> with count().
+
+        Reduce the <raw-revenue> as Currency from the <rows> with sum(<line_total>).
         Compute the <revenue: fixed> from the <raw-revenue>.
-        Compute the <raw-avg> from <revenue> / <order-count>.
+        Compute the <raw-avg> as Currency from <raw-revenue> / <order-count>.
         Compute the <avg-order: fixed> from the <raw-avg>.
 
         Create the <row> with {
@@ -570,7 +571,7 @@ And the product:
 ```
 avg_order_value,id,orders,region,revenue
 49.98,EMEA,2,EMEA,99.95
-46.0,AMER,2,AMER,92.0
+46.00,AMER,2,AMER,92.00
 ```
 
 CSV, because the person who asked for it opens things in a spreadsheet.
@@ -578,7 +579,8 @@ Had they asked for JSON, the only change is the extension.
 
 ### 7.1 Money, and the digits you would otherwise ship
 
-Without those two `fixed` statements, the same file reads:
+Take the money format out of silver and gold — plain `Float` arithmetic,
+the way most languages leave it — and the same file reads:
 
 ```
 avg_order_value,id,orders,region,revenue
@@ -595,43 +597,83 @@ that revenue prints `99.95` — but a **file does not, and must not**.
 `Write` serializes at full precision, and a data product is a file
 someone opens.
 
-`fixed` moves the correction from the renderer to the value. It rounds
-through the decimal spelling, so what is stored is the `Double` nearest
-to `99.95` — the number a person would have written, which the CSV, the
-console, and anything that reads the file back then agree about:
+The fix is not to round the wrong answer afterwards. It is to not compute
+a wrong answer: **`as Currency` makes the arithmetic exact base 10**, at
+the statement that produces the amount.
 
 ```aro
-Reduce the <raw-revenue> from the <rows> with sum(<line_total>).
-Compute the <revenue: fixed> from the <raw-revenue>.
+Compute the <line-total> as Currency from <order: quantity> * <order: unit_price>.
 ```
 
-Two decimal places by default; `with { places: 4 }` for a rate. The
-result stays a number — a rendered string would print correctly and then
-quote itself into a JSON data product, which is a different wrong
-answer. There is no `round` qualifier, and no `money` one; both
-diagnostics point at `fixed`.
+`2 × 19.99` is then exactly `39.98`, rather than the `Double` next door,
+and that is what silver stores. A `Currency` is a **number**, not a rendering — it
+serialises as a JSON, CSV or YAML number at its own scale, and in an HTTP
+body, so what leaves in the data product is what was computed. The scale
+comes from the operands rather than being invented, which is the rule SQL's
+`NUMERIC` and Java's `BigDecimal` follow: addition and subtraction take the
+wider of the two scales, multiplication adds them. Division is the one
+operation that cannot be exact, so its rule is stated rather than silent —
+six decimal places, rounded half-up — and six is four more places than any
+currency's minor unit, so an intermediate division never decides the cents.
+`as Decimal` is the same format under a different name; before GitLab #906
+it was a silent alias for `Float`, which is the word that promises
+exactness delivering the opposite.
 
-![The same revenue, before and after `fixed`](screenshots/02-solaro-money.png){ width=95% }
+The second thing `as Currency` buys is the one that matters to a pipeline:
+**exactness is contagious.** A statement that reads an exact amount stays
+exact without repeating the annotation, so the aggregate downstream agrees
+with the line item by construction:
 
-The discipline around it matters more than the spelling. **Round each
-amount once, where it is produced, to the precision that amount actually
-has.** `line_total` is rounded in silver because a line total *is* money
-to the cent; the `fixed` in gold is not a second rounding of that number
-but the cleanup after summing, because floating-point addition of
-exact-to-the-cent values still drifts. What you must not do is round the
-same quantity twice at different precisions — that is how two dashboards
-come to disagree by a penny, and exercise 4 in Appendix D makes it happen
-on purpose so you can see the size of it.
+```aro
+Reduce the <raw-revenue> as Currency from the <rows> with sum(<line_total>).
+```
 
-Where a ledger has to balance to the cent rather than merely display
-well, the stricter option is still the old one: hold money in integer
-minor units through the pipeline and divide once at the end.
+The annotation is there because of the **file boundary** in between. Silver
+wrote `39.98` exactly, but JSONL carries only numbers, so the column arrives
+in gold as the `Double` nearest each amount and the sum has to be asked for
+in base 10 again. Within one stage — a line total read by a tax, a tax read
+by a total — nothing needs restating.
 
-One caveat, so the JSONL in §6.2 is not a surprise: ARO's JSON writer
-renders every `Double` at 17 significant digits, so a silver row shows
-`39.979999999999997` even after `fixed` has made the value the nearest
-one to `39.98`. The number is right, the rendering is not, and it is the
-CSV data product — the file with a reader — where the difference shows.
+`fixed` keeps its own job: settling the **presentation** scale, two places
+for a CSV, four for a rate.
+
+```aro
+Compute the <revenue: fixed> from the <raw-revenue>.
+Compute the <rate: fixed> from the <raw-rate> with { places: 4 }.
+```
+
+Two decimal places by default; the count comes from `with { places: N }`
+and must be 0…15. On a `Float` `fixed` is a *repair* — it rounds through
+the decimal spelling, so the stored `Double` is the one nearest `99.95` and
+every downstream path agrees about it. On a `Currency` there is nothing to
+repair, so it is a *rescale*: `fixed` of `7.2` is the exact amount `7.20`.
+Either way the result stays a number — a rendered string would print
+correctly and then quote itself into a JSON data product, which is a
+different wrong answer. There is no `round` qualifier and no `money` one;
+`round` is redirected to `fixed`, and `money` to `as Currency`.
+
+![The same revenue, with an exact amount and without one](screenshots/02-solaro-money.png){ width=95% }
+
+The discipline around it matters more than the spelling. **Compute each
+amount once, where it is produced, at the precision that amount actually
+has.** `line_total` is exact in silver because a line total *is* money to
+the cent; the `fixed` statements in gold are a presentation choice about
+the CSV, not a second rounding of that number. What you must not do is
+round the same quantity twice at different precisions — that is how two
+dashboards come to disagree by a penny, and exercise 4 in Appendix D makes
+it happen on purpose so you can see the size of it.
+
+Where a ledger has to balance to the cent rather than merely display well,
+the stricter option is still the old one: hold money in integer minor units
+through the pipeline and divide once at the end. An `Integer` cannot acquire
+a fractional place at all.
+
+One more thing worth knowing, since `Currency` is a precision format and not
+a currency: it carries **no currency code**, so it will add a USD amount to a
+EUR one without complaint. The code belongs in the schema — ARO-0014's
+`Money` is an object with `amount` and `currency` — and the two compose:
+hold `Money.amount` as a `Currency` and both the exactness and the label are
+where they belong.
 
 ### 7.2 Getting the distinct values
 
@@ -902,15 +944,16 @@ Verified against the language version on the cover.
 | `uppercase`, `lowercase`, `trim`, `replace` | Text |
 | `lines`, `join` | Text ↔ collection |
 | `hash` / `sha256` | Digest |
-| `fixed` | Round to N decimal places, 2 by default — money (§7.1) |
+| `fixed` | Settle a presentation scale: N decimal places, `with { places: N }`, 2 by default (§7.1) |
 | `-7d`, `+24h`, `+1M` | Date offsets |
 
 The qualifier set is **closed**. An unrecognised one is a check-time
 error naming the closest match, not a silent pass-through. Notably
 `sort`, `reverse`, `first` and `last` are *not* Compute qualifiers:
 sorting and reversing are actions, and element access is an Extract
-qualifier (`Extract the <head: first> from the <xs>.`). Nor is `round`
-or `money` — both diagnostics point at `fixed`.
+qualifier (`Extract the <head: first> from the <xs>.`). Nor is `round`,
+whose diagnostic points at `fixed`, nor `money`, whose diagnostic points
+at `as Currency` — a result type rather than a qualifier (§7.1).
 
 Run `aro actions --qualifiers` for the live set.
 
@@ -955,8 +998,11 @@ against *your* current directory. Run it from where you want the layers
 written (§8).
 
 **A price ends in `…9999` in the output file** — the console renders at
-15 significant digits and hides it; the file does not. Round the value
-once, at the layer that publishes: `Compute the <revenue: fixed> from the
+15 significant digits and hides it; the file does not. Compute the amount
+exactly rather than rounding it afterwards:
+`Compute the <line-total> as Currency from <qty> * <price>.`, and
+`as Currency` on an aggregate read back out of a file. `fixed` then settles
+the places the file ships: `Compute the <revenue: fixed> from the
 <raw-revenue>.` (§7.1).
 
 **"Unknown Compute qualifier 'round'"** — the qualifier is `fixed`, and
@@ -1016,27 +1062,40 @@ landing CSV.
 customer *tier*, not by region. Write `gold/revenue_by_tier.csv`.
 
 > Answer: §7's loop with `tier` where `region` was —
-> `Map … with tier`, `Compute the <tiers: unique> …`, filter, reduce,
-> `fixed`, store, write. Two rows: `gold,39.98` and `silver,151.97`.
-> Note what you did *not* have to do: no re-derivation of `line_total`.
-> Silver computed money once, so the second product agrees with the
-> first by construction.
+> `Map … with tier`, `Compute the <tiers: unique> …`, filter,
+> `Reduce … as Currency`, `fixed`, store, write. Two rows: `gold,39.98`
+> and `silver,151.97`. Note what you did *not* have to do: no
+> re-derivation of `line_total`. Silver computed money once and exactly,
+> so the second product agrees with the first by construction.
 
-**3. Break the rounding on purpose.** Delete the two `fixed` statements
-from `BuildRegionRevenue`, re-run, and open the CSV. Put them back.
+**3. Break the money on purpose.** Take the format out of
+`BuildRegionRevenue`: drop `as Currency` from the `Reduce` and from the
+average, delete the two `fixed` statements, and bind `<revenue>` and
+`<avg-order>` straight from the float arithmetic. Re-run, and open the
+CSV. Put it back.
 
-> The point is to see `99.94999999999999` land in a file a person opens,
-> once, deliberately — so you recognise it the next time it happens by
-> accident (§7.1).
+> You get `99.94999999999999` in the revenue column and
+> `49.974999999999994` in the average. The point is to see that land in
+> a file a person opens, once, deliberately — so you recognise it the
+> next time it happens by accident (§7.1).
 
-**4. Round the same quantity twice, and watch it drift.** Round
-`line_total` in silver to whole units — `Compute the <line-total: fixed>
-from the <raw-total> with { places: 0 }.` — leave gold as it is, re-run,
-and compare EMEA's revenue against §7's `99.95`.
+**4. Round the same quantity twice, and watch it drift.** Rescale
+`line_total` in silver to whole units — compute it exactly under a name
+of its own, then round that:
 
-> You get `100.0`. Nothing errored, no count changed, and the number is
+```aro
+Compute the <exact-total> as Currency from <order: quantity> * <order: unit_price>.
+Compute the <line-total: fixed> from the <exact-total> with { places: 0 }.
+```
+
+Leave gold as it is, re-run, and compare EMEA's revenue against §7's
+`99.95`.
+
+> You get `100.00`. Nothing errored, no count changed, and the number is
 > wrong by five cents — which is exactly why a rounding decision belongs
-> in one place, at the precision the amount actually has.
+> in one place, at the precision the amount actually has. Exact
+> arithmetic does not save you from this one: the amount is right at
+> every step, and you asked for the wrong precision.
 
 **5. Break the join.** Change the silver join to match on `sku` instead
 of `customer_id` and re-run.

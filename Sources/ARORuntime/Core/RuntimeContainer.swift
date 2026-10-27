@@ -55,6 +55,15 @@ public final class RuntimeContainer: @unchecked Sendable {
     /// Collector for execution metrics and timings.
     public let metricsCollector: MetricsCollector
 
+    /// Which repositories are caller-scoped, and how (ARO-0094).
+    ///
+    /// Here rather than reached for as `RepositoryScopeRegistry.shared` by the
+    /// two places that read it, because a test that declares a scope is
+    /// precisely the caller that must not share one: swift-testing runs suites
+    /// in parallel, so one suite's `reset()` landed between another's
+    /// declaration and its assertions (GitLab #890).
+    public let repositoryScopes: RepositoryScopeRegistry
+
     // MARK: - Default (singleton-backed) container
 
     /// The default container backed by all existing shared singletons.
@@ -83,7 +92,8 @@ public final class RuntimeContainer: @unchecked Sendable {
         qualifierRegistry: QualifierRegistry = .shared,
         externalServices: ExternalServiceRegistry = .shared,
         parameterStorage: ParameterStorage = .shared,
-        metricsCollector: MetricsCollector = .shared
+        metricsCollector: MetricsCollector = .shared,
+        repositoryScopes: RepositoryScopeRegistry = .shared
     ) {
         self.eventBus = eventBus
         self.actionRegistry = actionRegistry
@@ -92,5 +102,6 @@ public final class RuntimeContainer: @unchecked Sendable {
         self.externalServices = externalServices
         self.parameterStorage = parameterStorage
         self.metricsCollector = metricsCollector
+        self.repositoryScopes = repositoryScopes
     }
 }

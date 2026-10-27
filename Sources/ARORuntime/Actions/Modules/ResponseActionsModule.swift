@@ -20,6 +20,7 @@ public enum ResponseActionsModule: ActionModule {
             NotifyAction.self,
             PublishAction.self,
             EmitAction.self,
+            DeliverAction.self,
         ]
     }
 }

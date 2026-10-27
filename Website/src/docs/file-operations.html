@@ -366,7 +366,51 @@ CreateDirectory the &lt;output-dir&gt; to the &lt;path: <span class="code-string
     <span class="code-keyword">Return</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;startup&gt;.
 }</code></pre>
 
-        <h2>Actions Reference</h2>
+        <h2>Path Qualifiers</h2>
+
+<p>
+    Paths are taken apart and put together with <code>Compute</code> qualifiers
+    (ARO-0036 &sect;9). <strong>All of them are pure functions &mdash; none touches the
+    filesystem</strong>, so they answer the same way for a path that does not exist:
+</p>
+
+<table>
+    <thead><tr><th>Qualifier</th><th>Gives</th></tr></thead>
+    <tbody>
+        <tr><td><code>basename</code> / <code>dirname</code></td><td>The name, and the directory holding it</td></tr>
+        <tr><td><code>extension</code> / <code>stem</code></td><td>The type and the name, with no dot</td></tr>
+        <tr><td><code>absolute</code></td><td>Resolves <code>.</code> and <code>..</code> against the working directory</td></tr>
+        <tr><td><code>path-join</code></td><td>Joins with exactly one separator</td></tr>
+    </tbody>
+</table>
+
+<p>Three rules are worth knowing before you rely on them:</p>
+<ul>
+    <li><code>extension</code> has <strong>no dot</strong>, and a dotfile is a name rather than an extension.</li>
+    <li><code>dirname</code> of a bare filename is <code>"."</code>.</li>
+    <li>
+        <strong>An absolute right-hand component does not reset the path.</strong>
+        <code>path-join</code> of <code>/uploads</code> and <code>/etc/passwd</code> is
+        <code>/uploads/etc/passwd</code> &mdash; deliberately unlike Python, because the call
+        it exists for is joining a trusted directory to an untrusted name.
+    </li>
+</ul>
+
+<h2>Permissions and Timestamps</h2>
+
+<p>
+    <code>Configure</code> sets a file's mode and binds
+    <code>{ path, permissions, octal, previous }</code>. Octal and the symbolic form
+    <code>Stat</code> prints are both accepted, so a mode read off one file applies to another:
+</p>
+
+<pre><code><span class="code-keyword">Configure</span> the <span class="code-result">&lt;mode&gt;</span> for the <span class="code-result">&lt;file: "./run.sh"&gt;</span> with { permissions: <span class="code-string">"755"</span> }.</code></pre>
+
+<p><code>Touch</code> creates the file, or stamps it if it is already there:</p>
+
+<pre><code><span class="code-keyword">Touch</span> the <span class="code-result">&lt;marker&gt;</span> for the <span class="code-result">&lt;file: "./build.stamp"&gt;</span>.</code></pre>
+
+<h2>Actions Reference</h2>
 
         <table>
             <thead>

@@ -113,6 +113,27 @@ def prepare_workdir(workdir) -> Path:
     return workdir
 
 
+def resolve_oracle(argv0):
+    """A caller that writes `['aro', 'test']` means "the toolchain binary",
+    and until now the sandbox left that to PATH — which every development
+    shell answers and the aro-ci image does not (train:oracle, GitLab #900's
+    sequel): ARO_BIN names the artifact there, `aro` is never on PATH, so
+    every run graded aro_not_found and `passes check but does not run`
+    silently turned into "never asked".
+
+    Resolution is aro_oracle's (ARO_BIN, then a worktree build, then PATH),
+    applied only when the caller spelled the name rather than a path, so a
+    call that did its own resolution keeps its own word. A missing binary
+    still propagates the FileNotFoundError callers already handle.
+    """
+    if argv0 in ('aro', './aro'):
+        import aro_oracle  # sandbox stays stdlib-on-import; no cycle
+        resolved = aro_oracle.aro_bin()
+        if resolved:
+            return resolved
+    return str(argv0)
+
+
 def sandboxed_run(argv, workdir, timeout=10, allow_network=False,
                   env_extra=None, _runner=subprocess.run, **kwargs):
     """Run `argv` with `workdir` as its world. Returns a CompletedProcess.
@@ -123,7 +144,7 @@ def sandboxed_run(argv, workdir, timeout=10, allow_network=False,
     """
     workdir = prepare_workdir(workdir)
     return _runner(
-        [str(a) for a in argv],
+        [str(resolve_oracle(argv[0]))] + [str(a) for a in argv[1:]],
         cwd=str(workdir),
         env=sandbox_env(workdir, allow_network=allow_network, extra=env_extra),
         capture_output=True, text=True, timeout=timeout,

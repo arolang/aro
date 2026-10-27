@@ -72,6 +72,11 @@ public struct ExpressionEvaluator: Sendable {
         /// Double, so `7 / 2` is 3.5. Selected by an `as Float` / `as Double`
         /// result annotation (GitLab #475).
         case float
+        /// Arithmetic is done in exact base 10 and the result is an
+        /// `AROCurrency`, so `3 * 2.40` is `7.20` and not
+        /// `7.199999999999999`. Selected by an `as Currency` / `as Decimal`
+        /// result annotation (GitLab #906).
+        case exact
     }
 
     /// The numeric mode for this evaluator.
@@ -137,7 +142,16 @@ public struct ExpressionEvaluator: Sendable {
                 return value
             }
 
-            guard var value = context.resolveAny(varRef.noun.base) else {
+            // Every `with`, `to`, `where`, `against`, `default` and sink clause,
+            // and every `when` guard, reads its variables through here — so this
+            // is where `Return an <OK: status> with <users>.` waits for the
+            // `Retrieve` that produced `<users>`. `resolveAny` did that wait by
+            // parking the calling pthread on a `DispatchGroup`, and this function
+            // is `async`: the thread it parked was a cooperative-pool thread, of
+            // which there are only as many as cores (GitLab #707). Same walk,
+            // same value, same failure attribution — only the wait moves off the
+            // pthread.
+            guard var value = await context.resolveAnyAwaitingDeferred(varRef.noun.base) else {
                 throw ExpressionError.undefinedVariable(varRef.noun.base)
             }
             // Handle specifiers as qualifiers or property access
@@ -193,6 +207,10 @@ public struct ExpressionEvaluator: Sendable {
         // Binary expression
         case let binary as BinaryExpression:
             return try await evaluateBinary(binary, context: context)
+
+        // Range: `1->10` (ARO-0089, GitLab #546)
+        case let range as RangeExpression:
+            return try await evaluateRange(range, context: context).sendableElements
 
         // Unary expression
         case let unary as UnaryExpression:
@@ -303,6 +321,20 @@ public struct ExpressionEvaluator: Sendable {
         switch expr.op {
         // Arithmetic operators
         case .add:
+            // `+` on text names `++` (GitLab #851).
+            //
+            // ARO-0001 makes `++` the concatenation operator and `+` strictly
+            // arithmetic, and the language is right — but the diagnostic was
+            // "Cannot convert String to number", which describes the machine's
+            // difficulty rather than the author's mistake. Someone writing
+            // `"Hello, " + <name>` has not asked for a conversion; they have
+            // used the operator every other language spells this way. Naming
+            // `++` turns a puzzle into a correction.
+            if left is String || right is String {
+                throw ExpressionError.typeMismatch(
+                    "'+' adds numbers; use '++' to join text: "
+                    + "Compute the <greeting> from \"Hello, \" ++ <name>.")
+            }
             return try numericOperation(
                 left, right, symbol: "+",
                 intOp: { $0.addingReportingOverflow($1) },
@@ -330,6 +362,11 @@ public struct ExpressionEvaluator: Sendable {
                 doubleOp: { $0 * $1 }
             )
         case .divide:
+            // Exact first: division is the one currency operation that has to
+            // round, and `AROCurrency.divided` states how (GitLab #906).
+            if Self.wantsExact(numericMode, left, right) {
+                return try Self.exactOperation(left, right, symbol: "/")
+            }
             // Int/Int → integer floor division (matches binary mode evaluateBinaryOp behavior).
             // Skipped in .float mode so `<x> / 2 as Float` yields 3.5 rather than 3.
             if numericMode == .natural, let li = left as? Int, let ri = right as? Int {
@@ -373,9 +410,9 @@ public struct ExpressionEvaluator: Sendable {
 
         // Logical operators
         case .and:
-            return asBool(left) && asBool(right)
+            return try asBool(left, operator: "and") && asBool(right, operator: "and")
         case .or:
-            return asBool(left) || asBool(right)
+            return try asBool(left, operator: "or") || asBool(right, operator: "or")
 
         // Temporal comparison (Book ch. 42 §42.8, GitLab #516).
         // `compareValues` already orders dates — and ISO strings,
@@ -460,6 +497,43 @@ public struct ExpressionEvaluator: Sendable {
         return false
     }
 
+    // MARK: - Range Evaluation (ARO-0089)
+
+    /// Evaluate a range's endpoints into the span they describe.
+    ///
+    /// Endpoints are evaluated **once** (§3.1) — this is called from the
+    /// expression path, and the for-each driver calls it once before the
+    /// first iteration. A non-Int endpoint throws: `aro check` catches the
+    /// literal cases, and a variable that turns out to hold a String has to
+    /// fail at the statement rather than count something it did not mean
+    /// (GitLab #546).
+    func evaluateRange(_ expr: RangeExpression, context: ExecutionContext) async throws -> AROIntRange {
+        let lowerValue = try await evaluate(expr.lower, context: context)
+        let upperValue = try await evaluate(expr.upper, context: context)
+        return AROIntRange(
+            lower: try Self.rangeEndpoint(lowerValue, side: "lower", of: expr),
+            upper: try Self.rangeEndpoint(upperValue, side: "upper", of: expr))
+    }
+
+    /// An Int endpoint, or an error naming the offending side.
+    ///
+    /// A Double that is a whole number is accepted — arithmetic on a parsed
+    /// value lands there easily (`<n> / 2` with an even `<n>`), and refusing
+    /// `1->5.0` while accepting `1->5` would be a surprise about
+    /// representation rather than about the program. A fractional one is
+    /// refused, which is the rule §3.1 states.
+    private static func rangeEndpoint(
+        _ value: any Sendable, side: String, of expr: RangeExpression
+    ) throws -> Int {
+        if let i = value as? Int { return i }
+        if let d = value as? Double, d == d.rounded(), d.magnitude < 9e18 { return Int(d) }
+        if let s = value as? String, let i = Int(s) { return i }
+        throw ActionError.typeMismatch(
+            expected: "Int",
+            actual: "\(type(of: value))",
+            variable: "the \(side) endpoint of \(expr.description)")
+    }
+
     // MARK: - Unary Expression Evaluation
 
     private func evaluateUnary(_ expr: UnaryExpression, context: ExecutionContext) async throws -> any Sendable {
@@ -474,9 +548,11 @@ public struct ExpressionEvaluator: Sendable {
                 return value
             }
             if let d = operand as? Double { return -d }
+            // An exact amount negates exactly (GitLab #906).
+            if let c = operand as? AROCurrency { return c.negated }
             throw ExpressionError.typeMismatch("Cannot negate \(type(of: operand))")
         case .not:
-            return !asBool(operand)
+            return try !asBool(operand, operator: "not")
         }
     }
 
@@ -640,6 +716,10 @@ public struct ExpressionEvaluator: Sendable {
         intOp: (Int, Int) -> (partialValue: Int, overflow: Bool),
         doubleOp: (Double, Double) -> Double
     ) throws -> any Sendable {
+        if Self.wantsExact(numericMode, left, right) {
+            return try Self.exactOperation(left, right, symbol: symbol)
+        }
+
         if numericMode == .natural, let li = left as? Int, let ri = right as? Int {
             let (value, overflow) = intOp(li, ri)
             guard !overflow else { throw Self.overflowError(li, symbol, ri) }
@@ -651,12 +731,62 @@ public struct ExpressionEvaluator: Sendable {
         return doubleOp(l, r)
     }
 
+    /// Whether this operation must be done in exact base 10 (GitLab #906).
+    ///
+    /// Either the statement asked for it (`as Currency`), or one of the
+    /// operands already *is* an exact amount — in which case staying exact is
+    /// the only answer that does not throw the precision away a line after it
+    /// was established. That contagion is what lets a pipeline compute
+    /// `line_total` once, exactly, and have every `sum` downstream agree.
+    static func wantsExact(
+        _ mode: NumericMode, _ left: any Sendable, _ right: any Sendable
+    ) -> Bool {
+        mode == .exact || left is AROCurrency || right is AROCurrency
+    }
+
+    /// `+ - * / %` in exact base 10.
+    ///
+    /// A non-numeric operand is a type mismatch here rather than a silent
+    /// zero: the whole point of the annotation is that the author cares what
+    /// the number is.
+    static func exactOperation(
+        _ left: any Sendable, _ right: any Sendable, symbol: String
+    ) throws -> any Sendable {
+        guard let l = AROCurrency.from(left) else {
+            throw ExpressionError.typeMismatch(
+                "Cannot read \(type(of: left)) as an exact amount for '\(symbol)'")
+        }
+        guard let r = AROCurrency.from(right) else {
+            throw ExpressionError.typeMismatch(
+                "Cannot read \(type(of: right)) as an exact amount for '\(symbol)'")
+        }
+        do {
+            switch symbol {
+            case "+": return try l.adding(r)
+            case "-": return try l.subtracting(r)
+            case "*": return try l.multiplied(by: r)
+            case "/": return try l.divided(by: r)
+            case "%": return try l.remainder(dividingBy: r)
+            default:
+                throw ExpressionError.typeMismatch(
+                    "'\(symbol)' has no exact-decimal form")
+            }
+        } catch let error as AROCurrencyError {
+            // Re-thrown as the runtime error shape every other arithmetic
+            // failure uses, so the statement reconstruction reads the same.
+            throw ActionError.runtimeError(error.description)
+        }
+    }
+
     private func intOperation(
         _ left: any Sendable,
         _ right: any Sendable,
         symbol: String,
         _ op: (Int, Int) -> (partialValue: Int, overflow: Bool)
     ) throws -> any Sendable {
+        if Self.wantsExact(numericMode, left, right) {
+            return try Self.exactOperation(left, right, symbol: symbol)
+        }
         guard let l = left as? Int, let r = right as? Int else {
             throw ExpressionError.typeMismatch("Expected integers for modulo operation")
         }
@@ -677,6 +807,15 @@ public struct ExpressionEvaluator: Sendable {
             let leftTime = leftDate.date.timeIntervalSince1970
             let rightTime = rightDate.date.timeIntervalSince1970
             return compare(leftTime, rightTime)
+        }
+
+        // Exact amounts compare exactly (GitLab #906): two amounts a cent
+        // apart at the limit of Double's precision must not come out equal.
+        // The `compare` closure is fed -1/0/1, which answers every one of
+        // `<`, `>`, `<=`, `>=` correctly.
+        if left is AROCurrency || right is AROCurrency,
+           let l = AROCurrency.from(left), let r = AROCurrency.from(right) {
+            return compare(Double(l.compare(r)), 0)
         }
 
         let l = try asDouble(left)
@@ -700,16 +839,31 @@ public struct ExpressionEvaluator: Sendable {
     private func asDouble(_ value: any Sendable) throws -> Double {
         if let i = value as? Int { return Double(i) }
         if let d = value as? Double { return d }
+        if let c = value as? AROCurrency { return c.doubleValue }
         if let s = value as? String, let d = Double(s) { return d }
         throw ExpressionError.typeMismatch("Cannot convert \(type(of: value)) to number")
     }
 
-    private func asBool(_ value: any Sendable) -> Bool {
-        if let b = value as? Bool { return b }
-        if let i = value as? Int { return i != 0 }
-        if let s = value as? String { return !s.isEmpty }
-        if let array = value as? [any Sendable] { return !array.isEmpty }
-        return true // Non-nil values are truthy
+    /// An operand of `and` / `or` / `not`, as the boolean it must be.
+    ///
+    /// This was the fifth competing truthiness rule (GitLab #644): a
+    /// non-empty string or array was true and *anything unrecognised* was
+    /// true, so `when <user> and <admin>` was true for two records whatever
+    /// they contained, and `not <name>` was false for every name. ARO-0002
+    /// says conditions are boolean expressions; `Int` stays because 0/1 is
+    /// how a compiled binary carries one across the C ABI.
+    ///
+    /// Naming the operator matters here — the operand is usually a noun, and
+    /// the author needs to know which half of the condition the runtime could
+    /// not read.
+    private func asBool(_ value: any Sendable, operator op: String) throws -> Bool {
+        guard let b = AROTruthiness.strict(value) else {
+            throw ExpressionError.typeMismatch(
+                "'\(op)' needs a condition on each side, but was given "
+                + "\(type(of: value)). Compare it first: <count> > 0, "
+                + "<name> != \"\".")
+        }
+        return b
     }
 
     private func areEqual(_ left: any Sendable, _ right: any Sendable) -> Bool {
@@ -730,6 +884,14 @@ public struct ExpressionEvaluator: Sendable {
         if let l = left as? Double, let r = right as? Double { return l == r }
         if let l = left as? Int, let r = right as? Double { return Double(l) == r }
         if let l = left as? Double, let r = right as? Int { return l == Double(r) }
+
+        // Exact amounts compare exactly, and compare equal to the Int or
+        // Double that spells the same number (GitLab #906). Without this the
+        // fallback below compared "7.20" to "7.2" as text.
+        if left is AROCurrency || right is AROCurrency,
+           let l = AROCurrency.from(left), let r = AROCurrency.from(right) {
+            return l == r
+        }
 
         // Boolean comparison
         if let l = left as? Bool, let r = right as? Bool { return l == r }
@@ -897,7 +1059,14 @@ public enum ExpressionError: Error, CustomStringConvertible {
         case .typeMismatch(let msg):
             return "Type mismatch: \(msg)"
         case .indexOutOfBounds(let index, let count):
-            return "Index \(index) out of bounds (count: \(count))"
+            // Same wording as `ActionError.indexOutOfBounds` and the
+            // compiled bridge (GitLab #843) — one behaviour deserves one
+            // sentence, whichever of the three paths produced it.
+            if count == 0 {
+                return "index \(index) on an empty list"
+            }
+            return "index \(index) is past the end of a \(count)-element list "
+                + "(valid indices are 0 to \(count - 1))"
         case .unsupportedExpression(let type):
             return "Unsupported expression type: \(type)"
         }

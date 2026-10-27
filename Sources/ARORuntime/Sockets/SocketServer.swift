@@ -365,8 +365,10 @@ private final class SocketHandler: ChannelInboundHandler, @unchecked Sendable {
 /// in both interpreter mode (`aro run`) and compiled binary mode (`aro build`).
 /// SwiftNIO's MultiThreadedEventLoopGroup crashes with SIGSEGV in LLVM binaries.
 ///
-/// All I/O is non-blocking with `poll()`-based timeouts to avoid starving
-/// the Swift async runtime thread pool.
+/// The receive loop blocks in `poll()`, so it runs on a thread of its own and
+/// never on Swift's cooperative pool: a pool thread parked in `poll()` for each
+/// open connection is a pool thread nothing else can use, and on a machine
+/// with few cores that stalls every async task in the process.
 public final class AROSocketClient: @unchecked Sendable {
     // MARK: - Properties
 
@@ -374,15 +376,19 @@ public final class AROSocketClient: @unchecked Sendable {
     private var socketFd: Int32 = -1
     private let lock = NSLock()
     private var _isConnected = false
-    private var receiveTask: Task<Void, Never>?
+    private var receiveStopped = false
 
     public let connectionId: String
 
     /// Connection timeout in seconds (default: 30)
     public var connectTimeout: Int = 30
 
-    /// Receive timeout in seconds per poll cycle (default: 30)
+    /// Receive timeout in seconds per poll cycle (default: 30). The loop
+    /// wakes at least every `stopCheckMilliseconds` regardless, so that
+    /// `disconnect()` releases its thread promptly.
     public var receiveTimeout: Int = 30
+
+    private static let stopCheckMilliseconds: Int32 = 200
 
     /// Receive buffer size in bytes (default: 8192)
     public var receiveBufferSize: Int = 8192
@@ -404,6 +410,14 @@ public final class AROSocketClient: @unchecked Sendable {
         withLock { socketFd }
     }
 
+    private func stopReceiving() {
+        withLock { receiveStopped = true }
+    }
+
+    private var isReceiveStopped: Bool {
+        withLock { receiveStopped }
+    }
+
     /// Atomically clears socketFd / _isConnected and returns the old fd.
     private func takeFd() -> Int32 {
         withLock {
@@ -422,9 +436,9 @@ public final class AROSocketClient: @unchecked Sendable {
     }
 
     deinit {
-        receiveTask?.cancel()
+        stopReceiving()
         let fd = takeFd()
-        if fd >= 0 { _ = bsdClose(fd) }
+        if fd >= 0 { _ = Self.bsdClose(fd) }
     }
 
     // MARK: - Connection
@@ -432,6 +446,44 @@ public final class AROSocketClient: @unchecked Sendable {
     /// Connect to a server using non-blocking I/O with timeout.
     /// Resolves hostname, connects with a deadline, and starts the receive loop.
     public func connect(host: String, port: Int) async throws {
+        // Resolving the host and waiting for the handshake both block — DNS for
+        // as long as the resolver takes, poll() for up to `connectTimeout` — so
+        // they run on a thread of its own rather than the caller's pool thread.
+        let timeout = connectTimeout
+        let fd = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Int32, any Error>) in
+            Thread {
+                continuation.resume(with: Result {
+                    try Self.openConnection(host: host, port: port, timeoutSeconds: timeout)
+                })
+            }.start()
+        }
+
+        withLock {
+            socketFd = fd
+            _isConnected = true
+            receiveStopped = false
+        }
+
+        eventBus.publish(ClientConnectedEvent(connectionId: connectionId, remoteAddress: "\(host):\(port)"))
+        // Co-publish DomainEvent for binary mode handlers
+        EventBus.shared.publish(DomainEvent(
+            eventType: "socket.connected",
+            payload: ["connection": ["id": connectionId, "remoteAddress": "\(host):\(port)"] as [String: any Sendable]]
+        ))
+
+        // A dedicated thread, not a Task: the loop blocks in poll(), and a
+        // Task would park a cooperative-pool thread for the connection's life.
+        let bufSize = receiveBufferSize
+        let recvTimeout = receiveTimeout
+        let receiver = Thread { [weak self] in
+            self?.receiveLoop(bufferSize: bufSize, timeoutSeconds: recvTimeout)
+        }
+        receiver.name = "aro.socket-client.receive"
+        receiver.start()
+    }
+
+    /// Open a connected, non-blocking socket to `host:port`, or throw. Blocks.
+    private static func openConnection(host: String, port: Int, timeoutSeconds: Int) throws -> Int32 {
         // SOCK_STREAM is Int32 on macOS but __socket_type on Linux
         #if canImport(Darwin)
         let fd = socket(AF_INET, SOCK_STREAM, 0)
@@ -445,7 +497,7 @@ public final class AROSocketClient: @unchecked Sendable {
         // Set socket to non-blocking mode
         let flags = fcntl(fd, F_GETFL)
         guard flags >= 0, fcntl(fd, F_SETFL, flags | O_NONBLOCK) >= 0 else {
-            _ = bsdClose(fd)
+            _ = Self.bsdClose(fd)
             throw SocketError.connectionFailed("fcntl() failed (errno \(errno))")
         }
 
@@ -460,7 +512,7 @@ public final class AROSocketClient: @unchecked Sendable {
         var res: UnsafeMutablePointer<addrinfo>? = nil
         let gaiStatus = getaddrinfo(host, "\(port)", &hints, &res)
         guard gaiStatus == 0, let addrRes = res else {
-            _ = bsdClose(fd)
+            _ = Self.bsdClose(fd)
             let msg = gai_strerror(gaiStatus).map { String(cString: $0) } ?? "\(gaiStatus)"
             throw SocketError.connectionFailed("Cannot resolve \(host): \(msg)")
         }
@@ -476,19 +528,19 @@ public final class AROSocketClient: @unchecked Sendable {
 
         if connectResult != 0 {
             guard errno == EINPROGRESS else {
-                _ = bsdClose(fd)
+                _ = Self.bsdClose(fd)
                 throw SocketError.connectionFailed("connect() to \(host):\(port) failed (errno \(errno))")
             }
 
             // Wait for connect to complete using poll() with timeout
             var pfd = pollfd(fd: fd, events: Int16(POLLOUT), revents: 0)
-            let pollResult = poll(&pfd, 1, Int32(connectTimeout) * 1000)
+            let pollResult = poll(&pfd, 1, Int32(timeoutSeconds) * 1000)
 
             if pollResult == 0 {
-                _ = bsdClose(fd)
+                _ = Self.bsdClose(fd)
                 throw SocketError.connectionTimeout(host: host, port: port)
             } else if pollResult < 0 {
-                _ = bsdClose(fd)
+                _ = Self.bsdClose(fd)
                 throw SocketError.connectionFailed("poll() failed during connect (errno \(errno))")
             }
 
@@ -497,36 +549,19 @@ public final class AROSocketClient: @unchecked Sendable {
             var soLen = socklen_t(MemoryLayout<Int32>.size)
             getsockopt(fd, SOL_SOCKET, SO_ERROR, &soError, &soLen)
             if soError != 0 {
-                _ = bsdClose(fd)
+                _ = Self.bsdClose(fd)
                 throw SocketError.connectionFailed("connect() to \(host):\(port) failed (errno \(soError))")
             }
         }
 
-        withLock {
-            socketFd = fd
-            _isConnected = true
-        }
-
-        eventBus.publish(ClientConnectedEvent(connectionId: connectionId, remoteAddress: "\(host):\(port)"))
-        // Co-publish DomainEvent for binary mode handlers
-        EventBus.shared.publish(DomainEvent(
-            eventType: "socket.connected",
-            payload: ["connection": ["id": connectionId, "remoteAddress": "\(host):\(port)"] as [String: any Sendable]]
-        ))
-
-        // Start receive loop using structured concurrency instead of DispatchQueue
-        let bufSize = receiveBufferSize
-        let recvTimeout = receiveTimeout
-        receiveTask = Task.detached { [weak self] in
-            self?.receiveLoop(bufferSize: bufSize, timeoutSeconds: recvTimeout)
-        }
+        return fd
     }
 
     private func receiveLoop(bufferSize: Int, timeoutSeconds: Int) {
         var buffer = [UInt8](repeating: 0, count: bufferSize)
-        let timeoutMs = Int32(timeoutSeconds) * 1000
+        let timeoutMs = min(Int32(timeoutSeconds) * 1000, Self.stopCheckMilliseconds)
 
-        while !Task.isCancelled {
+        while !isReceiveStopped {
             let fd = getFd()
             guard fd >= 0 else { break }
 
@@ -535,7 +570,7 @@ public final class AROSocketClient: @unchecked Sendable {
             let pollResult = poll(&pfd, 1, timeoutMs)
 
             if pollResult == 0 {
-                // Timeout — continue polling (allows Task cancellation check)
+                // Timeout — continue polling (re-checks the stop flag)
                 continue
             } else if pollResult < 0 {
                 if errno == EINTR { continue }  // Interrupted, retry
@@ -561,7 +596,7 @@ public final class AROSocketClient: @unchecked Sendable {
         }
 
         let fd = takeFd()
-        if fd >= 0 { _ = bsdClose(fd) }
+        if fd >= 0 { _ = Self.bsdClose(fd) }
         eventBus.publish(ClientDisconnectedEvent(connectionId: connectionId, reason: "connection closed"))
         EventBus.shared.publish(DomainEvent(
             eventType: "socket.disconnected",
@@ -571,10 +606,9 @@ public final class AROSocketClient: @unchecked Sendable {
 
     /// Disconnect from server
     public func disconnect() async throws {
-        receiveTask?.cancel()
-        receiveTask = nil
+        stopReceiving()
         let fd = takeFd()
-        if fd >= 0 { _ = bsdClose(fd) }
+        if fd >= 0 { _ = Self.bsdClose(fd) }
         eventBus.publish(ClientDisconnectedEvent(connectionId: connectionId, reason: "disconnect requested"))
         EventBus.shared.publish(DomainEvent(
             eventType: "socket.disconnected",
@@ -608,7 +642,7 @@ public final class AROSocketClient: @unchecked Sendable {
     // MARK: - Platform helpers
 
     @discardableResult
-    private func bsdClose(_ fd: Int32) -> Int32 {
+    private static func bsdClose(_ fd: Int32) -> Int32 {
         #if canImport(Darwin)
         return Darwin.close(fd)
         #else

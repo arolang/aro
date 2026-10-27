@@ -309,9 +309,11 @@ extension ExecutionEngine {
                 (field: field, store: VisitedURLStore(maxSize: RuntimeDefaults.visitedURLStoreMaxSize))
             }
 
-            eventBus.subscribe(to: DomainEvent.self) { event in
-                // Only handle events that match this handler's event type
-                guard event.domainEventType == eventType else { return }
+            // The name test is the subscription's, not the handler's: it now
+            // runs before the fan-out spawns a task, so an `Emit` in an
+            // application with H handlers costs one task rather than H
+            // (GitLab #704).
+            eventBus.subscribe(toDomainEventNamed: eventType) { event in
 
                 if let seen,
                    let identity = DedupeGuard.identity(ofField: seen.field, in: event.payload) {
@@ -339,7 +341,7 @@ extension ExecutionEngine {
         // Get all plugin feature sets
         let pluginFeatureSets = PluginFeatureSetRegistry.shared.getAll()
 
-        if ProcessInfo.processInfo.environment["ARO_DEBUG"] != nil {
+        if RuntimeEnvironment.isDebug {
             FileHandle.standardError.write(Data("[ExecutionEngine] Found \(pluginFeatureSets.count) plugin feature sets\n".utf8))
         }
 
@@ -354,7 +356,7 @@ extension ExecutionEngine {
             return hasHandler && !isSpecialHandler
         }
 
-        if ProcessInfo.processInfo.environment["ARO_DEBUG"] != nil {
+        if RuntimeEnvironment.isDebug {
             FileHandle.standardError.write(Data("[ExecutionEngine] Found \(domainHandlers.count) plugin domain handlers\n".utf8))
             for handler in domainHandlers {
                 FileHandle.standardError.write(Data("[ExecutionEngine] - \(handler.qualifiedName) (\(handler.analyzedFeatureSet.featureSet.businessActivity))\n".utf8))
@@ -381,17 +383,16 @@ extension ExecutionEngine {
             let deps = handlerDependencies
 
             let capturedEventType = eventType
-            eventBus.subscribe(to: DomainEvent.self) { event in
-                if ProcessInfo.processInfo.environment["ARO_DEBUG"] != nil {
+            eventBus.subscribe(toDomainEventNamed: capturedEventType) { event in
+                if RuntimeEnvironment.isDebug {
                     FileHandle.standardError.write(Data("[ExecutionEngine] Plugin handler received event: \(event.domainEventType), expecting: \(capturedEventType)\n".utf8))
                 }
-                guard event.domainEventType == capturedEventType else { return }
 
                 if !guardSet.isEmpty {
                     guard guardSet.allMatch(payload: event.payload) else { return }
                 }
 
-                if ProcessInfo.processInfo.environment["ARO_DEBUG"] != nil {
+                if RuntimeEnvironment.isDebug {
                     FileHandle.standardError.write(Data("[ExecutionEngine] Executing plugin handler for: \(capturedEventType)\n".utf8))
                 }
 
@@ -469,13 +470,20 @@ extension ExecutionEngine {
                 let evaluator = ExpressionEvaluator()
                 do {
                     let result = try await evaluator.evaluate(condition, context: handlerContext)
-                    let passes: Bool
-                    if let b = result as? Bool { passes = b }
-                    else if let i = result as? Int { passes = i != 0 }
-                    else { passes = false }
-                    guard passes else { return false }
+                    // One rule, shared with statement and match guards
+                    // (GitLab #644). ARO-0002: "Conditions must be boolean
+                    // expressions".
+                    guard FeatureSetExecutor.strictBool(result) == true else { return false }
                 } catch {
-                    return false // Skip handler silently if condition evaluation fails
+                    // Not silently (GitLab #644). A guard that cannot be
+                    // evaluated — a misspelt field in
+                    // `(H: X Handler) when <evnt: kind> = "a"`, say — made the
+                    // handler never fire, with no diagnostic at any log level.
+                    // The program looked like it had no handler for that event,
+                    // which is the hardest kind of bug to find because there is
+                    // nothing to search for.
+                    FeatureSetExecutor.reportGuardFailure(analyzedFS.featureSet.name, error, kind: "handler", bus: eventBus)
+                    return false
                 }
             }
 
@@ -593,6 +601,7 @@ extension ExecutionEngine {
             // Subscribe to RepositoryChangedEvent and filter by repositoryName and guards
             // CRITICAL: Capture values to avoid actor reentrancy deadlock
             let deps = handlerDependencies
+            let capturedBus = eventBus
 
             // Capture the feature-set-level when condition for evaluation
             let whenCondition = analyzedFS.featureSet.whenCondition
@@ -621,20 +630,15 @@ extension ExecutionEngine {
                     let evaluator = ExpressionEvaluator()
                     do {
                         let conditionResult = try await evaluator.evaluate(condition, context: evalContext)
-                        // Convert condition result to boolean
-                        let isTrue: Bool
-                        if let b = conditionResult as? Bool {
-                            isTrue = b
-                        } else if let i = conditionResult as? Int {
-                            isTrue = i != 0
-                        } else {
-                            isTrue = false
-                        }
-                        guard isTrue else {
+                        // Same rule as every other guard (GitLab #644).
+                        guard FeatureSetExecutor.strictBool(conditionResult) == true else {
                             return  // Condition is false - skip this observer
                         }
                     } catch {
-                        // Log error but skip observer silently on evaluation failure
+                        // The comment said "log error" and then did not
+                        // (GitLab #644); an observer whose guard failed simply
+                        // stopped existing.
+                        FeatureSetExecutor.reportGuardFailure(analyzedFS.featureSet.name, error, kind: "observer", bus: capturedBus)
                         return
                     }
                 }
@@ -726,9 +730,7 @@ extension ExecutionEngine {
                 // CRITICAL: Capture values to avoid actor reentrancy deadlock
                 let deps = handlerDependencies
 
-                eventBus.subscribe(to: DomainEvent.self) { event in
-                    // Only handle events that match this watch handler's event type
-                    guard event.domainEventType == eventType else { return }
+                eventBus.subscribe(toDomainEventNamed: eventType) { event in
 
                     await deps.run(
                         analyzedFS,
