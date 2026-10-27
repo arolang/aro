@@ -1038,7 +1038,9 @@ train:catalogs:
     # The FIXTRAIN rules' corrected examples are run through `aro check` here
     # (GitLab #811). train:unit runs the same file on a slim image where those
     # cases skip for want of a binary; this is where they execute.
-    - python3 -m pip install --quiet pytest
+    # PEP 668: noble's system Python is externally-managed (#897).
+    - python3 -m pip install --quiet --break-system-packages pytest
+      || python3 -m pip install --quiet pytest
     - python3 -m pytest Train/script/tests/test_fixtrain_examples.py -q
 
 # =============================================================================
